@@ -16,6 +16,7 @@ Kirigami.ApplicationWindow {
 
     pageStack.initialPage: MixerPage {
         onOpenDevices: root.pageStack.push(devicesPage)
+        onOpenRouting: root.pageStack.push(routingPage)
     }
 
     Component {
@@ -23,8 +24,15 @@ Kirigami.ApplicationWindow {
         DevicesPage {}
     }
 
+    Component {
+        id: routingPage
+        RoutingPage {}
+    }
+
     Component.onCompleted: {
         if (startPage === "devices")
             pageStack.push(devicesPage);
+        else if (startPage === "routing")
+            pageStack.push(routingPage);
     }
 }

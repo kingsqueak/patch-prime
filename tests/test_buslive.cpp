@@ -14,6 +14,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
+#include <QScopeGuard>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
@@ -93,7 +94,7 @@ class TestBusLive : public QObject
 private Q_SLOTS:
     void initTestCase()
     {
-        for (const auto *tool : {"pactl", "pw-dump", "pw-play"}) {
+        for (const auto *tool : {"pactl", "pw-dump", "pw-play", "pw-loopback"}) {
             if (QStandardPaths::findExecutable(QString::fromLatin1(tool)).isEmpty()) {
                 qWarning("%s not found", tool);
                 std::exit(77);
@@ -134,6 +135,13 @@ private Q_SLOTS:
         if (!m_module.isEmpty()) {
             run(QStringLiteral("pactl"), {QStringLiteral("unload-module"), m_module});
         }
+        // Anything the routing test's engine left behind.
+        for (const auto &[id, node] : m_graph.nodes()) {
+            if (!m_owner.empty() && prop(node, "patchprime.owner") == m_owner) {
+                m_graph.destroyObject(id);
+            }
+        }
+        QTest::qWait(200);
     }
 
     void busFollowsSettings()
@@ -231,11 +239,101 @@ private Q_SLOTS:
         m_busName.clear();
     }
 
+    void routesInputToVirtualSink()
+    {
+        // A fake microphone: pw-loopback turns what plays into pp_feed_<pid>
+        // into the source pp_src_<pid>.
+        const auto pid = std::to_string(QCoreApplication::applicationPid());
+        const auto feed = "pp_feed_" + pid;
+        const auto mic = "pp_src_" + pid;
+        QProcess loopback;
+        loopback.start(QStringLiteral("pw-loopback"),
+                       {QString::fromStdString("--capture-props=media.class=Audio/Sink node.name=" +
+                                               feed + " audio.position=[FL,FR]"),
+                        QString::fromStdString("--playback-props=media.class=Audio/Source "
+                                               "node.name=" +
+                                               mic + " audio.position=[FL,FR]")});
+        auto stopLoopback = qScopeGuard([&loopback] {
+            loopback.terminate();
+            loopback.waitForFinished(2000);
+        });
+
+        QTemporaryDir dir;
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel devices(&store);
+        devices.attach(&m_graph);
+        BusManager buses(&m_graph, &devices);
+        m_owner = busOwnerFor(store.path());
+
+        const auto micKey = makeEndpointKey("Audio/Source", mic);
+        QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(micKey) >= 0; }, 5000));
+        devices.setEnabled(devices.rowForKey(micKey), true);
+        const auto mixKey =
+            devices.createVirtual(QStringLiteral("Test Mix"), EndpointKind::VirtualSink);
+        devices.setSend(devices.rowForKey(micKey), mixKey, true);
+
+        const auto inBus = busNodeName(Direction::Input, store.find(micKey)->busId);
+        const auto mixNode = virtualNodeName(store.find(mixKey.toStdString())->busId);
+        QVERIFY(QTest::qWaitFor(
+            [&] { return nodeNamed(m_graph, inBus) && nodeNamed(m_graph, mixNode); }, 5000));
+        QCOMPARE(prop(*nodeNamed(m_graph, inBus), "media.class"), "Audio/Source/Virtual");
+        QCOMPARE(prop(*nodeNamed(m_graph, mixNode), "node.description"), "Test Mix");
+
+        auto linksBetween = [&](const std::string &from, const std::string &to) {
+            const auto *a = nodeNamed(m_graph, from);
+            const auto *b = nodeNamed(m_graph, to);
+            if (a == nullptr || b == nullptr) {
+                return std::ptrdiff_t{0};
+            }
+            const auto outId = std::to_string(a->id);
+            const auto inId = std::to_string(b->id);
+            return std::ranges::count_if(m_graph.links(), [&](const auto &entry) {
+                return prop(entry.second, "link.output.node") == outId &&
+                       prop(entry.second, "link.input.node") == inId;
+            });
+        };
+        QVERIFY(QTest::qWaitFor([&] { return linksBetween(mic, inBus) == 2; }, 5000));
+        QVERIFY(QTest::qWaitFor([&] { return linksBetween(inBus, mixNode) == 2; }, 5000));
+
+        // Sound goes all the way: tone -> fake mic -> input bus -> Test Mix.
+        buses.setMetering(true);
+        QTemporaryDir toneDir;
+        const auto tone = toneDir.filePath(QStringLiteral("tone.wav"));
+        QVERIFY(writeTone(tone));
+        QProcess player;
+        player.start(QStringLiteral("pw-play"),
+                     {QStringLiteral("--target"), QString::fromStdString(feed), tone});
+        float mixPeak = 0.0F;
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                const auto levels = buses.takeLevels();
+                if (const auto it = levels.find(mixKey.toStdString()); it != levels.end()) {
+                    for (const float level : it->second) {
+                        mixPeak = std::max(mixPeak, level);
+                    }
+                }
+                return mixPeak > 0.3F;
+            },
+            5000));
+        player.kill();
+        player.waitForFinished();
+        buses.setMetering(false);
+
+        // Unsend: the links go. Delete the mix and disable the mic: all gone.
+        devices.setSend(devices.rowForKey(micKey), mixKey, false);
+        QVERIFY(QTest::qWaitFor([&] { return linksBetween(inBus, mixNode) == 0; }, 5000));
+        devices.forget(devices.rowForKey(mixKey.toStdString()));
+        devices.setEnabled(devices.rowForKey(micKey), false);
+        QVERIFY(QTest::qWaitFor(
+            [&] { return !nodeNamed(m_graph, inBus) && !nodeNamed(m_graph, mixNode); }, 5000));
+    }
+
 private:
     PipeWireGraph m_graph;
     std::string m_sinkName;
     std::string m_busName;
     std::string m_originalDefault;
+    std::string m_owner;
     QString m_module;
 };
 

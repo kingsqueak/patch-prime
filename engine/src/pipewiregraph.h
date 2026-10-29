@@ -89,10 +89,11 @@ public:
     // "default" metadata). WirePlumber then updates the effective default.
     bool setConfiguredDefault(Direction direction, const std::string &nodeName);
 
-    // Starts a small capture stream on the monitor of the sink named
-    // targetNodeName and returns its peak levels. Meters belong to the current
-    // connection: after a reconnect they must be added again.
-    std::shared_ptr<MeterLevels> addMeter(const std::string &targetNodeName, int channels);
+    // Starts a small capture stream on targetNodeName (the monitor of a sink,
+    // or a source itself) and returns its peak levels. Meters belong to the
+    // current connection: after a reconnect they must be added again.
+    std::shared_ptr<MeterLevels> addMeter(const std::string &targetNodeName, int channels,
+                                          bool sinkMonitor = true);
     void removeMeter(const std::shared_ptr<MeterLevels> &meter);
 
 Q_SIGNALS:

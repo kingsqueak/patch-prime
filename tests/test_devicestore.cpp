@@ -77,6 +77,33 @@ private Q_SLOTS:
         QVERIFY(!store.lastError().isEmpty());
     }
 
+    void sendsAndKinds()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("devices.json"));
+        {
+            DeviceStore store(path);
+            store.upsert("mic").sends = {"phones", "mix"};
+            store.upsert("mix").kind = EndpointKind::VirtualSink;
+            store.upsert("chat").kind = EndpointKind::VirtualSource;
+            store.upsert("phones");
+            QVERIFY(store.save());
+        }
+        DeviceStore store(path);
+        QVERIFY(store.load());
+        QCOMPARE(store.find("mic")->sends, (std::vector<std::string>{"phones", "mix"}));
+        QCOMPARE(store.find("mix")->kind, EndpointKind::VirtualSink);
+        QCOMPARE(store.find("chat")->kind, EndpointKind::VirtualSource);
+        QCOMPARE(store.find("phones")->kind, EndpointKind::Hardware);
+
+        // A re-attached destination keeps its sends; a removed one drops them.
+        QVERIFY(store.rekey("phones", "phones2"));
+        QCOMPARE(store.find("mic")->sends, (std::vector<std::string>{"phones2", "mix"}));
+        QVERIFY(store.remove("mix"));
+        QCOMPARE(store.find("mic")->sends, std::vector<std::string>{"phones2"});
+        QCOMPARE(DeviceStore::virtualKey("ab12cd34"), "patchprime-virtual|ab12cd34");
+    }
+
     void busIdSurvivesRekey()
     {
         DeviceStore store(QStringLiteral("/dev/null/unused"));

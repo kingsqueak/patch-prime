@@ -331,6 +331,74 @@ private Q_SLOTS:
         QVERIFY(!role(model, 0, DeviceModel::BusDefaultRole).toBool());
     }
 
+    void virtualDevices()
+    {
+        DeviceStore store(m_path);
+        DeviceModel model(&store);
+        QAbstractItemModelTester tester(&model);
+        const auto key =
+            model.createVirtual(QStringLiteral("  Stream Mix "), EndpointKind::VirtualSink);
+        QVERIFY(key.startsWith(QStringLiteral("patchprime-virtual|")));
+        const int row = model.rowForKey(key.toStdString());
+        QVERIFY(row >= 0);
+        QCOMPARE(role(model, row, DeviceModel::LabelRole).toString(), QStringLiteral("Stream Mix"));
+        QCOMPARE(role(model, row, DeviceModel::KindRole).toString(),
+                 QStringLiteral("virtual-sink"));
+        QCOMPARE(role(model, row, DeviceModel::DirectionRole).toString(), QStringLiteral("output"));
+        QVERIFY(role(model, row, DeviceModel::EnabledRole).toBool());
+        QVERIFY(!role(model, row, DeviceModel::OnlineRole).toBool());
+
+        // Online once its node shows up.
+        const auto nodeName = virtualNodeName(store.find(key.toStdString())->busId);
+        model.upsertNode({.id = 77,
+                          .type = "PipeWire:Interface:Node",
+                          .version = 3,
+                          .props = {{"node.name", nodeName}, {"media.class", "Audio/Sink"}}},
+                         nullptr);
+        QVERIFY(role(model, model.rowForKey(key.toStdString()), DeviceModel::OnlineRole).toBool());
+
+        // Delete: the row goes even though it's online.
+        model.forget(model.rowForKey(key.toStdString()));
+        QCOMPARE(model.rowForKey(key.toStdString()), -1);
+        QVERIFY(store.find(key.toStdString()) == nullptr);
+        QVERIFY(model.createVirtual(QStringLiteral("x"), EndpointKind::Hardware).isEmpty());
+    }
+
+    void sendsOnlyGoFromInputsToOutputs()
+    {
+        DeviceStore store(m_path);
+        DeviceModel model(&store);
+        QAbstractItemModelTester tester(&model);
+        model.upsertNode(sourceNode(11, "mic"), nullptr);
+        model.upsertNode(sinkNode(10, "phones", nullptr), nullptr);
+        const auto mix = model.createVirtual(QStringLiteral("Mix"), EndpointKind::VirtualSink);
+        const int mic = model.rowForKey("Audio/Source|mic");
+
+        QSignalSpy settings(&model, &DeviceModel::settingsChanged);
+        model.setSend(mic, QStringLiteral("Audio/Sink|phones"), true);
+        model.setSend(mic, mix, true);
+        model.setSend(mic, mix, true); // already there
+        QCOMPARE(settings.count(), 2);
+        QCOMPARE(
+            role(model, model.rowForKey("Audio/Source|mic"), DeviceModel::SendsRole).toStringList(),
+            (QStringList{QStringLiteral("Audio/Sink|phones"), mix}));
+
+        // Not allowed: output -> anything, input -> input, unknown destination.
+        model.setSend(model.rowForKey("Audio/Sink|phones"), mix, true);
+        model.setSend(mic, QStringLiteral("Audio/Source|mic"), true);
+        model.setSend(mic, QStringLiteral("Audio/Sink|nope"), true);
+        QCOMPARE(settings.count(), 2);
+        QVERIFY(store.find("Audio/Sink|phones") == nullptr); // nothing was saved for it
+
+        // Deleting the virtual device removes the send to it.
+        model.forget(model.rowForKey(mix.toStdString()));
+        QCOMPARE(store.find("Audio/Source|mic")->sends,
+                 std::vector<std::string>{"Audio/Sink|phones"});
+        model.setSend(model.rowForKey("Audio/Source|mic"), QStringLiteral("Audio/Sink|phones"),
+                      false);
+        QVERIFY(store.find("Audio/Source|mic")->sends.empty());
+    }
+
     void defaults()
     {
         DeviceStore store(m_path);

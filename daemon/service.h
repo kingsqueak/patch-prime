@@ -47,6 +47,12 @@ public Q_SLOTS:
     // that follow the default play through the mixer. Otherwise make the
     // hardware output itself the default.
     void SetDefaultOutput(const QString &key, bool throughMixer);
+    // Sends an input to an output or virtual device, or stops sending it.
+    void SetSend(const QString &inputKey, const QString &destinationKey, bool enabled);
+    // kind: "sink" (apps play into it; record its monitor, e.g. "Stream Mix")
+    // or "source" (apps record from it like a microphone, e.g. "Chat Mic").
+    // Returns the new device's key. Rename with SetLabel, delete with Forget.
+    QString CreateVirtual(const QString &name, const QString &kind);
     void WatchLevels();
     void UnwatchLevels();
 

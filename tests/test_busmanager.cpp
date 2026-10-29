@@ -94,6 +94,30 @@ private Q_SLOTS:
         QCOMPARE(busProperties(e, s)["node.description"], "Patch Prime In: Desk");
     }
 
+    void kinds()
+    {
+        Endpoint mic;
+        mic.key = "Audio/Source|mic";
+        mic.direction = Direction::Input;
+        mic.description = "Mic";
+        DeviceSettings hw;
+        hw.busId = "11111111";
+        QCOMPARE(busMediaClass(mic, hw), "Audio/Source/Virtual"); // recordable, not an output
+        QCOMPARE(busNameFor(mic, hw), "patchprime.bus.in.11111111");
+
+        Endpoint mix;
+        mix.direction = Direction::Output;
+        DeviceSettings sink;
+        sink.busId = "22222222";
+        sink.kind = EndpointKind::VirtualSink;
+        sink.label = "Stream Mix";
+        QCOMPARE(busNameFor(mix, sink), "patchprime.virtual.22222222");
+        QCOMPARE(busMediaClass(mix, sink), "Audio/Sink");
+        QCOMPARE(busDescription(mix, sink), "Stream Mix");
+        sink.kind = EndpointKind::VirtualSource;
+        QCOMPARE(busMediaClass(mix, sink), "Audio/Source/Virtual");
+    }
+
     void pairing()
     {
         // Same channel names, in a different order: by name.

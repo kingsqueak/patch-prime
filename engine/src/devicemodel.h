@@ -51,6 +51,8 @@ public:
         MutedRole,
         BusIdRole,
         BusDefaultRole, // this output's bus is the system default output
+        KindRole,       // "hardware", "virtual-sink" or "virtual-source"
+        SendsRole,      // inputs: keys of the outputs this input is sent to
     };
     Q_ENUM(Role)
 
@@ -75,6 +77,10 @@ public:
     Q_INVOKABLE void forget(int row);
     Q_INVOKABLE void setVolume(int row, double volumeDb);
     Q_INVOKABLE void setMuted(int row, bool muted);
+    // Sends (or stops sending) an input to an output or virtual device.
+    Q_INVOKABLE void setSend(int row, const QString &destinationKey, bool enabled);
+    // Makes a new virtual device, enabled, and returns its key.
+    QString createVirtual(const QString &name, EndpointKind kind);
 
     // The fader's bottom: at or below this the bus is silent.
     static constexpr double minimumVolumeDb() { return -60.0; }

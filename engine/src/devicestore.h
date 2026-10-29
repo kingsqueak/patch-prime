@@ -10,13 +10,29 @@
 
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace pp {
 
+// Hardware endpoints come from PipeWire; virtual devices are made by Patch
+// Prime itself and exist only as long as their saved entry does.
+enum class EndpointKind : std::uint8_t
+{
+    Hardware,      // any endpoint PipeWire reports (cards, other apps' virtual devices)
+    VirtualSink,   // apps play into it, others record its monitor ("Stream Mix")
+    VirtualSource, // apps record from it, like a microphone ("Chat Mic")
+};
+
+// "hardware", "virtual-sink", "virtual-source" (in the settings file and the D-Bus state).
+std::string kindName(EndpointKind kind);
+// The reverse; anything unknown is Hardware.
+EndpointKind kindFromName(std::string_view name);
+
 // What the user chose for one endpoint, kept across restarts and replugs.
 struct DeviceSettings
 {
+    EndpointKind kind = EndpointKind::Hardware;
     // Permanent random id, made when the entry is created. It names the
     // endpoint's bus, so the bus keeps its name when the endpoint is recognised
     // under a new node.name.
@@ -25,6 +41,9 @@ struct DeviceSettings
     std::string label; // empty: show the system description
     double volumeDb = 0.0;
     bool muted = false;
+    // Inputs only: the keys of the outputs and virtual devices this input is
+    // sent to.
+    std::vector<std::string> sends;
     // Last seen details, so an offline endpoint can still be shown and matched.
     std::string nodeName;
     std::string mediaClass;
@@ -57,12 +76,16 @@ public:
     [[nodiscard]] const DeviceSettings *find(const std::string &key) const;
     // Creates the entry (with a new busId) when it doesn't exist.
     DeviceSettings &upsert(const std::string &key);
+    // Also removes the sends that pointed at it.
     bool remove(const std::string &key);
-    // Moves an entry to a new key when its endpoint is recognised under a new name.
+    // Moves an entry to a new key when its endpoint is recognised under a new
+    // name, and updates every send that pointed at the old key.
     bool rekey(const std::string &from, const std::string &to);
 
     static QString defaultPath();
     static std::string newBusId();
+    // Key for a virtual device Patch Prime makes: "patchprime-virtual|<busId>".
+    static std::string virtualKey(const std::string &busId);
 
 private:
     QString m_path;

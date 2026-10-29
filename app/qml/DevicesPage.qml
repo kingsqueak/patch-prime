@@ -14,6 +14,49 @@ Kirigami.ScrollablePage {
 
     header: EngineMessage {}
 
+    actions: Kirigami.Action {
+        text: qsTr("Add Virtual Device…")
+        icon.name: "list-add"
+        enabled: Devices.daemonRunning
+        onTriggered: addDialog.open()
+    }
+
+    Kirigami.PromptDialog {
+        id: addDialog
+
+        title: qsTr("Add Virtual Device")
+        standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
+        onOpened: {
+            nameField.text = "";
+            nameField.forceActiveFocus();
+        }
+        onAccepted: {
+            if (nameField.text.trim().length > 0)
+                Devices.createVirtual(nameField.text, sinkButton.checked ? "sink" : "source");
+        }
+
+        ColumnLayout {
+            spacing: Kirigami.Units.smallSpacing
+
+            QQC2.TextField {
+                id: nameField
+                Layout.fillWidth: true
+                placeholderText: sinkButton.checked ? qsTr("e.g. Stream Mix") : qsTr("e.g. Chat Mic")
+                onAccepted: addDialog.accept()
+            }
+
+            QQC2.RadioButton {
+                id: sinkButton
+                checked: true
+                text: qsTr("Output: apps play into it, others can record it (a mix for OBS)")
+            }
+
+            QQC2.RadioButton {
+                text: qsTr("Microphone: apps record from it (a mic for Discord)")
+            }
+        }
+    }
+
     ListView {
         id: list
 
@@ -50,6 +93,8 @@ Kirigami.ScrollablePage {
             readonly property bool isDefault: model.isDefault
             readonly property bool saved: model.saved
             readonly property bool sectionStart: model.sectionStart
+            readonly property string kind: model.kind
+            readonly property bool ownVirtual: kind !== "hardware"
 
             width: ListView.view.width
             spacing: 0
@@ -57,7 +102,8 @@ Kirigami.ScrollablePage {
             Kirigami.ListSectionHeader {
                 Layout.fillWidth: true
                 visible: row.sectionStart
-                text: row.direction === "input" ? qsTr("Inputs") : qsTr("Outputs")
+                text: row.direction === "input" ? qsTr("Inputs")
+                                                : qsTr("Outputs and virtual devices")
             }
 
             QQC2.ItemDelegate {
@@ -105,7 +151,9 @@ Kirigami.ScrollablePage {
                                 const parts = [];
                                 if (row.customLabel.length > 0)
                                     parts.push(row.description);
-                                parts.push(row.isVirtual ? qsTr("virtual") : qsTr("hardware"));
+                                parts.push(row.kind === "virtual-sink" ? qsTr("Patch Prime virtual output")
+                                           : row.kind === "virtual-source" ? qsTr("Patch Prime virtual microphone")
+                                           : row.isVirtual ? qsTr("virtual") : qsTr("hardware"));
                                 if (row.channels > 0)
                                     parts.push(row.positions.length > 0
                                                ? qsTr("%1 ch (%2)").arg(row.channels).arg(row.positions)
@@ -134,12 +182,13 @@ Kirigami.ScrollablePage {
                     }
 
                     QQC2.ToolButton {
-                        visible: !row.online && row.saved
+                        visible: row.ownVirtual || (!row.online && row.saved)
                         icon.name: "edit-delete-remove"
-                        text: qsTr("Forget")
+                        text: row.ownVirtual ? qsTr("Delete") : qsTr("Forget")
                         display: QQC2.AbstractButton.IconOnly
                         onClicked: Devices.forget(row.key)
-                        QQC2.ToolTip.text: qsTr("Forget this device's settings")
+                        QQC2.ToolTip.text: row.ownVirtual ? qsTr("Delete this virtual device")
+                                                          : qsTr("Forget this device's settings")
                         QQC2.ToolTip.visible: hovered
                         QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
                     }

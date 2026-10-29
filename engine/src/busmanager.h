@@ -28,8 +28,12 @@ struct MeterLevels;
 
 constexpr std::string_view busNamePrefix = "patchprime.bus.";
 
+constexpr std::string_view virtualNamePrefix = "patchprime.virtual.";
+
 // "patchprime.bus.in.<busId>" or "patchprime.bus.out.<busId>"
 std::string busNodeName(Direction direction, const std::string &busId);
+// "patchprime.virtual.<busId>": a virtual device is its own bus.
+std::string virtualNodeName(const std::string &busId);
 
 // dB to linear amplitude; at or below minimumDb the result is 0 (silent).
 float dbToLinear(double db, double minimumDb);
@@ -43,6 +47,12 @@ std::vector<std::string> busPositions(const Endpoint &endpoint);
 // `owner` tags the bus with the settings it belongs to (see BusManager).
 Properties busProperties(const Endpoint &endpoint, const DeviceSettings &settings,
                          const std::string &owner = {});
+
+// The node that is an endpoint's bus: patchprime.bus.* for hardware,
+// patchprime.virtual.* for a virtual device (which is its own bus).
+std::string busNameFor(const Endpoint &endpoint, const DeviceSettings &settings);
+std::string busMediaClass(const Endpoint &endpoint, const DeviceSettings &settings);
+std::string busDescription(const Endpoint &endpoint, const DeviceSettings &settings);
 
 // A short tag for a settings file, so engines with different settings (the
 // daemon and a test, say) leave each other's buses alone.
@@ -107,8 +117,10 @@ private:
     void reconcile();
     void onConnectedChanged(bool connected);
     [[nodiscard]] std::map<std::string, Wanted> wantedBuses() const;
-    void linkBus(std::uint32_t busNodeId, const Wanted &wanted,
-                 const std::set<std::pair<std::uint32_t, std::uint32_t>> &existingLinks);
+    using LinkMap = std::map<std::pair<std::uint32_t, std::uint32_t>, std::uint32_t>;
+    void linkHardware(std::uint32_t busNodeId, const Wanted &wanted, const LinkMap &existingLinks);
+    void linkSends(const std::map<std::string, Wanted> &wanted,
+                   const std::map<std::string, std::uint32_t> &ready, const LinkMap &existingLinks);
     [[nodiscard]] std::vector<PortRef> portsOf(std::uint32_t nodeId, const std::string &direction,
                                                bool monitor) const;
 

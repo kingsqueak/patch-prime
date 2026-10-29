@@ -648,7 +648,7 @@ bool PipeWireGraph::setConfiguredDefault(Direction direction, const std::string 
 }
 
 std::shared_ptr<MeterLevels> PipeWireGraph::addMeter(const std::string &targetNodeName,
-                                                     int channels)
+                                                     int channels, bool sinkMonitor)
 {
     if (!m_session || channels <= 0) {
         return nullptr;
@@ -662,7 +662,7 @@ std::shared_ptr<MeterLevels> PipeWireGraph::addMeter(const std::string &targetNo
         {PW_KEY_MEDIA_CATEGORY, "Monitor"},
         {PW_KEY_NODE_NAME, "patchprime.meter." + targetNodeName},
         {PW_KEY_TARGET_OBJECT, targetNodeName},
-        {PW_KEY_STREAM_CAPTURE_SINK, "true"},
+        {PW_KEY_STREAM_CAPTURE_SINK, sinkMonitor ? "true" : "false"},
         {PW_KEY_NODE_DONT_RECONNECT, "true"},
         {PW_KEY_NODE_PASSIVE, "true"},
         {"stream.dont-remix", "true"},

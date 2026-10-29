@@ -11,15 +11,23 @@ Kirigami.Page {
     id: page
 
     signal openDevices()
+    signal openRouting()
 
     title: qsTr("Mixer")
     header: EngineMessage {}
 
-    actions: Kirigami.Action {
-        text: qsTr("Devices")
-        icon.name: "audio-card"
-        onTriggered: page.openDevices()
-    }
+    actions: [
+        Kirigami.Action {
+            text: qsTr("Routing")
+            icon.name: "network-connect"
+            onTriggered: page.openRouting()
+        },
+        Kirigami.Action {
+            text: qsTr("Devices")
+            icon.name: "audio-card"
+            onTriggered: page.openDevices()
+        }
+    ]
 
     StripFilter {
         id: inputs

@@ -127,11 +127,40 @@ void PatchPrimeService::SetDefaultOutput(const QString &key, bool throughMixer)
         fail(QStringLiteral("enable the device first: ") + key);
         return;
     }
-    const auto name =
-        throughMixer ? pp::busNodeName(pp::Direction::Output, settings->busId) : endpoint.nodeName;
+    const auto name = throughMixer ? pp::busNameFor(endpoint, *settings) : endpoint.nodeName;
     if (!m_graph->setConfiguredDefault(pp::Direction::Output, name)) {
         fail(QStringLiteral("PipeWire refused the default device change"));
     }
+}
+
+void PatchPrimeService::SetSend(const QString &inputKey, const QString &destinationKey,
+                                bool enabled)
+{
+    if (const int row = rowFor(inputKey); row >= 0) {
+        if (m_devices->rowForKey(destinationKey.toStdString()) < 0) {
+            if (calledFromDBus()) {
+                sendErrorReply(QDBusError::InvalidArgs,
+                               QStringLiteral("no device with key ") + destinationKey);
+            }
+            return;
+        }
+        m_devices->setSend(row, destinationKey, enabled);
+    }
+}
+
+QString PatchPrimeService::CreateVirtual(const QString &name, const QString &kind)
+{
+    const auto trimmed = name.trimmed();
+    // "sink" / "source" here, "virtual-sink" / "virtual-source" in the state.
+    const auto type = pp::kindFromName("virtual-" + kind.toStdString());
+    if (trimmed.isEmpty() || type == pp::EndpointKind::Hardware) {
+        if (calledFromDBus()) {
+            sendErrorReply(QDBusError::InvalidArgs,
+                           QStringLiteral("need a name and a kind of \"sink\" or \"source\""));
+        }
+        return {};
+    }
+    return m_devices->createVirtual(trimmed, type);
 }
 
 void PatchPrimeService::WatchLevels()

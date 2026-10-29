@@ -46,6 +46,11 @@ std::string busNodeName(Direction direction, const std::string &busId)
     return std::string(busNamePrefix) + (direction == Direction::Input ? "in." : "out.") + busId;
 }
 
+std::string virtualNodeName(const std::string &busId)
+{
+    return std::string(virtualNamePrefix) + busId;
+}
+
 float dbToLinear(double db, double minimumDb)
 {
     if (db <= minimumDb) {
@@ -82,21 +87,51 @@ std::string busOwnerFor(const QString &storePath)
         .toStdString();
 }
 
+std::string busNameFor(const Endpoint &endpoint, const DeviceSettings &settings)
+{
+    return settings.kind == EndpointKind::Hardware ? busNodeName(endpoint.direction, settings.busId)
+                                                   : virtualNodeName(settings.busId);
+}
+
+std::string busMediaClass(const Endpoint &endpoint, const DeviceSettings &settings)
+{
+    switch (settings.kind) {
+    case EndpointKind::VirtualSink:
+        return "Audio/Sink";
+    case EndpointKind::VirtualSource:
+        return "Audio/Source/Virtual";
+    case EndpointKind::Hardware:
+        break;
+    }
+    // An input bus is a source, so apps can record the processed input from it
+    // and it doesn't show up in the list of outputs.
+    return endpoint.direction == Direction::Input ? "Audio/Source/Virtual" : "Audio/Sink";
+}
+
+std::string busDescription(const Endpoint &endpoint, const DeviceSettings &settings)
+{
+    const auto &name = settings.label.empty() ? endpoint.description : settings.label;
+    if (settings.kind != EndpointKind::Hardware) {
+        return name; // the user's own device: just its name
+    }
+    return (endpoint.direction == Direction::Input ? "Patch Prime In: " : "Patch Prime Out: ") +
+           name;
+}
+
 Properties busProperties(const Endpoint &endpoint, const DeviceSettings &settings,
                          const std::string &owner)
 {
     const auto positions = busPositions(endpoint);
-    const auto &name = settings.label.empty() ? endpoint.description : settings.label;
-    const bool input = endpoint.direction == Direction::Input;
     return {
         {"factory.name", "support.null-audio-sink"},
-        {"node.name", busNodeName(endpoint.direction, settings.busId)},
-        {"node.description", (input ? "Patch Prime In: " : "Patch Prime Out: ") + name},
-        {"media.class", "Audio/Sink"},
+        {"node.name", busNameFor(endpoint, settings)},
+        {"node.description", busDescription(endpoint, settings)},
+        {"media.class", busMediaClass(endpoint, settings)},
         {"audio.channels", std::to_string(positions.size())},
         {"audio.position", joinPositions(positions)},
         {"node.autoconnect", "false"},
         {"node.virtual", "true"},
+        // The fader applies to what leaves the bus (the monitor/capture ports).
         {"monitor.channel-volumes", "true"},
         {"object.linger", "true"},
         // Low priority so WirePlumber never picks a bus as the default device.
@@ -245,7 +280,7 @@ std::map<std::string, BusManager::Wanted> BusManager::wantedBuses() const
             w.endpoint.channels =
                 static_cast<int>(portsOf(*w.hardwareNodeId, input ? "out" : "in", false).size());
         }
-        out[busNodeName(row.endpoint.direction, settings->busId)] = std::move(w);
+        out[busNameFor(w.endpoint, *settings)] = std::move(w);
     }
     return out;
 }
@@ -288,16 +323,17 @@ void BusManager::reconcile()
     for (const auto &[id, node] : m_graph->nodes()) {
         const auto &name = prop(node, "node.name");
         const auto &owner = prop(node, "patchprime.owner");
-        if (name.starts_with(busNamePrefix) && (owner.empty() || owner == m_owner)) {
+        if ((name.starts_with(busNamePrefix) || name.starts_with(virtualNamePrefix)) &&
+            (owner.empty() || owner == m_owner)) {
             existing[name] = id;
         }
     }
 
-    std::set<std::pair<std::uint32_t, std::uint32_t>> existingLinks;
+    LinkMap existingLinks; // (output port, input port) -> link id
     for (const auto &[id, link] : m_graph->links()) {
         const std::pair ports{parseId(prop(link, "link.output.port")),
                               parseId(prop(link, "link.input.port"))};
-        existingLinks.insert(ports);
+        existingLinks[ports] = id;
         m_pendingLinks.erase(ports);
     }
 
@@ -321,6 +357,9 @@ void BusManager::reconcile()
         m_graph->destroyObject(id);
     }
 
+    // Buses that exist and are wanted, by node name -> node id.
+    std::map<std::string, std::uint32_t> ready;
+
     for (const auto &[name, w] : wanted) {
         const auto it = existing.find(name);
         if (it == existing.end()) {
@@ -334,14 +373,25 @@ void BusManager::reconcile()
         }
         m_pendingBuses.erase(name);
         const std::uint32_t busId = it->second;
+        const auto &node = m_graph->nodes().at(busId);
 
-        // Fader and mute: one volume per channel the bus actually has.
-        std::size_t channels = busPositions(w.endpoint).size();
-        if (const auto node = m_graph->nodes().find(busId); node != m_graph->nodes().end()) {
-            if (const auto actual = parseId(prop(node->second, "audio.channels")); actual > 0) {
-                channels = actual;
-            }
+        // A bus made with different settings (an older version, a changed
+        // channel count, a renamed virtual device) is replaced. WirePlumber
+        // keeps it as the default if it was, since the name stays the same.
+        const auto channels = busPositions(w.endpoint).size();
+        const bool stale =
+            prop(node, "media.class") != busMediaClass(w.endpoint, *w.settings) ||
+            parseId(prop(node, "audio.channels")) != channels ||
+            (w.settings->kind != EndpointKind::Hardware &&
+             prop(node, "node.description") != busDescription(w.endpoint, *w.settings));
+        if (stale) {
+            qCInfo(lcBus, "replacing bus %s", name.c_str());
+            m_graph->destroyObject(busId);
+            continue;
         }
+        ready[name] = busId;
+
+        // Fader and mute.
         const std::vector<float> volumes(
             channels, dbToLinear(w.settings->volumeDb, DeviceModel::minimumVolumeDb()));
         const std::pair state{volumes, w.settings->muted};
@@ -352,18 +402,21 @@ void BusManager::reconcile()
             }
         }
 
-        linkBus(busId, w, existingLinks);
+        linkHardware(busId, w, existingLinks);
 
         if (m_metering && !m_meters.contains(name)) {
-            if (auto levels = m_graph->addMeter(name, static_cast<int>(channels))) {
+            const bool sink = busMediaClass(w.endpoint, *w.settings) == "Audio/Sink";
+            if (auto levels = m_graph->addMeter(name, static_cast<int>(channels), sink)) {
                 m_meters[name] = {w.key, std::move(levels)};
             }
         }
     }
 
+    linkSends(wanted, ready, existingLinks);
+
     // Meters whose bus is gone or no longer wanted.
     for (auto it = m_meters.begin(); it != m_meters.end();) {
-        if (!wanted.contains(it->first) || !existing.contains(it->first)) {
+        if (!ready.contains(it->first)) {
             m_graph->removeMeter(it->second.second);
             it = m_meters.erase(it);
         } else {
@@ -372,15 +425,74 @@ void BusManager::reconcile()
     }
 }
 
-void BusManager::linkBus(std::uint32_t busNodeId, const Wanted &wanted,
-                         const std::set<std::pair<std::uint32_t, std::uint32_t>> &existingLinks)
+void BusManager::linkSends(const std::map<std::string, Wanted> &wanted,
+                           const std::map<std::string, std::uint32_t> &ready,
+                           const LinkMap &existingLinks)
 {
-    if (!wanted.hardwareNodeId) {
-        return; // hardware offline: the bus stays, unlinked, as a stable target
+    // Every bus's node id, by endpoint key.
+    std::map<std::string, std::uint32_t> busByKey;
+    for (const auto &[name, id] : ready) {
+        busByKey[wanted.at(name).key] = id;
+    }
+
+    std::set<std::pair<std::uint32_t, std::uint32_t>> desired;
+    std::set<std::uint32_t> inputBuses;
+    std::set<std::uint32_t> allBuses;
+    for (const auto &[name, id] : ready) {
+        allBuses.insert(id);
+        const auto &w = wanted.at(name);
+        if (w.endpoint.direction != Direction::Input) {
+            continue;
+        }
+        inputBuses.insert(id);
+        for (const auto &destination : w.settings->sends) {
+            const auto target = busByKey.find(destination);
+            if (target == busByKey.end()) {
+                continue; // destination disabled, offline-and-unmade, or forgotten
+            }
+            for (const auto &[out, in] :
+                 pairPorts(portsOf(id, "out", true), portsOf(target->second, "in", false))) {
+                desired.emplace(out.portId, in.portId);
+                if (!existingLinks.contains({out.portId, in.portId}) &&
+                    !m_pendingLinks.contains({out.portId, in.portId}) &&
+                    m_graph->createLink(out.nodeId, out.portId, in.nodeId, in.portId, true)) {
+                    m_pendingLinks[{out.portId, in.portId}] = Clock::now();
+                }
+            }
+        }
+    }
+
+    // Links from one of our input buses into another of our buses are ours to
+    // manage: remove the ones no send asks for. Links to anything else (an
+    // app recording an input bus) are left alone.
+    for (const auto &[id, link] : m_graph->links()) {
+        const auto outNode = parseId(prop(link, "link.output.node"));
+        const auto inNode = parseId(prop(link, "link.input.node"));
+        if (!inputBuses.contains(outNode) || !allBuses.contains(inNode)) {
+            continue;
+        }
+        const std::pair ports{parseId(prop(link, "link.output.port")),
+                              parseId(prop(link, "link.input.port"))};
+        if (!desired.contains(ports)) {
+            m_graph->destroyObject(id);
+        }
+    }
+}
+
+void BusManager::linkHardware(std::uint32_t busNodeId, const Wanted &wanted,
+                              const LinkMap &existingLinks)
+{
+    if (!wanted.hardwareNodeId || wanted.settings->kind != EndpointKind::Hardware) {
+        return; // offline (the bus stays, unlinked, as a stable target) or virtual
     }
     const auto hardware = *wanted.hardwareNodeId;
     const bool input = wanted.endpoint.direction == Direction::Input;
-    const auto outputs = input ? portsOf(hardware, "out", false) : portsOf(busNodeId, "out", true);
+    // Every bus takes audio in on its "in" ports and gives it out on its
+    // monitor ports (a virtual source's capture ports are flagged monitor too).
+    auto outputs = input ? portsOf(hardware, "out", false) : portsOf(busNodeId, "out", true);
+    if (input && outputs.empty()) {
+        outputs = portsOf(hardware, "out", true); // a virtual source: its outputs are monitor ports
+    }
     const auto inputs = input ? portsOf(busNodeId, "in", false) : portsOf(hardware, "in", false);
 
     const auto now = Clock::now();

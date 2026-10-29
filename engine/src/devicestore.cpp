@@ -13,6 +13,8 @@
 #include <QStandardPaths>
 #include <QUuid>
 
+#include <algorithm>
+
 namespace pp {
 
 namespace {
@@ -35,7 +37,13 @@ QJsonObject toJson(const DeviceSettings &d)
     for (const auto &p : d.positions) {
         positions.append(qs(p));
     }
+    QJsonArray sends;
+    for (const auto &s : d.sends) {
+        sends.append(qs(s));
+    }
     return QJsonObject{
+        {QStringLiteral("kind"), qs(kindName(d.kind))},
+        {QStringLiteral("sends"), sends},
         {QStringLiteral("busId"), qs(d.busId)},
         {QStringLiteral("enabled"), d.enabled},
         {QStringLiteral("label"), qs(d.label)},
@@ -64,6 +72,10 @@ QJsonObject toJson(const DeviceSettings &d)
 DeviceSettings fromJson(const QJsonObject &o)
 {
     DeviceSettings d;
+    d.kind = kindFromName(str(o, "kind"));
+    for (const auto &s : o.value(QLatin1String("sends")).toArray()) {
+        d.sends.push_back(s.toString().toStdString());
+    }
     d.busId = str(o, "busId");
     d.enabled = o.value(QLatin1String("enabled")).toBool();
     d.label = str(o, "label");
@@ -89,6 +101,30 @@ DeviceSettings fromJson(const QJsonObject &o)
 }
 
 } // namespace
+
+std::string kindName(EndpointKind kind)
+{
+    switch (kind) {
+    case EndpointKind::VirtualSink:
+        return "virtual-sink";
+    case EndpointKind::VirtualSource:
+        return "virtual-source";
+    case EndpointKind::Hardware:
+        break;
+    }
+    return "hardware";
+}
+
+EndpointKind kindFromName(std::string_view name)
+{
+    if (name == "virtual-sink") {
+        return EndpointKind::VirtualSink;
+    }
+    if (name == "virtual-source") {
+        return EndpointKind::VirtualSource;
+    }
+    return EndpointKind::Hardware;
+}
 
 DeviceStore::DeviceStore(QString path) : m_path(path.isEmpty() ? defaultPath() : std::move(path)) {}
 
@@ -180,7 +216,13 @@ std::string DeviceStore::newBusId()
 
 bool DeviceStore::remove(const std::string &key)
 {
-    return m_entries.erase(key) > 0;
+    if (m_entries.erase(key) == 0) {
+        return false;
+    }
+    for (auto &[other, settings] : m_entries) {
+        std::erase(settings.sends, key);
+    }
+    return true;
 }
 
 bool DeviceStore::rekey(const std::string &from, const std::string &to)
@@ -194,7 +236,15 @@ bool DeviceStore::rekey(const std::string &from, const std::string &to)
     }
     node.key() = to;
     m_entries.insert(std::move(node));
+    for (auto &[key, settings] : m_entries) {
+        std::ranges::replace(settings.sends, from, to);
+    }
     return true;
+}
+
+std::string DeviceStore::virtualKey(const std::string &busId)
+{
+    return "patchprime-virtual|" + busId;
 }
 
 } // namespace pp

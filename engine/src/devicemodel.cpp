@@ -179,10 +179,20 @@ QVariant DeviceModel::data(const QModelIndex &index, int role) const
         return saved != nullptr && saved->muted;
     case BusIdRole:
         return qs(saved != nullptr ? saved->busId : std::string{});
+    case KindRole:
+        return qs(kindName(saved != nullptr ? saved->kind : EndpointKind::Hardware));
+    case SendsRole: {
+        QStringList sends;
+        if (saved != nullptr) {
+            for (const auto &s : saved->sends) {
+                sends.append(qs(s));
+            }
+        }
+        return sends;
+    }
     case BusDefaultRole:
         return saved != nullptr && saved->enabled && e.direction == Direction::Output &&
-               !m_defaultSink.empty() &&
-               m_defaultSink == busNodeName(Direction::Output, saved->busId);
+               !m_defaultSink.empty() && m_defaultSink == busNameFor(e, *saved);
     case SectionStartRole:
         return index.row() == 0 ||
                m_rows[static_cast<std::size_t>(index.row()) - 1].endpoint.direction != e.direction;
@@ -212,6 +222,8 @@ QHash<int, QByteArray> DeviceModel::roleNames() const
         {MutedRole, "muted"},
         {BusIdRole, "busId"},
         {BusDefaultRole, "busIsDefault"},
+        {KindRole, "kind"},
+        {SendsRole, "sends"},
     };
 }
 
@@ -295,16 +307,89 @@ void DeviceModel::forget(int row)
     }
     saveStore();
     Q_EMIT settingsChanged(key);
-    if (r.nodeId) {
+    // A virtual device exists only through its entry, so it goes entirely.
+    const bool isOwnVirtual = r.endpoint.nodeName.starts_with(virtualNamePrefix);
+    if (r.nodeId && !isOwnVirtual) {
         const auto i = index(row);
         Q_EMIT dataChanged(i, i);
     } else {
         removeRowAt(row);
     }
+    // Inputs that were sent here lost that send.
+    if (!m_rows.empty()) {
+        Q_EMIT dataChanged(index(0), index(rowCount() - 1), {SendsRole});
+    }
+}
+
+void DeviceModel::setSend(int row, const QString &destinationKey, bool enabled)
+{
+    if (row < 0 || row >= rowCount()) {
+        return;
+    }
+    const auto &r = m_rows[static_cast<std::size_t>(row)];
+    const auto destination = destinationKey.toStdString();
+    const int destinationRow = rowForKey(destination);
+    if (r.endpoint.direction != Direction::Input || destinationRow < 0 ||
+        m_rows[static_cast<std::size_t>(destinationRow)].endpoint.direction != Direction::Output) {
+        return; // only input -> output: that's also what keeps loops impossible
+    }
+    m_store->upsert(r.endpoint.key);
+    remember(r, r.nodeId.has_value());
+    auto &sends = m_store->upsert(r.endpoint.key).sends;
+    const bool has = std::ranges::find(sends, destination) != sends.end();
+    if (has == enabled) {
+        return;
+    }
+    if (enabled) {
+        sends.push_back(destination);
+    } else {
+        std::erase(sends, destination);
+    }
+    saveStore();
+    const auto i = index(row);
+    Q_EMIT dataChanged(i, i, {SendsRole, SavedRole});
+    Q_EMIT settingsChanged(qs(r.endpoint.key));
+}
+
+QString DeviceModel::createVirtual(const QString &name, EndpointKind kind)
+{
+    if (kind == EndpointKind::Hardware) {
+        return {};
+    }
+    const auto busId = DeviceStore::newBusId();
+    const auto key = DeviceStore::virtualKey(busId);
+    auto &s = m_store->upsert(key);
+    s.busId = busId;
+    s.kind = kind;
+    s.enabled = true;
+    s.label = name.trimmed().toStdString();
+    s.nodeName = virtualNodeName(busId);
+    s.mediaClass = kind == EndpointKind::VirtualSink ? "Audio/Sink" : "Audio/Source/Virtual";
+    s.direction = Direction::Output; // a routing destination
+    s.isVirtual = true;
+    s.description = s.label;
+    s.channels = 2;
+    s.positions = {"FL", "FR"};
+    s.lastSeen = QDateTime::currentDateTimeUtc();
+    saveStore();
+    insertSorted({.endpoint = endpointFromSettings(key, s), .nodeId = {}});
+    Q_EMIT settingsChanged(qs(key));
+    return qs(key);
 }
 
 void DeviceModel::upsertNode(const GraphObject &node, const GraphObject *device)
 {
+    // Our own virtual devices: online once their node exists.
+    if (const auto &name = prop(node, "node.name"); name.starts_with(virtualNamePrefix)) {
+        const auto it = std::ranges::find_if(
+            m_rows, [&name](const Row &r) { return r.endpoint.nodeName == name; });
+        if (it != m_rows.end() && it->nodeId != node.id) {
+            it->nodeId = node.id;
+            const auto i = index(static_cast<int>(it - m_rows.begin()));
+            Q_EMIT dataChanged(i, i, {OnlineRole, DefaultRole, BusDefaultRole});
+        }
+        return;
+    }
     const auto endpoint = classifyEndpoint(node, device);
     if (const int current = rowForNode(node.id);
         current >= 0 &&

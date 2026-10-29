@@ -28,9 +28,10 @@ const QString interface = QStringLiteral("org.kingsqueak.PatchPrime1");
 
 // Field names in the daemon's state JSON (DeviceModel's role names).
 constexpr std::array fields{
-    "key",       "label",        "customLabel", "description", "nodeName",  "direction",
-    "isVirtual", "online",       "isEnabled",   "channels",    "positions", "isDefault",
-    "saved",     "sectionStart", "volumeDb",    "muted",       "busId",     "busIsDefault",
+    "key",       "label",     "customLabel",  "description",  "nodeName",
+    "direction", "isVirtual", "online",       "isEnabled",    "channels",
+    "positions", "isDefault", "saved",        "sectionStart", "volumeDb",
+    "muted",     "busId",     "busIsDefault", "kind",         "sends",
 };
 
 // How far a meter falls per update (about 30 per second): 60 dB in ~1.6 s.
@@ -215,6 +216,16 @@ void DaemonClient::forget(const QString &key)
 void DaemonClient::setDefaultOutput(const QString &key, bool throughMixer)
 {
     call(QStringLiteral("SetDefaultOutput"), {key, throughMixer});
+}
+
+void DaemonClient::setSend(const QString &inputKey, const QString &destinationKey, bool enabled)
+{
+    call(QStringLiteral("SetSend"), {inputKey, destinationKey, enabled});
+}
+
+void DaemonClient::createVirtual(const QString &name, const QString &kind)
+{
+    call(QStringLiteral("CreateVirtual"), {name, kind});
 }
 
 void DaemonClient::onStateChanged(const QString &state)

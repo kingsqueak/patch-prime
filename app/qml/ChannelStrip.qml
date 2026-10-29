@@ -19,6 +19,7 @@ QQC2.Frame {
     readonly property bool muted: model.muted
     readonly property string direction: model.direction
     readonly property bool busIsDefault: model.busIsDefault
+    readonly property string kind: model.kind
     readonly property real volumeDb: model.volumeDb
     readonly property var levels: model.levels
     readonly property int channels: Math.max(1, model.channels)
@@ -147,7 +148,8 @@ QQC2.Frame {
 
         QQC2.Button {
             Layout.alignment: Qt.AlignHCenter
-            visible: strip.direction === "output"
+            // A virtual source is a microphone, not something to play into.
+            visible: strip.direction === "output" && strip.kind !== "virtual-source"
             checkable: true
             icon.name: strip.busIsDefault ? "starred-symbolic" : "non-starred-symbolic"
             text: qsTr("Default")
