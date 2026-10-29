@@ -11,7 +11,7 @@ A virtual audio mixer and router for KDE Plasma, built on PipeWire.
 
 Planned: built-in EQ and dynamics processing, then LV2, CLAP and VST3 plugin hosting.
 
-Status: early development (Phase 0: build skeleton and `patchprime-probe`).
+Status: early development. Phase 1: the app lists every audio input and output live (hotplug included), and lets you enable each one and give it a label. Settings are kept in `~/.config/patchprime/devices.json` and follow a device when it moves to another USB port or changes profile.
 
 ## Building
 

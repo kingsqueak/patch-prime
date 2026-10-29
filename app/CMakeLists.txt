@@ -12,7 +12,7 @@ qt_add_executable(patchprime main.cpp)
 qt_add_qml_module(patchprime
     URI org.kingsqueak.patchprime
     VERSION 1.0
-    QML_FILES qml/Main.qml
+    QML_FILES qml/Main.qml qml/DevicesPage.qml
     NO_IMPORT_SCAN) # the import scan only matters for static Qt builds
 
 target_link_libraries(patchprime PRIVATE

@@ -1,0 +1,468 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 KC2RGW Chris
+
+#include "devicemodel.h"
+
+#include "pipewiregraph.h"
+
+#include <QLoggingCategory>
+
+#include <algorithm>
+#include <cctype>
+#include <charconv>
+#include <tuple>
+
+Q_LOGGING_CATEGORY(lcDevices, "patchprime.devices")
+
+namespace pp {
+
+namespace {
+
+const std::string nodeType = "PipeWire:Interface:Node";
+const std::string deviceType = "PipeWire:Interface:Device";
+
+QString qs(const std::string &s)
+{
+    return QString::fromStdString(s);
+}
+
+std::string lower(std::string s)
+{
+    std::ranges::transform(s, s.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return s;
+}
+
+std::optional<std::uint32_t> parseId(const std::string &value)
+{
+    std::uint32_t id = 0;
+    if (value.empty() ||
+        std::from_chars(value.data(), value.data() + value.size(), id).ec != std::errc{}) {
+        return std::nullopt;
+    }
+    return id;
+}
+
+Endpoint endpointFromSettings(const std::string &key, const DeviceSettings &s)
+{
+    Endpoint e;
+    e.key = key;
+    e.nodeName = s.nodeName;
+    e.mediaClass = s.mediaClass;
+    e.direction = s.direction;
+    e.isVirtual = s.isVirtual;
+    e.description = s.description.empty() ? s.nodeName : s.description;
+    e.channels = s.channels;
+    e.signature = s.signature;
+    return e;
+}
+
+} // namespace
+
+DeviceModel::DeviceModel(DeviceStore *store, QObject *parent)
+    : QAbstractListModel(parent), m_store(store)
+{
+    for (const auto &[key, settings] : m_store->entries()) {
+        m_rows.push_back({.endpoint = endpointFromSettings(key, settings), .nodeId = {}});
+    }
+    std::ranges::sort(m_rows, &DeviceModel::lessThan);
+}
+
+void DeviceModel::attach(PipeWireGraph *graph)
+{
+    m_graph = graph;
+
+    auto deviceFor = [graph](const GraphObject &node) -> const GraphObject * {
+        const auto id = parseId(prop(node, "device.id"));
+        if (!id) {
+            return nullptr;
+        }
+        const auto it = graph->devices().find(*id);
+        return it != graph->devices().end() ? &it->second : nullptr;
+    };
+    auto onAddedOrChanged = [this, graph, deviceFor](const GraphObject &object) {
+        if (object.type == nodeType) {
+            upsertNode(object, deviceFor(object));
+        } else if (object.type == deviceType) {
+            // The signature comes from the card, so refresh its nodes.
+            const auto id = std::to_string(object.id);
+            for (const auto &[nodeId, node] : graph->nodes()) {
+                if (prop(node, "device.id") == id) {
+                    upsertNode(node, &object);
+                }
+            }
+        }
+    };
+
+    connect(graph, &PipeWireGraph::objectAdded, this, onAddedOrChanged);
+    connect(graph, &PipeWireGraph::objectChanged, this, onAddedOrChanged);
+    connect(graph, &PipeWireGraph::objectRemoved, this, [this](const GraphObject &object) {
+        if (object.type == nodeType) {
+            removeNode(object.id);
+        }
+    });
+    connect(graph, &PipeWireGraph::defaultsChanged, this,
+            [this, graph] { setDefaults(graph->defaultSinkName(), graph->defaultSourceName()); });
+    connect(graph, &PipeWireGraph::connectedChanged, this, &DeviceModel::setConnected);
+
+    setConnected(graph->isConnected());
+    for (const auto &[id, node] : graph->nodes()) {
+        upsertNode(node, deviceFor(node));
+    }
+    setDefaults(graph->defaultSinkName(), graph->defaultSourceName());
+}
+
+int DeviceModel::rowCount(const QModelIndex &parent) const
+{
+    return parent.isValid() ? 0 : static_cast<int>(m_rows.size());
+}
+
+QVariant DeviceModel::data(const QModelIndex &index, int role) const
+{
+    if (!checkIndex(index, CheckIndexOption::IndexIsValid | CheckIndexOption::ParentIsInvalid)) {
+        return {};
+    }
+    const auto &row = m_rows[static_cast<std::size_t>(index.row())];
+    const auto &e = row.endpoint;
+    const auto *saved = m_store->find(e.key);
+
+    switch (role) {
+    case Qt::DisplayRole:
+    case LabelRole:
+        return qs(saved != nullptr && !saved->label.empty() ? saved->label : e.description);
+    case KeyRole:
+        return qs(e.key);
+    case CustomLabelRole:
+        return qs(saved != nullptr ? saved->label : std::string{});
+    case DescriptionRole:
+        return qs(e.description);
+    case NodeNameRole:
+        return qs(e.nodeName);
+    case DirectionRole:
+        return e.direction == Direction::Input ? QStringLiteral("input") : QStringLiteral("output");
+    case VirtualRole:
+        return e.isVirtual;
+    case OnlineRole:
+        return row.nodeId.has_value();
+    case EnabledRole:
+        return saved != nullptr && saved->enabled;
+    case ChannelsRole:
+        return e.channels;
+    case PositionsRole: {
+        QStringList positions;
+        for (const auto &p : e.positions) {
+            positions.append(qs(p));
+        }
+        return positions.join(QLatin1Char(' '));
+    }
+    case DefaultRole:
+        return isDefault(row);
+    case SavedRole:
+        return saved != nullptr;
+    case SectionStartRole:
+        return index.row() == 0 ||
+               m_rows[static_cast<std::size_t>(index.row()) - 1].endpoint.direction != e.direction;
+    default:
+        return {};
+    }
+}
+
+QHash<int, QByteArray> DeviceModel::roleNames() const
+{
+    return {
+        {KeyRole, "key"},
+        {LabelRole, "label"},
+        {CustomLabelRole, "customLabel"},
+        {DescriptionRole, "description"},
+        {NodeNameRole, "nodeName"},
+        {DirectionRole, "direction"},
+        {VirtualRole, "isVirtual"},
+        {OnlineRole, "online"},
+        {EnabledRole, "isEnabled"},
+        {ChannelsRole, "channels"},
+        {PositionsRole, "positions"},
+        {DefaultRole, "isDefault"},
+        {SavedRole, "saved"},
+        {SectionStartRole, "sectionStart"},
+    };
+}
+
+void DeviceModel::setEnabled(int row, bool enabled)
+{
+    if (row < 0 || row >= rowCount()) {
+        return;
+    }
+    const auto &r = m_rows[static_cast<std::size_t>(row)];
+    m_store->upsert(r.endpoint.key);
+    remember(r, r.nodeId.has_value());
+    m_store->upsert(r.endpoint.key).enabled = enabled;
+    saveStore();
+    const auto i = index(row);
+    Q_EMIT dataChanged(i, i, {EnabledRole, SavedRole});
+}
+
+void DeviceModel::setLabel(int row, const QString &label)
+{
+    if (row < 0 || row >= rowCount()) {
+        return;
+    }
+    const auto &r = m_rows[static_cast<std::size_t>(row)];
+    const auto trimmed = label.trimmed().toStdString();
+    const auto *saved = m_store->find(r.endpoint.key);
+    if ((saved == nullptr && trimmed.empty()) || (saved != nullptr && saved->label == trimmed)) {
+        return;
+    }
+    m_store->upsert(r.endpoint.key);
+    remember(r, r.nodeId.has_value());
+    m_store->upsert(r.endpoint.key).label = trimmed;
+    saveStore();
+    const auto i = index(row);
+    Q_EMIT dataChanged(i, i, {LabelRole, CustomLabelRole, Qt::DisplayRole, SavedRole});
+}
+
+void DeviceModel::forget(int row)
+{
+    if (row < 0 || row >= rowCount()) {
+        return;
+    }
+    const auto &r = m_rows[static_cast<std::size_t>(row)];
+    if (!m_store->remove(r.endpoint.key)) {
+        return;
+    }
+    saveStore();
+    if (r.nodeId) {
+        const auto i = index(row);
+        Q_EMIT dataChanged(i, i);
+    } else {
+        removeRowAt(row);
+    }
+}
+
+void DeviceModel::upsertNode(const GraphObject &node, const GraphObject *device)
+{
+    const auto endpoint = classifyEndpoint(node, device);
+    if (const int current = rowForNode(node.id);
+        current >= 0 &&
+        (!endpoint || m_rows[static_cast<std::size_t>(current)].endpoint.key != endpoint->key)) {
+        // The node stopped being an endpoint, or was renamed in place.
+        removeNode(node.id);
+    }
+    if (!endpoint) {
+        return;
+    }
+
+    Row row{.endpoint = *endpoint, .nodeId = node.id};
+
+    if (const int existing = rowForKey(endpoint->key); existing >= 0) {
+        const bool cameOnline = !m_rows[static_cast<std::size_t>(existing)].nodeId.has_value();
+        replaceRow(existing, row);
+        remember(row, cameOnline);
+        return;
+    }
+
+    if (const int candidate = findReattachCandidate(*endpoint); candidate >= 0) {
+        const auto old = m_rows[static_cast<std::size_t>(candidate)].endpoint;
+        if (m_store->rekey(old.key, endpoint->key)) {
+            const auto *saved = m_store->find(endpoint->key);
+            const auto label = qs(saved->label.empty() ? old.description : saved->label);
+            qCInfo(lcDevices, "recognised %s as %s", old.nodeName.c_str(),
+                   endpoint->nodeName.c_str());
+            replaceRow(candidate, row);
+            remember(row, true);
+            Q_EMIT reattached(label, qs(old.nodeName), qs(endpoint->nodeName));
+            return;
+        }
+    }
+
+    insertSorted(std::move(row));
+}
+
+void DeviceModel::removeNode(std::uint32_t nodeId)
+{
+    const int index = rowForNode(nodeId);
+    if (index < 0) {
+        return;
+    }
+    auto &row = m_rows[static_cast<std::size_t>(index)];
+    if (m_store->find(row.endpoint.key) != nullptr) {
+        row.nodeId.reset();
+        const auto i = this->index(index);
+        Q_EMIT dataChanged(i, i, {OnlineRole, DefaultRole});
+    } else {
+        removeRowAt(index);
+    }
+}
+
+void DeviceModel::setDefaults(const std::string &sinkName, const std::string &sourceName)
+{
+    if (sinkName == m_defaultSink && sourceName == m_defaultSource) {
+        return;
+    }
+    m_defaultSink = sinkName;
+    m_defaultSource = sourceName;
+    if (!m_rows.empty()) {
+        Q_EMIT dataChanged(index(0), index(rowCount() - 1), {DefaultRole});
+    }
+}
+
+void DeviceModel::setConnected(bool connected)
+{
+    if (connected != m_connected) {
+        m_connected = connected;
+        Q_EMIT connectedChanged();
+    }
+}
+
+int DeviceModel::rowForKey(const std::string &key) const
+{
+    const auto it =
+        std::ranges::find_if(m_rows, [&key](const Row &r) { return r.endpoint.key == key; });
+    return it != m_rows.end() ? static_cast<int>(it - m_rows.begin()) : -1;
+}
+
+int DeviceModel::rowForNode(std::uint32_t nodeId) const
+{
+    const auto it =
+        std::ranges::find_if(m_rows, [nodeId](const Row &r) { return r.nodeId == nodeId; });
+    return it != m_rows.end() ? static_cast<int>(it - m_rows.begin()) : -1;
+}
+
+int DeviceModel::findReattachCandidate(const Endpoint &live) const
+{
+    if (live.isVirtual) {
+        return -1; // virtual endpoints have no hardware signature; only exact names match
+    }
+    int best = -1;
+    bool tie = false;
+    std::tuple<int, bool, bool> bestRank{0, false, false};
+
+    for (std::size_t i = 0; i < m_rows.size(); ++i) {
+        const auto &row = m_rows[i];
+        const auto &saved = row.endpoint;
+        if (row.nodeId || saved.isVirtual || saved.mediaClass != live.mediaClass ||
+            m_store->find(saved.key) == nullptr) {
+            continue;
+        }
+        const auto match = matchSignature(saved.signature, live.signature);
+        if (match == Match::None) {
+            continue;
+        }
+        const bool sameProfile = saved.signature.profile == live.signature.profile;
+        // A bare model match is a device moved to another port, which keeps its
+        // profile. Without that, it's too weak to act on.
+        if (match == Match::SameModel && !sameProfile) {
+            continue;
+        }
+        const std::tuple rank{static_cast<int>(match),
+                              saved.signature.busPath == live.signature.busPath, sameProfile};
+        if (rank > bestRank) {
+            bestRank = rank;
+            best = static_cast<int>(i);
+            tie = false;
+        } else if (rank == bestRank) {
+            tie = true;
+        }
+    }
+    return tie ? -1 : best;
+}
+
+bool DeviceModel::isDefault(const Row &row) const
+{
+    if (!row.nodeId) {
+        return false;
+    }
+    const auto &name =
+        row.endpoint.direction == Direction::Output ? m_defaultSink : m_defaultSource;
+    return !name.empty() && name == row.endpoint.nodeName;
+}
+
+bool DeviceModel::lessThan(const Row &a, const Row &b)
+{
+    const auto rank = [](const Row &r) {
+        return std::tuple{r.endpoint.direction != Direction::Input, r.endpoint.isVirtual,
+                          lower(r.endpoint.description), r.endpoint.key};
+    };
+    return rank(a) < rank(b);
+}
+
+void DeviceModel::insertSorted(Row row)
+{
+    const auto it = std::ranges::upper_bound(m_rows, row, &DeviceModel::lessThan);
+    const int position = static_cast<int>(it - m_rows.begin());
+    beginInsertRows({}, position, position);
+    m_rows.insert(it, std::move(row));
+    endInsertRows();
+    refreshSectionStarts();
+}
+
+void DeviceModel::replaceRow(int index, Row row)
+{
+    const auto i = static_cast<std::size_t>(index);
+    const bool staysSorted = (i == 0 || !lessThan(row, m_rows[i - 1])) &&
+                             (i + 1 == m_rows.size() || !lessThan(m_rows[i + 1], row));
+    if (staysSorted) {
+        m_rows[i] = std::move(row);
+        const auto modelIndex = this->index(index);
+        Q_EMIT dataChanged(modelIndex, modelIndex);
+        return;
+    }
+    removeRowAt(index);
+    insertSorted(std::move(row));
+}
+
+void DeviceModel::removeRowAt(int index)
+{
+    beginRemoveRows({}, index, index);
+    m_rows.erase(m_rows.begin() + index);
+    endRemoveRows();
+    refreshSectionStarts();
+}
+
+// The list is short, so every row is refreshed rather than working out which
+// neighbours changed.
+void DeviceModel::refreshSectionStarts()
+{
+    if (!m_rows.empty()) {
+        Q_EMIT dataChanged(index(0), index(rowCount() - 1), {SectionStartRole});
+    }
+}
+
+void DeviceModel::remember(const Row &row, bool seenNow)
+{
+    if (m_store->find(row.endpoint.key) == nullptr) {
+        return;
+    }
+    auto &s = m_store->upsert(row.endpoint.key);
+    const auto &e = row.endpoint;
+    const DeviceSettings before = s;
+    s.nodeName = e.nodeName;
+    s.mediaClass = e.mediaClass;
+    s.direction = e.direction;
+    s.isVirtual = e.isVirtual;
+    s.description = e.description;
+    s.channels = e.channels;
+    // An offline row carries the saved signature; only a live one refreshes it.
+    if (row.nodeId) {
+        s.signature = e.signature;
+    }
+    const bool detailsChanged = s.nodeName != before.nodeName ||
+                                s.mediaClass != before.mediaClass ||
+                                s.description != before.description ||
+                                s.channels != before.channels || !(s.signature == before.signature);
+    if (seenNow) {
+        s.lastSeen = QDateTime::currentDateTimeUtc();
+    }
+    if (detailsChanged || seenNow) {
+        saveStore();
+    }
+}
+
+void DeviceModel::saveStore()
+{
+    if (!m_store->save()) {
+        qCWarning(lcDevices, "could not save %s: %s", qPrintable(m_store->path()),
+                  qPrintable(m_store->lastError()));
+    }
+}
+
+} // namespace pp

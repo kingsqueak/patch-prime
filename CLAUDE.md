@@ -21,6 +21,9 @@ C++23 (for `std::expected` and `std::print`), CMake + Ninja, Qt 6.10 (QML + Kiri
 ## Build
 - `cmake --preset gcc-debug && cmake --build --preset gcc-debug && ctest --preset gcc-debug` (also `clang-debug`; `clang-tidy` runs clang-tidy during the build). The presets turn on `-Werror`.
 - Layout: `engine/` (static library, Qt Core only, owns all libpipewire code), `probe/` (`patchprime-probe`), `app/` (Kirigami GUI), `tests/` (Qt Test; `test_graphsnapshot` needs a running PipeWire server and skips without one).
+- Phase 1 runs the engine inside the GUI (`app/main.cpp`): `PipeWireGraph` (pw_thread_loop, events posted to the main thread) → `DeviceModel` (+ `DeviceStore`, `~/.config/patchprime/devices.json`).
+- QML delegates: read roles through `required property var model` (`model.foo`), not one required property per role, and don't use `ListView.section`. With Qt 6.10 both showed stale data on the wrong row after a row was inserted. Never name a role after an existing Item property (`enabled`, `visible`, ...).
+- `PATCHPRIME_SCREENSHOT=<file.png> QT_QPA_PLATFORM=offscreen` saves the window and quits, to check the UI without a display; point `XDG_CONFIG_HOME` at a temp dir so your real settings aren't touched.
 - Kirigami is used only from QML. Don't `find_package(KF6Kirigami)`: its CMake config needs OpenMP, which Clang builds here lack.
 
 ## GitHub

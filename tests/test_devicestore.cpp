@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 KC2RGW Chris
+
+#include "devicestore.h"
+
+#include <QFile>
+#include <QTemporaryDir>
+#include <QTest>
+
+using namespace pp;
+
+class TestDeviceStore : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+    void missingFileIsEmpty()
+    {
+        QTemporaryDir dir;
+        DeviceStore store(dir.filePath(QStringLiteral("nope/devices.json")));
+        QVERIFY(store.load());
+        QVERIFY(store.entries().empty());
+    }
+
+    void roundTrip()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("sub/devices.json"));
+        {
+            DeviceStore store(path);
+            auto &d = store.upsert("Audio/Source|mic");
+            d.enabled = true;
+            d.label = "Desk mic";
+            d.nodeName = "mic";
+            d.mediaClass = "Audio/Source";
+            d.direction = Direction::Input;
+            d.description = "USB Microphone";
+            d.channels = 1;
+            d.signature = {.deviceSerial = "SN1",
+                           .vendorId = "0x1",
+                           .productId = "0x2",
+                           .busPath = "usb-0:3",
+                           .profile = "mono"};
+            d.lastSeen = QDateTime(QDate(2026, 10, 29), QTime(13, 0), QTimeZone::UTC);
+            QVERIFY2(store.save(), qPrintable(store.lastError())); // creates sub/
+        }
+        DeviceStore store(path);
+        QVERIFY(store.load());
+        const auto *d = store.find("Audio/Source|mic");
+        QVERIFY(d != nullptr);
+        QVERIFY(d->enabled);
+        QCOMPARE(d->label, "Desk mic");
+        QCOMPARE(d->direction, Direction::Input);
+        QCOMPARE(d->channels, 1);
+        QCOMPARE(d->signature.deviceSerial, "SN1");
+        QCOMPARE(d->signature.busPath, "usb-0:3");
+        QCOMPARE(d->lastSeen, QDateTime(QDate(2026, 10, 29), QTime(13, 0), QTimeZone::UTC));
+    }
+
+    void corruptFileIsAnError()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("devices.json"));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("{ not json");
+        file.close();
+        DeviceStore store(path);
+        QVERIFY(!store.load());
+        QVERIFY(!store.lastError().isEmpty());
+    }
+
+    void rekey()
+    {
+        DeviceStore store(QStringLiteral("/dev/null/unused"));
+        store.upsert("a").label = "A";
+        store.upsert("b").label = "B";
+        QVERIFY(store.rekey("a", "c"));
+        QVERIFY(store.find("a") == nullptr);
+        QCOMPARE(store.find("c")->label, "A");
+        QVERIFY(!store.rekey("c", "b")); // target taken: nothing moves
+        QCOMPARE(store.find("c")->label, "A");
+        QCOMPARE(store.find("b")->label, "B");
+        QVERIFY(!store.rekey("missing", "d"));
+    }
+};
+
+QTEST_GUILESS_MAIN(TestDeviceStore)
+#include "test_devicestore.moc"

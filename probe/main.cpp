@@ -21,6 +21,8 @@
 
 namespace {
 
+using pp::prop;
+
 QString qs(const std::string &s)
 {
     return QString::fromStdString(s);
@@ -87,12 +89,6 @@ QJsonObject toJson(const pp::GraphSnapshot &snapshot)
         {QStringLiteral("links"), toJson(snapshot.links)},
         {QStringLiteral("defaults"), defaultsToJson(snapshot.defaults)},
     };
-}
-
-std::string prop(const pp::GraphObject &object, const std::string &key)
-{
-    const auto it = object.props.find(key);
-    return it != object.props.end() ? it->second : std::string{};
 }
 
 std::string defaultFor(const pp::GraphSnapshot &snapshot, std::string_view key)

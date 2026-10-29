@@ -13,7 +13,14 @@ function(patchprime_add_test name)
 endfunction()
 
 patchprime_add_test(test_defaultnodename test_defaultnodename.cpp)
+patchprime_add_test(test_endpoint test_endpoint.cpp)
+patchprime_add_test(test_devicestore test_devicestore.cpp)
+patchprime_add_test(test_devicemodel test_devicemodel.cpp)
 
 # Needs a running PipeWire server; skips itself when there isn't one.
 patchprime_add_test(test_graphsnapshot test_graphsnapshot.cpp)
 set_tests_properties(test_graphsnapshot PROPERTIES LABELS "pipewire" SKIP_RETURN_CODE 77)
+
+# Creates and removes a temporary null sink with pactl; skips without PipeWire.
+patchprime_add_test(test_pipewiregraph test_pipewiregraph.cpp)
+set_tests_properties(test_pipewiregraph PROPERTIES LABELS "pipewire" SKIP_RETURN_CODE 77)

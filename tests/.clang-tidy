@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileCopyrightText: 2026 KC2RGW Chris
-# Qt Test runs private slots by name, so they can't be static or const.
+# Qt Test runs private slots by name, so they can't be static or const, and
+# QVERIFY(opt.has_value()) guards optionals in a way the checker can't see.
 InheritParentConfig: true
 Checks: >
   -readability-convert-member-functions-to-static,
   -readability-make-member-function-const,
-  -readability-redundant-access-specifiers
+  -readability-redundant-access-specifiers,
+  -bugprone-unchecked-optional-access

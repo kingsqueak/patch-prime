@@ -3,35 +3,14 @@
 
 #pragma once
 
+#include "graphtypes.h"
+
 #include <chrono>
-#include <cstdint>
 #include <expected>
-#include <map>
 #include <string>
 #include <vector>
 
 namespace pp {
-
-using Properties = std::map<std::string, std::string>;
-
-// One PipeWire global object as seen in the registry. For nodes and devices the
-// properties are the full set from the object's info event, not the reduced set
-// the registry announces.
-struct GraphObject
-{
-    std::uint32_t id = 0;
-    std::string type; // e.g. "PipeWire:Interface:Node"
-    std::uint32_t version = 0;
-    Properties props;
-};
-
-struct MetadataEntry
-{
-    std::uint32_t subject = 0;
-    std::string key;
-    std::string type; // e.g. "Spa:String:JSON"
-    std::string value;
-};
 
 struct ServerInfo
 {

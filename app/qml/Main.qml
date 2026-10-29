@@ -2,26 +2,22 @@
 // SPDX-FileCopyrightText: 2026 KC2RGW Chris
 
 import QtQuick
-import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.kingsqueak.patchprime.engine
 
 Kirigami.ApplicationWindow {
     id: root
 
     title: "Patch Prime"
-    width: Kirigami.Units.gridUnit * 50
-    height: Kirigami.Units.gridUnit * 32
+    width: Kirigami.Units.gridUnit * 46
+    height: Kirigami.Units.gridUnit * 34
 
-    pageStack.initialPage: Kirigami.Page {
-        title: "Mixer"
+    pageStack.initialPage: DevicesPage {}
 
-        Kirigami.PlaceholderMessage {
-            anchors.centerIn: parent
-            width: parent.width - Kirigami.Units.gridUnit * 4
-            icon.name: "audio-card"
-            text: "Patch Prime"
-            explanation: "The device matrix and channel strips arrive in Phase 1. "
-                         + "For now, run patchprime-probe --summary to list the devices PipeWire sees."
+    Connections {
+        target: Devices
+        function onReattached(label, oldNodeName, newNodeName) {
+            root.showPassiveNotification(qsTr("Recognised “%1” under its new name").arg(label));
         }
     }
 }
