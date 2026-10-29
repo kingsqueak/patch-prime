@@ -57,7 +57,11 @@ class AppRouter : public QObject
     Q_OBJECT
 
 public:
-    AppRouter(PipeWireGraph *graph, AppStore *store, QObject *parent = nullptr);
+    // scope: only streams whose "patchprime.scope" property equals it are
+    // handled; the daemon's is empty (streams without one). A test tags its
+    // own streams so a running daemon leaves them alone, and vice versa.
+    AppRouter(PipeWireGraph *graph, AppStore *store, std::string scope = {},
+              QObject *parent = nullptr);
 
     struct App
     {
@@ -100,6 +104,7 @@ private:
 
     PipeWireGraph *m_graph;
     AppStore *m_store;
+    std::string m_scope;
     QTimer m_reconcileTimer;
     std::map<std::uint32_t, Live> m_streams;
     // The target.object value last written to each stream, so our own

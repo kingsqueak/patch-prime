@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <set>
+#include <utility>
 
 Q_LOGGING_CATEGORY(lcApps, "patchprime.apps")
 
@@ -66,8 +67,8 @@ std::optional<AppStream> classifyAppStream(const GraphObject &node)
     };
 }
 
-AppRouter::AppRouter(PipeWireGraph *graph, AppStore *store, QObject *parent)
-    : QObject(parent), m_graph(graph), m_store(store)
+AppRouter::AppRouter(PipeWireGraph *graph, AppStore *store, std::string scope, QObject *parent)
+    : QObject(parent), m_graph(graph), m_store(store), m_scope(std::move(scope))
 {
     m_reconcileTimer.setSingleShot(true);
     m_reconcileTimer.setInterval(20);
@@ -160,7 +161,7 @@ void AppRouter::reconcile()
     if (m_graph->isConnected()) {
         for (const auto &[id, node] : m_graph->nodes()) {
             auto app = classifyAppStream(node);
-            if (!app) {
+            if (!app || prop(node, "patchprime.scope") != m_scope) {
                 continue;
             }
             present.insert(id);

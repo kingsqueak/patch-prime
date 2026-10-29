@@ -481,7 +481,9 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         AppStore store(dir.filePath(QStringLiteral("apps.json")));
-        AppRouter router(&m_graph, &store);
+        // Scoped, so a running daemon leaves the test app alone.
+        const auto scope = "test-" + std::to_string(QCoreApplication::applicationPid());
+        AppRouter router(&m_graph, &store, scope);
         const std::string key = "playback|patchprime-test";
         // An earlier test hands the default to the test sink; "the system
         // default" has to be somewhere else here.
@@ -495,11 +497,13 @@ private Q_SLOTS:
         QTemporaryDir toneDir;
         const auto tone = toneDir.filePath(QStringLiteral("tone.wav"));
         QVERIFY(writeTone(tone, 20));
-        auto startApp = [&tone](QProcess &player) {
+        auto startApp = [&tone, &scope](QProcess &player) {
             player.start(QStringLiteral("pw-play"),
                          {QStringLiteral("--volume=0"), QStringLiteral("-P"),
                           QStringLiteral("{ application.name = \"Patch Prime Test\" "
-                                         "application.process.binary = \"patchprime-test\" }"),
+                                         "application.process.binary = \"patchprime-test\" "
+                                         "patchprime.scope = \"%1\" }")
+                              .arg(QString::fromStdString(scope)),
                           tone});
         };
         auto *player = new QProcess(this);
