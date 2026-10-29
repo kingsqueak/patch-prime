@@ -1,0 +1,58 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": { "PATCHPRIME_WERROR": "ON" }
+    },
+    {
+      "name": "gcc-debug",
+      "displayName": "GCC Debug",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "clang-debug",
+      "displayName": "Clang Debug",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "clang-tidy",
+      "displayName": "Clang Debug + clang-tidy",
+      "inherits": "clang-debug",
+      "cacheVariables": { "CMAKE_CXX_CLANG_TIDY": "clang-tidy" }
+    },
+    {
+      "name": "gcc-release",
+      "displayName": "GCC RelWithDebInfo",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "gcc-debug", "configurePreset": "gcc-debug" },
+    { "name": "clang-debug", "configurePreset": "clang-debug" },
+    { "name": "clang-tidy", "configurePreset": "clang-tidy" },
+    { "name": "gcc-release", "configurePreset": "gcc-release" }
+  ],
+  "testPresets": [
+    { "name": "gcc-debug", "configurePreset": "gcc-debug", "output": { "outputOnFailure": true } },
+    { "name": "clang-debug", "configurePreset": "clang-debug", "output": { "outputOnFailure": true } }
+  ]
+}

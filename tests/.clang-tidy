@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 KC2RGW Chris
+# Qt Test runs private slots by name, so they can't be static or const.
+InheritParentConfig: true
+Checks: >
+  -readability-convert-member-functions-to-static,
+  -readability-make-member-function-const,
+  -readability-redundant-access-specifiers

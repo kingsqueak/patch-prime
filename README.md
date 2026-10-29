@@ -11,7 +11,33 @@ A virtual audio mixer and router for KDE Plasma, built on PipeWire.
 
 Planned: built-in EQ and dynamics processing, then LV2, CLAP and VST3 plugin hosting.
 
-Status: planning (Phase 0).
+Status: early development (Phase 0: build skeleton and `patchprime-probe`).
+
+## Building
+
+Ubuntu 26.04 / Plasma 6 build dependencies:
+
+```sh
+sudo apt install cmake ninja-build g++ qt6-base-dev qt6-declarative-dev \
+    libpipewire-0.3-dev libspa-0.2-dev libkirigami-dev kirigami-addons-dev
+```
+
+```sh
+cmake --preset gcc-debug          # or clang-debug
+cmake --build --preset gcc-debug
+ctest --preset gcc-debug
+```
+
+## patchprime-probe
+
+Connects to PipeWire once and prints the graph: nodes, devices, ports, links and the default devices.
+
+```sh
+build/gcc-debug/probe/patchprime-probe            # JSON
+build/gcc-debug/probe/patchprime-probe --summary  # short device list
+```
+
+A card whose profile is `off` (nothing plugged into its jacks, or no monitor on HDMI) has no nodes; `--summary` still lists it under *Cards*.
 
 ## License
 
