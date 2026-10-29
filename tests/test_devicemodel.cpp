@@ -450,6 +450,17 @@ private Q_SLOTS:
         QCOMPARE(settings.count(), 2);
         QVERIFY(store.find("Audio/Sink|phones") == nullptr); // nothing was saved for it
 
+        // A mix bus sends on to outputs, never to another bus or back to an input.
+        QCOMPARE(role(model, model.rowForKey(mix.toStdString()), DeviceModel::StageRole).toString(),
+                 QStringLiteral("bus"));
+        const auto other = model.createVirtual(QStringLiteral("Other"), EndpointKind::VirtualSink);
+        model.setSend(model.rowForKey(mix.toStdString()), QStringLiteral("Audio/Sink|phones"), true);
+        model.setSend(model.rowForKey(mix.toStdString()), other, true);
+        model.setSend(model.rowForKey(mix.toStdString()), QStringLiteral("Audio/Source|mic"), true);
+        QCOMPARE(store.find(mix.toStdString())->sends,
+                 std::vector<std::string>{"Audio/Sink|phones"});
+        model.forget(model.rowForKey(other.toStdString()));
+
         // Mono is for inputs only.
         model.setMono(model.rowForKey("Audio/Source|mic"), true);
         QVERIFY(role(model, model.rowForKey("Audio/Source|mic"), DeviceModel::MonoRole).toBool());

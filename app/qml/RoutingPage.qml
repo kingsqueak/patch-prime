@@ -7,8 +7,9 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kingsqueak.patchprime.engine
 
-// Inputs as rows, outputs and virtual devices as columns: a tick sends the
-// input to that destination. An input can go to any number of destinations.
+// What feeds what, console style. Rows are the strips that send (inputs, then
+// mix buses), columns the ones that receive (mix buses, then outputs). Sends
+// only go to a later stage, so a mix bus row has ticks only under outputs.
 Kirigami.ScrollablePage {
     id: page
 
@@ -18,16 +19,21 @@ Kirigami.ScrollablePage {
     readonly property real nameWidth: Kirigami.Units.gridUnit * 10
     readonly property real cellWidth: Kirigami.Units.gridUnit * 6
 
-    StripFilter {
-        id: inputs
-        sourceModel: Devices
-        direction: "input"
+    // Stage order: a send goes from a lower rank to a higher one.
+    function rank(stage) {
+        return stage === "input" ? 0 : stage === "bus" ? 1 : 2;
     }
 
     StripFilter {
-        id: outputs
+        id: inputs // the senders
         sourceModel: Devices
-        direction: "output"
+        stages: ["input", "bus"]
+    }
+
+    StripFilter {
+        id: outputs // the destinations
+        sourceModel: Devices
+        stages: ["bus", "output"]
     }
 
     ColumnLayout {
@@ -39,7 +45,7 @@ Kirigami.ScrollablePage {
             visible: inputs.count === 0 || outputs.count === 0
             icon.name: "network-connect"
             text: qsTr("Nothing to route yet")
-            explanation: qsTr("Enable at least one input and one output (or make a virtual device) on the Devices page.")
+            explanation: qsTr("Enable at least one input and one output, or add a mix bus, on the Devices page.")
         }
 
         // Column headings: the destinations.
@@ -58,7 +64,7 @@ Kirigami.ScrollablePage {
                     required property var model
                     Layout.preferredWidth: page.cellWidth
                     Layout.alignment: Qt.AlignBottom
-                    text: model.label
+                    text: model.stage === "bus" ? qsTr("%1\n(mix bus)").arg(model.label) : model.label
                     font.bold: true
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
@@ -92,7 +98,8 @@ Kirigami.ScrollablePage {
                     Layout.preferredWidth: page.nameWidth
                     Layout.preferredHeight: Kirigami.Units.gridUnit * 2
                     verticalAlignment: Text.AlignVCenter
-                    text: inputRow.model.label
+                    text: inputRow.model.stage === "bus" ? qsTr("%1 (mix bus)").arg(inputRow.model.label)
+                                                         : inputRow.model.label
                     elide: Text.ElideRight
                     opacity: inputRow.model.online ? 1 : 0.5
                 }
@@ -111,6 +118,7 @@ Kirigami.ScrollablePage {
 
                         QQC2.CheckBox {
                             anchors.centerIn: parent
+                            visible: page.rank(cell.model.stage) > page.rank(inputRow.model.stage)
                             enabled: Devices.daemonRunning
                             onToggled: Devices.setSend(inputRow.key, cell.model.key, checked)
                             Accessible.name: qsTr("Send %1 to %2").arg(inputRow.model.label).arg(cell.model.label)

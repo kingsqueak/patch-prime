@@ -279,7 +279,26 @@ private Q_SLOTS:
             },
             5000));
 
-        // An app plays into the virtual input, and it reaches the mix.
+        // Console style: the mix bus goes on to an output (the test sink).
+        const auto outKey = makeEndpointKey("Audio/Sink", m_sinkName);
+        QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(outKey) >= 0; }, 5000));
+        devices.setEnabled(devices.rowForKey(outKey), true);
+        devices.setSend(devices.rowForKey(mixKey.toStdString()), QString::fromStdString(outKey),
+                        true);
+        const auto outBus = busNodeName(Direction::Output, store.find(outKey)->busId);
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                const auto *a = nodeNamed(m_graph, mixNode);
+                const auto *b = nodeNamed(m_graph, outBus);
+                return a != nullptr && b != nullptr &&
+                       std::ranges::count_if(m_graph.links(), [&](const auto &entry) {
+                           return prop(entry.second, "link.output.node") == std::to_string(a->id) &&
+                                  prop(entry.second, "link.input.node") == std::to_string(b->id);
+                       }) == 2;
+            },
+            5000));
+
+        // An app plays into the virtual input; it reaches the mix and the output.
         buses.setMetering(true);
         QTemporaryDir toneDir;
         const auto tone = toneDir.filePath(QStringLiteral("tone.wav"));
@@ -299,10 +318,23 @@ private Q_SLOTS:
                 return mixPeak > 0.3F;
             },
             5000));
+        float outPeak = 0.0F;
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                const auto levels = buses.takeLevels();
+                if (const auto it = levels.find(outKey); it != levels.end()) {
+                    for (const float level : it->second) {
+                        outPeak = std::max(outPeak, level);
+                    }
+                }
+                return outPeak > 0.3F;
+            },
+            5000));
         player.kill();
         player.waitForFinished();
         buses.setMetering(false);
 
+        devices.setEnabled(devices.rowForKey(outKey), false);
         devices.forget(devices.rowForKey(desktopKey.toStdString()));
         devices.forget(devices.rowForKey(mixKey.toStdString()));
         QVERIFY(QTest::qWaitFor(

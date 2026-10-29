@@ -57,6 +57,8 @@ public:
     Q_INVOKABLE void setDefaultOutput(const QString &key, bool throughMixer);
     Q_INVOKABLE void setMono(const QString &key, bool mono);
     Q_INVOKABLE void setChannelPair(const QString &key, int pair);
+    // A strip's label by key; empty when there's no such strip.
+    [[nodiscard]] Q_INVOKABLE QString labelFor(const QString &key) const;
     Q_INVOKABLE void setSend(const QString &inputKey, const QString &destinationKey, bool enabled);
     // kind: "sink", "source" or "input"
     Q_INVOKABLE void createVirtual(const QString &name, const QString &kind);
@@ -100,11 +102,13 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QVariantList m_recordTargets;
 };
 
-// The enabled devices of one direction, for a row of mixer strips.
+// The enabled strips of some stages ("input", "bus", "output"), for a row of
+// mixer strips or one side of the routing grid; in console order (inputs,
+// mix buses, outputs), otherwise as the daemon lists them.
 class StripFilter : public QSortFilterProxyModel
 {
     Q_OBJECT
-    Q_PROPERTY(QString direction READ direction WRITE setDirection NOTIFY directionChanged)
+    Q_PROPERTY(QStringList stages READ stages WRITE setStages NOTIFY stagesChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
@@ -112,17 +116,18 @@ public:
 
     [[nodiscard]] int count() const { return rowCount(); }
 
-    [[nodiscard]] QString direction() const { return m_direction; }
-    void setDirection(const QString &direction);
+    [[nodiscard]] QStringList stages() const { return m_stages; }
+    void setStages(const QStringList &stages);
 
 Q_SIGNALS:
-    void directionChanged();
+    void stagesChanged();
     void countChanged();
 
 protected:
     [[nodiscard]] bool filterAcceptsRow(int sourceRow,
                                         const QModelIndex &sourceParent) const override;
+    [[nodiscard]] bool lessThan(const QModelIndex &left, const QModelIndex &right) const override;
 
 private:
-    QString m_direction;
+    QStringList m_stages;
 };

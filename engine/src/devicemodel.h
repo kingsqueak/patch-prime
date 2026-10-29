@@ -56,6 +56,7 @@ public:
         MonoRole,        // inputs: mixed down to one channel
         BusNameRole,     // node.name of the strip's bus while enabled, else empty
         ChannelPairRole, // hardware: 0 = all channels, n = stereo pair 2n-1/2n
+        StageRole,       // "input", "bus" or "output"
     };
     Q_ENUM(Role)
 
@@ -80,11 +81,12 @@ public:
     Q_INVOKABLE void forget(int row);
     Q_INVOKABLE void setVolume(int row, double volumeDb);
     Q_INVOKABLE void setMuted(int row, bool muted);
-    // Sends (or stops sending) an input to an output or virtual device.
     Q_INVOKABLE void setMono(int row, bool mono);
     // Hardware with more than two channels: use all of them (0) or one stereo
     // pair (1 = channels 1-2, ...). Anything out of range is ignored.
     Q_INVOKABLE void setChannelPair(int row, int pair);
+    // Sends (or stops sending) a strip to one in a later stage: an input to a
+    // mix bus or an output, a mix bus to an output.
     Q_INVOKABLE void setSend(int row, const QString &destinationKey, bool enabled);
     // Makes a new virtual device, enabled, and returns its key.
     QString createVirtual(const QString &name, EndpointKind kind);
@@ -123,6 +125,7 @@ private:
     [[nodiscard]] int rowForNode(std::uint32_t nodeId) const;
     [[nodiscard]] int findReattachCandidate(const Endpoint &live) const;
     [[nodiscard]] bool isDefault(const Row &row) const;
+    [[nodiscard]] Stage stageOfRow(const Row &row) const;
     void insertSorted(Row row);
     void replaceRow(int index, Row row);
     void removeRowAt(int index);

@@ -459,15 +459,15 @@ void BusManager::linkSends(const std::map<std::string, Wanted> &wanted,
     }
 
     std::set<std::pair<std::uint32_t, std::uint32_t>> desired;
-    std::set<std::uint32_t> inputBuses;
+    std::set<std::uint32_t> senders; // input buses and mix buses
     std::set<std::uint32_t> allBuses;
     for (const auto &[name, id] : ready) {
         allBuses.insert(id);
         const auto &w = wanted.at(name);
-        if (w.endpoint.direction != Direction::Input) {
+        if (stageOf(w.endpoint.direction, w.settings->kind) == Stage::Output) {
             continue;
         }
-        inputBuses.insert(id);
+        senders.insert(id);
         for (const auto &destination : w.settings->sends) {
             const auto target = busByKey.find(destination);
             if (target == busByKey.end()) {
@@ -485,13 +485,13 @@ void BusManager::linkSends(const std::map<std::string, Wanted> &wanted,
         }
     }
 
-    // Links from one of our input buses into another of our buses are ours to
-    // manage: remove the ones no send asks for. Links to anything else (an
+    // Links from one of our sending buses into another of our buses are ours
+    // to manage: remove the ones no send asks for. Links to anything else (an
     // app recording an input bus) are left alone.
     for (const auto &[id, link] : m_graph->links()) {
         const auto outNode = parseId(prop(link, "link.output.node"));
         const auto inNode = parseId(prop(link, "link.input.node"));
-        if (!inputBuses.contains(outNode) || !allBuses.contains(inNode)) {
+        if (!senders.contains(outNode) || !allBuses.contains(inNode)) {
             continue;
         }
         const std::pair ports{parseId(prop(link, "link.output.port")),

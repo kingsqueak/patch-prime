@@ -14,10 +14,20 @@ Kirigami.ApplicationWindow {
     width: Kirigami.Units.gridUnit * 52
     height: Kirigami.Units.gridUnit * 34
 
+    // One page at a time, full width, with a back button. Side-by-side
+    // columns put the wide mixer under the page next to it.
+    pageStack.columnView.columnResizeMode: Kirigami.ColumnView.SingleColumn
+
+    // Opens a page over the mixer, replacing any page already open.
+    function open(page) {
+        pageStack.pop(pageStack.initialPage);
+        pageStack.push(page);
+    }
+
     pageStack.initialPage: MixerPage {
-        onOpenDevices: root.pageStack.push(devicesPage)
-        onOpenRouting: root.pageStack.push(routingPage)
-        onOpenApps: root.pageStack.push(appsPage)
+        onOpenDevices: root.open(devicesPage)
+        onOpenRouting: root.open(routingPage)
+        onOpenApps: root.open(appsPage)
     }
 
     Component {
@@ -37,10 +47,10 @@ Kirigami.ApplicationWindow {
 
     Component.onCompleted: {
         if (startPage === "devices")
-            pageStack.push(devicesPage);
+            open(devicesPage);
         else if (startPage === "routing")
-            pageStack.push(routingPage);
+            open(routingPage);
         else if (startPage === "apps")
-            pageStack.push(appsPage);
+            open(appsPage);
     }
 }

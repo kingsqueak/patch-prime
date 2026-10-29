@@ -31,6 +31,19 @@ std::string kindName(EndpointKind kind);
 // The reverse; anything unknown is Hardware.
 EndpointKind kindFromName(std::string_view name);
 
+// Where a strip sits in the console. Sends only go to a later stage
+// (input -> bus, input -> output, bus -> output), so routing can't loop.
+enum class Stage : std::uint8_t
+{
+    Input,  // inputs and virtual inputs: they feed sends
+    Bus,    // mix buses (virtual sinks): fed by inputs, they feed outputs
+    Output, // hardware outputs and virtual microphones: the end of the line
+};
+
+Stage stageOf(Direction direction, EndpointKind kind);
+// "input", "bus", "output" (in the D-Bus state).
+std::string stageName(Stage stage);
+
 // What the user chose for one endpoint, kept across restarts and replugs.
 struct DeviceSettings
 {
@@ -43,8 +56,7 @@ struct DeviceSettings
     std::string label; // empty: show the system description
     double volumeDb = 0.0;
     bool muted = false;
-    // Inputs only: the keys of the outputs and virtual devices this input is
-    // sent to.
+    // Inputs and mix buses: the keys of the strips this one is sent to.
     std::vector<std::string> sends;
     // Inputs only: mix every hardware channel into a one-channel bus, so a mic
     // on one input of a stereo interface is heard in both ears.

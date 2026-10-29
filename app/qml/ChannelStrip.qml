@@ -14,6 +14,7 @@ import org.kingsqueak.patchprime.engine
 //   body     meters + fader (fills the height)
 //   readout  fader level in dB
 //   toggles  mute, mono, default
+//   sends    where it goes (inputs and mix buses; blank on outputs)
 //   options  the channel pair choice (blank when there's none)
 //
 // Sizes and colors come from Style. Roles are read through `model` (see the
@@ -34,6 +35,8 @@ QQC2.Control {
     readonly property var levels: model.levels
     readonly property int channels: Math.max(1, model.channels)
     readonly property int channelPair: model.channelPair
+    readonly property string stage: model.stage
+    readonly property var sends: model.sends
 
     readonly property bool ownVirtual: kind !== "hardware"
     readonly property bool isInput: direction === "input"
@@ -88,7 +91,6 @@ QQC2.Control {
                 color: strip.online ? Style.dimText : Style.offlineText
                 text: !strip.online ? qsTr("Offline")
                     : strip.kind === "virtual-input" ? qsTr("Virtual input")
-                    : strip.kind === "virtual-sink" ? qsTr("Virtual output")
                     : strip.kind === "virtual-source" ? qsTr("Virtual mic")
                     : strip.hasPairs && strip.channelPair > 0
                       ? qsTr("Ch %1–%2").arg(strip.channelPair * 2 - 1).arg(strip.channelPair * 2)
@@ -187,6 +189,21 @@ QQC2.Control {
                      : strip.busIsDefault
                      ? qsTr("The system default output: apps play through this strip. Click to send them straight to the device instead.")
                      : qsTr("Make this the system default output, so apps play through this strip.")
+            }
+        }
+
+        // --- sends
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: Style.controlHeight
+
+            SendButton {
+                anchors.fill: parent
+                visible: strip.stage !== "output"
+                enabled: Devices.daemonRunning
+                key: strip.key
+                stage: strip.stage
+                sends: strip.sends
             }
         }
 

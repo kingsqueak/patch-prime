@@ -31,7 +31,7 @@ constexpr std::array fields{
     "key",       "label",        "customLabel", "description", "nodeName",    "direction",
     "isVirtual", "online",       "isEnabled",   "channels",    "positions",   "isDefault",
     "saved",     "sectionStart", "volumeDb",    "muted",       "busId",       "busIsDefault",
-    "kind",      "sends",        "mono",        "busName",     "channelPair",
+    "kind",      "sends",        "mono",        "busName",     "channelPair", "stage",
 };
 
 // How far a meter falls per update (about 30 per second): 60 dB in ~1.6 s.
@@ -238,6 +238,16 @@ void DaemonClient::createVirtual(const QString &name, const QString &kind)
     call(QStringLiteral("CreateVirtual"), {name, kind});
 }
 
+QString DaemonClient::labelFor(const QString &key) const
+{
+    for (const auto &row : m_rows) {
+        if (row.value(QStringLiteral("key")).toString() == key) {
+            return row.value(QStringLiteral("label")).toString();
+        }
+    }
+    return {};
+}
+
 void DaemonClient::setAppTarget(const QString &appKey, const QString &nodeName)
 {
     call(QStringLiteral("SetAppTarget"), {appKey, nodeName});
@@ -365,15 +375,30 @@ StripFilter::StripFilter(QObject *parent) : QSortFilterProxyModel(parent)
     connect(this, &QAbstractItemModel::rowsInserted, this, &StripFilter::countChanged);
     connect(this, &QAbstractItemModel::rowsRemoved, this, &StripFilter::countChanged);
     connect(this, &QAbstractItemModel::modelReset, this, &StripFilter::countChanged);
+    setDynamicSortFilter(true);
+    sort(0);
 }
 
-void StripFilter::setDirection(const QString &direction)
+bool StripFilter::lessThan(const QModelIndex &left, const QModelIndex &right) const
 {
-    if (direction != m_direction) {
+    const auto stageRole = sourceModel()->roleNames().key("stage");
+    const auto rank = [stageRole](const QModelIndex &index) {
+        static const QStringList order{QStringLiteral("input"), QStringLiteral("bus"),
+                                       QStringLiteral("output")};
+        return order.indexOf(index.data(stageRole).toString());
+    };
+    const auto a = rank(left);
+    const auto b = rank(right);
+    return a != b ? a < b : left.row() < right.row();
+}
+
+void StripFilter::setStages(const QStringList &stages)
+{
+    if (stages != m_stages) {
         beginFilterChange();
-        m_direction = direction;
+        m_stages = stages;
         endFilterChange(QSortFilterProxyModel::Direction::Rows);
-        Q_EMIT directionChanged();
+        Q_EMIT stagesChanged();
     }
 }
 
@@ -386,5 +411,5 @@ bool StripFilter::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParen
     const auto roles = model->roleNames();
     const auto index = model->index(sourceRow, 0, sourceParent);
     return model->data(index, roles.key("isEnabled")).toBool() &&
-           model->data(index, roles.key("direction")).toString() == m_direction;
+           m_stages.contains(model->data(index, roles.key("stage")).toString());
 }

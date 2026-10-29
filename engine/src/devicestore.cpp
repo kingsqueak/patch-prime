@@ -135,6 +135,27 @@ EndpointKind kindFromName(std::string_view name)
     return EndpointKind::Hardware;
 }
 
+Stage stageOf(Direction direction, EndpointKind kind)
+{
+    if (direction == Direction::Input) {
+        return Stage::Input;
+    }
+    return kind == EndpointKind::VirtualSink ? Stage::Bus : Stage::Output;
+}
+
+std::string stageName(Stage stage)
+{
+    switch (stage) {
+    case Stage::Input:
+        return "input";
+    case Stage::Bus:
+        return "bus";
+    case Stage::Output:
+        break;
+    }
+    return "output";
+}
+
 DeviceStore::DeviceStore(QString path) : m_path(path.isEmpty() ? defaultPath() : std::move(path)) {}
 
 QString DeviceStore::defaultPath()

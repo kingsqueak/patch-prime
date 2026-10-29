@@ -194,6 +194,8 @@ QVariant DeviceModel::data(const QModelIndex &index, int role) const
         return saved != nullptr && saved->mono;
     case ChannelPairRole:
         return saved != nullptr ? saved->channelPair : 0;
+    case StageRole:
+        return qs(stageName(stageOfRow(row)));
     case BusNameRole:
         return qs(saved != nullptr && saved->enabled ? busNameFor(e, *saved) : std::string{});
     case BusDefaultRole:
@@ -230,6 +232,7 @@ QHash<int, QByteArray> DeviceModel::roleNames() const
         {BusDefaultRole, "busIsDefault"},
         {KindRole, "kind"},
         {BusNameRole, "busName"},
+        {StageRole, "stage"},
         {ChannelPairRole, "channelPair"},
         {SendsRole, "sends"},
         {MonoRole, "mono"},
@@ -375,9 +378,9 @@ void DeviceModel::setSend(int row, const QString &destinationKey, bool enabled)
     const auto &r = m_rows[static_cast<std::size_t>(row)];
     const auto destination = destinationKey.toStdString();
     const int destinationRow = rowForKey(destination);
-    if (r.endpoint.direction != Direction::Input || destinationRow < 0 ||
-        m_rows[static_cast<std::size_t>(destinationRow)].endpoint.direction != Direction::Output) {
-        return; // only input -> output: that's also what keeps loops impossible
+    if (destinationRow < 0 ||
+        stageOfRow(r) >= stageOfRow(m_rows[static_cast<std::size_t>(destinationRow)])) {
+        return; // only to a later stage: that's also what keeps loops impossible
     }
     m_store->upsert(r.endpoint.key);
     remember(r, r.nodeId.has_value());
@@ -563,6 +566,12 @@ int DeviceModel::findReattachCandidate(const Endpoint &live) const
         }
     }
     return tie ? -1 : best;
+}
+
+Stage DeviceModel::stageOfRow(const Row &row) const
+{
+    const auto *saved = m_store->find(row.endpoint.key);
+    return stageOf(row.endpoint.direction, saved != nullptr ? saved->kind : EndpointKind::Hardware);
 }
 
 bool DeviceModel::isDefault(const Row &row) const

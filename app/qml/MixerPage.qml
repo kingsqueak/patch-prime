@@ -38,19 +38,25 @@ Kirigami.Page {
     StripFilter {
         id: inputs
         sourceModel: Devices
-        direction: "input"
+        stages: ["input"]
+    }
+
+    StripFilter {
+        id: buses
+        sourceModel: Devices
+        stages: ["bus"]
     }
 
     StripFilter {
         id: outputs
         sourceModel: Devices
-        direction: "output"
+        stages: ["output"]
     }
 
     Kirigami.PlaceholderMessage {
         anchors.centerIn: parent
         width: parent.width - Kirigami.Units.gridUnit * 4
-        visible: Devices.daemonRunning && inputs.count === 0 && outputs.count === 0
+        visible: Devices.daemonRunning && inputs.count === 0 && buses.count === 0 && outputs.count === 0
         icon.name: "view-media-equalizer"
         text: qsTr("No devices in the mixer")
         explanation: qsTr("Choose the inputs and outputs Patch Prime should use.")
@@ -61,11 +67,11 @@ Kirigami.Page {
         }
     }
 
-    // Inputs and outputs side by side, like a console; scrolls sideways
-    // when there are more strips than fit.
+    // Inputs, mix buses and outputs side by side, like a console; scrolls
+    // sideways when there are more strips than fit.
     Flickable {
         anchors.fill: parent
-        visible: inputs.count > 0 || outputs.count > 0
+        visible: inputs.count > 0 || buses.count > 0 || outputs.count > 0
         contentWidth: consoleRow.implicitWidth
         contentHeight: height
         flickableDirection: Flickable.HorizontalFlick
@@ -88,7 +94,19 @@ Kirigami.Page {
 
             Kirigami.Separator {
                 Layout.fillHeight: true
-                visible: inputs.count > 0 && outputs.count > 0
+                visible: inputs.count > 0 && (buses.count > 0 || outputs.count > 0)
+            }
+
+            StripGroup {
+                Layout.fillHeight: true
+                visible: count > 0
+                title: qsTr("Mix Buses")
+                strips: buses
+            }
+
+            Kirigami.Separator {
+                Layout.fillHeight: true
+                visible: buses.count > 0 && outputs.count > 0
             }
 
             StripGroup {

@@ -80,8 +80,9 @@ std::vector<std::pair<PortRef, PortRef>> pairPorts(const std::vector<PortRef> &o
 
 // Keeps the PipeWire graph in line with the saved settings:
 //
-//   input  endpoint:  hardware source ──links──► [bus] ──monitor──► (routing, Phase 3)
-//   output endpoint:  (routing, Phase 3) ──► [bus] ──monitor──links──► hardware sink
+//   input    hardware source ──links──► [bus] ──monitor──► sends
+//   mix bus  sends ──► [virtual sink] ──monitor──► sends
+//   output   sends ──► [bus] ──monitor──links──► hardware sink
 //
 // One bus per enabled endpoint, named from its busId so it survives the
 // endpoint being recognised under a new node.name. The fader and mute are the

@@ -55,7 +55,7 @@ Kirigami.ScrollablePage {
 
             QQC2.RadioButton {
                 id: sinkButton
-                text: qsTr("Output: apps play into it, others can record it (a mix for OBS)")
+                text: qsTr("Mix bus: inputs and apps mix into it, it goes to outputs, and apps can record it (a stream mix for OBS)")
             }
 
             QQC2.RadioButton {
@@ -160,7 +160,7 @@ Kirigami.ScrollablePage {
                                 if (row.customLabel.length > 0)
                                     parts.push(row.description);
                                 parts.push(row.kind === "virtual-input" ? qsTr("Patch Prime virtual input")
-                                           : row.kind === "virtual-sink" ? qsTr("Patch Prime virtual output")
+                                           : row.kind === "virtual-sink" ? qsTr("Patch Prime mix bus")
                                            : row.kind === "virtual-source" ? qsTr("Patch Prime virtual microphone")
                                            : row.isVirtual ? qsTr("virtual") : qsTr("hardware"));
                                 if (row.channels > 0)
