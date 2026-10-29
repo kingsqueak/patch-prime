@@ -45,6 +45,7 @@ QJsonObject toJson(const DeviceSettings &d)
         {QStringLiteral("kind"), qs(kindName(d.kind))},
         {QStringLiteral("sends"), sends},
         {QStringLiteral("mono"), d.mono},
+        {QStringLiteral("channelPair"), d.channelPair},
         {QStringLiteral("busId"), qs(d.busId)},
         {QStringLiteral("enabled"), d.enabled},
         {QStringLiteral("label"), qs(d.label)},
@@ -75,6 +76,7 @@ DeviceSettings fromJson(const QJsonObject &o)
     DeviceSettings d;
     d.kind = kindFromName(str(o, "kind"));
     d.mono = o.value(QLatin1String("mono")).toBool();
+    d.channelPair = std::max(0, o.value(QLatin1String("channelPair")).toInt());
     for (const auto &s : o.value(QLatin1String("sends")).toArray()) {
         d.sends.push_back(s.toString().toStdString());
     }

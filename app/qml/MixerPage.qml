@@ -61,43 +61,41 @@ Kirigami.Page {
         }
     }
 
-    ColumnLayout {
+    // Inputs and outputs side by side, like a console; scrolls sideways
+    // when there are more strips than fit.
+    Flickable {
         anchors.fill: parent
-        spacing: Kirigami.Units.largeSpacing
         visible: inputs.count > 0 || outputs.count > 0
+        contentWidth: consoleRow.implicitWidth
+        contentHeight: height
+        flickableDirection: Flickable.HorizontalFlick
+        boundsBehavior: Flickable.StopAtBounds
+        clip: true
+        QQC2.ScrollBar.horizontal: QQC2.ScrollBar {}
 
-        Repeater {
-            model: [
-                { title: qsTr("Inputs"), strips: inputs },
-                { title: qsTr("Outputs"), strips: outputs },
-            ]
+        RowLayout {
+            id: consoleRow
 
-            delegate: ColumnLayout {
-                required property var modelData
+            height: parent.height
+            spacing: Style.groupGap
 
-                Layout.fillWidth: true
+            StripGroup {
                 Layout.fillHeight: true
-                visible: modelData.strips.count > 0
-                spacing: Kirigami.Units.smallSpacing
+                visible: count > 0
+                title: qsTr("Inputs")
+                strips: inputs
+            }
 
-                Kirigami.Heading {
-                    level: 3
-                    text: modelData.title
-                }
+            Kirigami.Separator {
+                Layout.fillHeight: true
+                visible: inputs.count > 0 && outputs.count > 0
+            }
 
-                ListView {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    orientation: ListView.Horizontal
-                    spacing: Kirigami.Units.largeSpacing
-                    clip: true
-                    model: modelData.strips
-                    QQC2.ScrollBar.horizontal: QQC2.ScrollBar {}
-
-                    delegate: ChannelStrip {
-                        height: ListView.view.height
-                    }
-                }
+            StripGroup {
+                Layout.fillHeight: true
+                visible: count > 0
+                title: qsTr("Outputs")
+                strips: outputs
             }
         }
     }

@@ -9,10 +9,13 @@ qt_policy(SET QTP0001 NEW)
 qt_policy(SET QTP0004 NEW)
 
 qt_add_executable(patchprime main.cpp src/daemonclient.cpp src/daemonclient.h)
+set_source_files_properties(qml/Style.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
 qt_add_qml_module(patchprime
     URI org.kingsqueak.patchprime
     VERSION 1.0
     QML_FILES qml/Main.qml qml/MixerPage.qml qml/ChannelStrip.qml qml/DevicesPage.qml qml/EngineMessage.qml qml/RoutingPage.qml qml/AppsPage.qml
+        qml/Style.qml qml/LevelMeter.qml qml/StripToggle.qml qml/VolumeFader.qml qml/StripGroup.qml
     NO_IMPORT_SCAN) # the import scan only matters for static Qt builds
 
 target_include_directories(patchprime PRIVATE src)

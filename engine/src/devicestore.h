@@ -49,6 +49,10 @@ struct DeviceSettings
     // Inputs only: mix every hardware channel into a one-channel bus, so a mic
     // on one input of a stereo interface is heard in both ears.
     bool mono = false;
+    // Hardware with more than two channels (a card in pro-audio mode): 0 uses
+    // every channel; n uses only the stereo pair 2n-1 and 2n (1 = channels
+    // 1-2, 2 = 3-4, ...), and the bus is stereo.
+    int channelPair = 0;
     // Last seen details, so an offline endpoint can still be shown and matched.
     std::string nodeName;
     std::string mediaClass;

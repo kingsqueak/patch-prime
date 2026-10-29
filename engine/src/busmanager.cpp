@@ -79,6 +79,16 @@ std::vector<std::string> busPositions(const Endpoint &endpoint)
     return out;
 }
 
+std::vector<PortRef> selectPair(const std::vector<PortRef> &ports, int pair)
+{
+    const auto first = static_cast<std::size_t>(std::max(pair - 1, 0)) * 2;
+    if (pair <= 0 || first + 2 > ports.size()) {
+        return ports;
+    }
+    const auto begin = ports.begin() + static_cast<std::ptrdiff_t>(first);
+    return {begin, begin + 2};
+}
+
 std::string busOwnerFor(const QString &storePath)
 {
     return QCryptographicHash::hash(storePath.toUtf8(), QCryptographicHash::Sha1)
@@ -280,6 +290,11 @@ std::map<std::string, BusManager::Wanted> BusManager::wantedBuses() const
             const bool input = w.endpoint.direction == Direction::Input;
             w.endpoint.channels =
                 static_cast<int>(portsOf(*w.hardwareNodeId, input ? "out" : "in", false).size());
+        }
+        if (settings->channelPair > 0 && settings->kind == EndpointKind::Hardware &&
+            w.endpoint.channels >= settings->channelPair * 2) {
+            w.endpoint.channels = 2; // one stereo pair of a multichannel card
+            w.endpoint.positions = {"FL", "FR"};
         }
         if (settings->mono && w.endpoint.direction == Direction::Input) {
             w.endpoint.channels = 1;
@@ -497,20 +512,44 @@ void BusManager::linkHardware(std::uint32_t busNodeId, const Wanted &wanted,
     const bool input = wanted.endpoint.direction == Direction::Input;
     // Every bus takes audio in on its "in" ports and gives it out on its
     // monitor ports (a virtual source's capture ports are flagged monitor too).
-    auto outputs = input ? portsOf(hardware, "out", false) : portsOf(busNodeId, "out", true);
-    if (input && outputs.empty()) {
-        outputs = portsOf(hardware, "out", true); // a virtual source: its outputs are monitor ports
+    auto hardwarePorts = input ? portsOf(hardware, "out", false) : portsOf(hardware, "in", false);
+    if (input && hardwarePorts.empty()) {
+        hardwarePorts =
+            portsOf(hardware, "out", true); // a virtual source: its outputs are monitor ports
     }
-    const auto inputs = input ? portsOf(busNodeId, "in", false) : portsOf(hardware, "in", false);
+    const auto busPorts = input ? portsOf(busNodeId, "in", false) : portsOf(busNodeId, "out", true);
+    const auto used = selectPair(hardwarePorts, wanted.settings->channelPair);
+    const auto pairs = input ? pairPorts(used, busPorts) : pairPorts(busPorts, used);
 
     const auto now = Clock::now();
-    for (const auto &[out, in] : pairPorts(outputs, inputs)) {
+    std::set<std::pair<std::uint32_t, std::uint32_t>> desired;
+    for (const auto &[out, in] : pairs) {
         const std::pair ports{out.portId, in.portId};
+        desired.insert(ports);
         if (existingLinks.contains(ports) || m_pendingLinks.contains(ports)) {
             continue;
         }
         if (m_graph->createLink(out.nodeId, out.portId, in.nodeId, in.portId, true)) {
             m_pendingLinks[ports] = now;
+        }
+    }
+
+    // Links between the bus and its hardware that no longer fit (another
+    // channel pair was chosen) go.
+    std::set<std::uint32_t> hardwareIds;
+    std::set<std::uint32_t> busIds;
+    for (const auto &p : hardwarePorts) {
+        hardwareIds.insert(p.portId);
+    }
+    for (const auto &p : busPorts) {
+        busIds.insert(p.portId);
+    }
+    for (const auto &[ports, linkId] : existingLinks) {
+        const auto &[out, in] = ports;
+        const bool between = input ? hardwareIds.contains(out) && busIds.contains(in)
+                                   : busIds.contains(out) && hardwareIds.contains(in);
+        if (between && !desired.contains(ports)) {
+            m_graph->destroyObject(linkId);
         }
     }
 }

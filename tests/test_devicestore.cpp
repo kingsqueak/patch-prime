@@ -87,7 +87,7 @@ private Q_SLOTS:
             store.upsert("mic").mono = true;
             store.upsert("mix").kind = EndpointKind::VirtualSink;
             store.upsert("chat").kind = EndpointKind::VirtualSource;
-            store.upsert("phones");
+            store.upsert("phones").channelPair = 2;
             QVERIFY(store.save());
         }
         DeviceStore store(path);
@@ -97,6 +97,8 @@ private Q_SLOTS:
         QCOMPARE(store.find("mix")->kind, EndpointKind::VirtualSink);
         QCOMPARE(store.find("chat")->kind, EndpointKind::VirtualSource);
         QCOMPARE(store.find("phones")->kind, EndpointKind::Hardware);
+        QCOMPARE(store.find("phones")->channelPair, 2);
+        QCOMPARE(store.find("mic")->channelPair, 0);
 
         // A re-attached destination keeps its sends; a removed one drops them.
         QVERIFY(store.rekey("phones", "phones2"));

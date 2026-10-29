@@ -364,6 +364,31 @@ private Q_SLOTS:
         QVERIFY(model.createVirtual(QStringLiteral("x"), EndpointKind::Hardware).isEmpty());
     }
 
+    void channelPairs()
+    {
+        DeviceStore store(m_path);
+        DeviceModel model(&store);
+        QAbstractItemModelTester tester(&model);
+        auto pro = sinkNode(10, "pro", nullptr, "pro-audio");
+        pro.props["audio.channels"] = "6";
+        pro.props["audio.position"] = "[ AUX0, AUX1, AUX2, AUX3, AUX4, AUX5 ]";
+        model.upsertNode(pro, nullptr);
+        model.upsertNode(sinkNode(11, "stereo", nullptr), nullptr);
+        const auto row = [&](const char *key) { return model.rowForKey(key); };
+
+        model.setChannelPair(row("Audio/Sink|pro"), 2);
+        QCOMPARE(role(model, row("Audio/Sink|pro"), DeviceModel::ChannelPairRole).toInt(), 2);
+        model.setChannelPair(row("Audio/Sink|pro"), 4); // only three pairs
+        model.setChannelPair(row("Audio/Sink|pro"), -1);
+        QCOMPARE(store.find("Audio/Sink|pro")->channelPair, 2);
+        model.setChannelPair(row("Audio/Sink|pro"), 0);
+        QCOMPARE(store.find("Audio/Sink|pro")->channelPair, 0);
+
+        // A stereo device has nothing to choose.
+        model.setChannelPair(row("Audio/Sink|stereo"), 1);
+        QVERIFY(store.find("Audio/Sink|stereo") == nullptr);
+    }
+
     void virtualInputs()
     {
         DeviceStore store(m_path);

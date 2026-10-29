@@ -65,6 +65,10 @@ struct PortRef
     std::string channel; // audio.channel, e.g. "FL"
 };
 
+// The ports of one stereo pair (1 = the first two, 2 = the next two, ...), or
+// all of them for pair 0 or a pair the ports don't have.
+std::vector<PortRef> selectPair(const std::vector<PortRef> &ports, int pair);
+
 // Which output port feeds which input port. Ports pair up by channel name
 // when both sides have the same set of names, otherwise in order. A single
 // output feeds every input (mono to stereo) and every output feeds a single

@@ -192,11 +192,13 @@ QVariant DeviceModel::data(const QModelIndex &index, int role) const
     }
     case MonoRole:
         return saved != nullptr && saved->mono;
+    case ChannelPairRole:
+        return saved != nullptr ? saved->channelPair : 0;
     case BusNameRole:
         return qs(saved != nullptr && saved->enabled ? busNameFor(e, *saved) : std::string{});
     case BusDefaultRole:
-        return saved != nullptr && saved->enabled && playsInto(e) &&
-               !m_defaultSink.empty() && m_defaultSink == busNameFor(e, *saved);
+        return saved != nullptr && saved->enabled && playsInto(e) && !m_defaultSink.empty() &&
+               m_defaultSink == busNameFor(e, *saved);
     case SectionStartRole:
         return index.row() == 0 ||
                m_rows[static_cast<std::size_t>(index.row()) - 1].endpoint.direction != e.direction;
@@ -228,6 +230,7 @@ QHash<int, QByteArray> DeviceModel::roleNames() const
         {BusDefaultRole, "busIsDefault"},
         {KindRole, "kind"},
         {BusNameRole, "busName"},
+        {ChannelPairRole, "channelPair"},
         {SendsRole, "sends"},
         {MonoRole, "mono"},
     };
@@ -342,6 +345,25 @@ void DeviceModel::setMono(int row, bool mono)
     saveStore();
     const auto i = index(row);
     Q_EMIT dataChanged(i, i, {MonoRole, SavedRole});
+    Q_EMIT settingsChanged(qs(r.endpoint.key));
+}
+
+void DeviceModel::setChannelPair(int row, int pair)
+{
+    if (row < 0 || row >= rowCount()) {
+        return;
+    }
+    const auto &r = m_rows[static_cast<std::size_t>(row)];
+    if (r.endpoint.nodeName.starts_with(virtualNamePrefix) || pair < 0 ||
+        pair * 2 > r.endpoint.channels || (pair > 0 && r.endpoint.channels <= 2)) {
+        return;
+    }
+    m_store->upsert(r.endpoint.key);
+    remember(r, r.nodeId.has_value());
+    m_store->upsert(r.endpoint.key).channelPair = pair;
+    saveStore();
+    const auto i = index(row);
+    Q_EMIT dataChanged(i, i, {ChannelPairRole, SavedRole});
     Q_EMIT settingsChanged(qs(r.endpoint.key));
 }
 
@@ -549,8 +571,7 @@ bool DeviceModel::isDefault(const Row &row) const
         return false;
     }
     // A virtual input is a sink, so it's the default output, not input.
-    const auto &name =
-        playsInto(row.endpoint) ? m_defaultSink : m_defaultSource;
+    const auto &name = playsInto(row.endpoint) ? m_defaultSink : m_defaultSource;
     return !name.empty() && name == row.endpoint.nodeName;
 }
 

@@ -121,6 +121,25 @@ private Q_SLOTS:
         QCOMPARE(busNameFor(mix, sink), "patchprime.virtual.22222222");
     }
 
+    void channelPairs()
+    {
+        const std::vector<PortRef> six{port(1, "AUX0"), port(2, "AUX1"), port(3, "AUX2"),
+                                       port(4, "AUX3"), port(5, "AUX4"), port(6, "AUX5")};
+        auto idsOf = [](const std::vector<PortRef> &ports) {
+            std::vector<std::uint32_t> out;
+            out.reserve(ports.size());
+            for (const auto &p : ports) {
+                out.push_back(p.portId);
+            }
+            return out;
+        };
+        QCOMPARE(idsOf(selectPair(six, 0)).size(), 6U);
+        QCOMPARE(idsOf(selectPair(six, 1)), (std::vector<std::uint32_t>{1, 2}));
+        QCOMPARE(idsOf(selectPair(six, 3)), (std::vector<std::uint32_t>{5, 6}));
+        QCOMPARE(idsOf(selectPair(six, 4)).size(), 6U); // no such pair: all
+        QCOMPARE(idsOf(selectPair({port(1, "FL")}, 1)).size(), 1U);
+    }
+
     void pairing()
     {
         // Same channel names, in a different order: by name.

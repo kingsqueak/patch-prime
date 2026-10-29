@@ -25,6 +25,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <optional>
+#include <set>
 
 using namespace pp;
 
@@ -407,6 +408,73 @@ private Q_SLOTS:
         devices.setEnabled(devices.rowForKey(micKey), false);
         QVERIFY(QTest::qWaitFor(
             [&] { return !nodeNamed(m_graph, inBus) && !nodeNamed(m_graph, mixNode); }, 5000));
+    }
+
+    void usesOneChannelPair()
+    {
+        // A 6-channel card, like an onboard card in pro-audio mode.
+        const auto name = "pp_six_" + std::to_string(QCoreApplication::applicationPid());
+        const auto module = QString::fromUtf8(
+            run(QStringLiteral("pactl"),
+                {QStringLiteral("load-module"), QStringLiteral("module-null-sink"),
+                 QStringLiteral("sink_name=") + QString::fromStdString(name),
+                 QStringLiteral("channels=6"),
+                 QStringLiteral("channel_map=aux0,aux1,aux2,aux3,aux4,aux5")})
+                .value_or(QByteArray())
+                .trimmed());
+        QVERIFY(!module.isEmpty());
+        auto unload = qScopeGuard(
+            [&module] { run(QStringLiteral("pactl"), {QStringLiteral("unload-module"), module}); });
+
+        QTemporaryDir dir;
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel devices(&store);
+        devices.attach(&m_graph);
+        BusManager buses(&m_graph, &devices);
+        m_owner = busOwnerFor(store.path());
+
+        const auto key = makeEndpointKey("Audio/Sink", name);
+        QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(key) >= 0; }, 5000));
+        devices.setChannelPair(devices.rowForKey(key), 2); // channels 3-4
+        devices.setEnabled(devices.rowForKey(key), true);
+        const auto bus = busNodeName(Direction::Output, store.find(key)->busId);
+
+        // Which of the card's channels the bus feeds.
+        auto fedChannels = [&] {
+            std::set<std::string> channels;
+            const auto *from = nodeNamed(m_graph, bus);
+            const auto *to = nodeNamed(m_graph, name);
+            if (from == nullptr || to == nullptr) {
+                return channels;
+            }
+            for (const auto &[id, link] : m_graph.links()) {
+                if (prop(link, "link.output.node") == std::to_string(from->id) &&
+                    prop(link, "link.input.node") == std::to_string(to->id)) {
+                    const auto port = m_graph.ports().find(
+                        static_cast<std::uint32_t>(std::stoul(prop(link, "link.input.port"))));
+                    if (port != m_graph.ports().end()) {
+                        channels.insert(prop(port->second, "audio.channel"));
+                    }
+                }
+            }
+            return channels;
+        };
+        QVERIFY(QTest::qWaitFor(
+            [&] { return fedChannels() == std::set<std::string>{"AUX2", "AUX3"}; }, 5000));
+        QCOMPARE(prop(*nodeNamed(m_graph, bus), "audio.channels"), "2");
+
+        // Another pair: the old links go, the bus stays.
+        devices.setChannelPair(devices.rowForKey(key), 1);
+        QVERIFY(QTest::qWaitFor(
+            [&] { return fedChannels() == std::set<std::string>{"AUX0", "AUX1"}; }, 5000));
+
+        // All channels: a 6-channel bus.
+        devices.setChannelPair(devices.rowForKey(key), 0);
+        QVERIFY(QTest::qWaitFor([&] { return fedChannels().size() == 6; }, 5000));
+        QCOMPARE(prop(*nodeNamed(m_graph, bus), "audio.channels"), "6");
+
+        devices.setEnabled(devices.rowForKey(key), false);
+        QVERIFY(QTest::qWaitFor([&] { return nodeNamed(m_graph, bus) == nullptr; }, 5000));
     }
 
     void routesApps()

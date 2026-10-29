@@ -52,6 +52,8 @@ public Q_SLOTS:
     // hardware output itself the default.
     void SetDefaultOutput(const QString &key, bool throughMixer);
     void SetMono(const QString &key, bool mono);
+    // Hardware with more than two channels: 0 = all, n = stereo pair 2n-1/2n.
+    void SetChannelPair(const QString &key, int pair);
     // Sends an input to an output or virtual device, or stops sending it.
     void SetSend(const QString &inputKey, const QString &destinationKey, bool enabled);
     // kind: "sink" (apps play into it; record its monitor, e.g. "Stream Mix"),

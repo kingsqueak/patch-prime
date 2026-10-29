@@ -813,9 +813,9 @@ void PipeWireGraph::handleMetadata(int generation, std::uint32_t subject, const 
     }
     if (subject != PW_ID_CORE) {
         if (key.empty() || key == "target.object") {
-            const bool changed =
-                value.empty() ? m_streamTargets.erase(subject) > 0
-                              : std::exchange(m_streamTargets[subject], value) != value;
+            const bool changed = value.empty()
+                                     ? m_streamTargets.erase(subject) > 0
+                                     : std::exchange(m_streamTargets[subject], value) != value;
             if (changed) {
                 Q_EMIT streamTargetChanged(subject);
             }

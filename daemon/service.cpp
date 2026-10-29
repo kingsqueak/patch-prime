@@ -16,8 +16,7 @@
 #include <QJsonObject>
 
 PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *devices,
-                                     pp::BusManager *buses, pp::AppRouter *apps,
-                                     QObject *parent)
+                                     pp::BusManager *buses, pp::AppRouter *apps, QObject *parent)
     : QObject(parent), m_graph(graph), m_devices(devices), m_buses(buses), m_apps(apps)
 {
     m_stateTimer.setSingleShot(true);
@@ -140,7 +139,8 @@ void PatchPrimeService::SetDefaultOutput(const QString &key, bool throughMixer)
         return;
     }
     if (!throughMixer && settings != nullptr && settings->kind != pp::EndpointKind::Hardware) {
-        fail(QStringLiteral("a virtual device has no device to bypass to; make another strip the default"));
+        fail(QStringLiteral(
+            "a virtual device has no device to bypass to; make another strip the default"));
         return;
     }
     if (throughMixer && (settings == nullptr || !settings->enabled)) {
@@ -157,6 +157,13 @@ void PatchPrimeService::SetMono(const QString &key, bool mono)
 {
     if (const int row = rowFor(key); row >= 0) {
         m_devices->setMono(row, mono);
+    }
+}
+
+void PatchPrimeService::SetChannelPair(const QString &key, int pair)
+{
+    if (const int row = rowFor(key); row >= 0) {
+        m_devices->setChannelPair(row, pair);
     }
 }
 
@@ -182,8 +189,9 @@ QString PatchPrimeService::CreateVirtual(const QString &name, const QString &kin
     const auto type = pp::kindFromName("virtual-" + kind.toStdString());
     if (trimmed.isEmpty() || type == pp::EndpointKind::Hardware) {
         if (calledFromDBus()) {
-            sendErrorReply(QDBusError::InvalidArgs,
-                           QStringLiteral("need a name and a kind of \"sink\", \"source\" or \"input\""));
+            sendErrorReply(
+                QDBusError::InvalidArgs,
+                QStringLiteral("need a name and a kind of \"sink\", \"source\" or \"input\""));
         }
         return {};
     }

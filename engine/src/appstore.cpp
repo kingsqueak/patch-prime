@@ -73,8 +73,8 @@ bool AppStore::load()
             .name = str(o, "name"),
             .icon = str(o, "icon"),
             .target = str(o, "target"),
-            .lastSeen = QDateTime::fromString(o.value(QLatin1String("lastSeen")).toString(),
-                                              Qt::ISODate),
+            .lastSeen =
+                QDateTime::fromString(o.value(QLatin1String("lastSeen")).toString(), Qt::ISODate),
         };
     }
     return true;
@@ -89,13 +89,14 @@ bool AppStore::save()
     }
     QJsonObject apps;
     for (const auto &[key, a] : m_entries) {
-        apps.insert(qs(key), QJsonObject{
-                                 {QStringLiteral("direction"), qs(streamDirectionName(a.direction))},
-                                 {QStringLiteral("name"), qs(a.name)},
-                                 {QStringLiteral("icon"), qs(a.icon)},
-                                 {QStringLiteral("target"), qs(a.target)},
-                                 {QStringLiteral("lastSeen"), a.lastSeen.toString(Qt::ISODate)},
-                             });
+        apps.insert(qs(key),
+                    QJsonObject{
+                        {QStringLiteral("direction"), qs(streamDirectionName(a.direction))},
+                        {QStringLiteral("name"), qs(a.name)},
+                        {QStringLiteral("icon"), qs(a.icon)},
+                        {QStringLiteral("target"), qs(a.target)},
+                        {QStringLiteral("lastSeen"), a.lastSeen.toString(Qt::ISODate)},
+                    });
     }
     const QJsonObject root{
         {QStringLiteral("version"), formatVersion},

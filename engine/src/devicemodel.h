@@ -50,11 +50,12 @@ public:
         VolumeRole,       // fader position in dB; minimumVolumeDb() means silent
         MutedRole,
         BusIdRole,
-        BusDefaultRole, // this output's bus is the system default output
-        KindRole,       // "hardware", "virtual-sink", "virtual-source" or "virtual-input"
-        SendsRole,      // inputs: keys of the outputs this input is sent to
-        MonoRole,       // inputs: mixed down to one channel
-        BusNameRole,    // node.name of the strip's bus while enabled, else empty
+        BusDefaultRole,  // this output's bus is the system default output
+        KindRole,        // "hardware", "virtual-sink", "virtual-source" or "virtual-input"
+        SendsRole,       // inputs: keys of the outputs this input is sent to
+        MonoRole,        // inputs: mixed down to one channel
+        BusNameRole,     // node.name of the strip's bus while enabled, else empty
+        ChannelPairRole, // hardware: 0 = all channels, n = stereo pair 2n-1/2n
     };
     Q_ENUM(Role)
 
@@ -81,6 +82,9 @@ public:
     Q_INVOKABLE void setMuted(int row, bool muted);
     // Sends (or stops sending) an input to an output or virtual device.
     Q_INVOKABLE void setMono(int row, bool mono);
+    // Hardware with more than two channels: use all of them (0) or one stereo
+    // pair (1 = channels 1-2, ...). Anything out of range is ignored.
+    Q_INVOKABLE void setChannelPair(int row, int pair);
     Q_INVOKABLE void setSend(int row, const QString &destinationKey, bool enabled);
     // Makes a new virtual device, enabled, and returns its key.
     QString createVirtual(const QString &name, EndpointKind kind);

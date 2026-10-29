@@ -21,7 +21,8 @@ constexpr std::string_view systemDefault = "-1";
 
 bool isNumber(const std::string &value)
 {
-    return !value.empty() && std::ranges::all_of(value, [](char c) { return c >= '0' && c <= '9'; });
+    return !value.empty() &&
+           std::ranges::all_of(value, [](char c) { return c >= '0' && c <= '9'; });
 }
 
 } // namespace
@@ -174,7 +175,8 @@ void AppRouter::reconcile()
     listChanged |= std::erase_if(m_streams, [&present](const auto &entry) {
                        return !present.contains(entry.first);
                    }) > 0;
-    std::erase_if(m_written, [&present](const auto &entry) { return !present.contains(entry.first); });
+    std::erase_if(m_written,
+                  [&present](const auto &entry) { return !present.contains(entry.first); });
 
     bool settling = false;
     for (const auto &[id, live] : m_streams) {

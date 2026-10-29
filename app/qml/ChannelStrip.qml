@@ -7,9 +7,18 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kingsqueak.patchprime.engine
 
-// One mixer channel: label, a meter per channel, fader, level and mute.
-// Roles are read through `model` (see the note in DevicesPage.qml).
-QQC2.Frame {
+// One mixer channel. Every strip has the same sections, top to bottom, each
+// a fixed height except the body, so strips line up side by side:
+//
+//   header   name, and a status line (offline, virtual, ...)
+//   body     meters + fader (fills the height)
+//   readout  fader level in dB
+//   toggles  mute, mono, default
+//   options  the channel pair choice (blank when there's none)
+//
+// Sizes and colors come from Style. Roles are read through `model` (see the
+// note in DevicesPage.qml).
+QQC2.Control {
     id: strip
 
     required property var model
@@ -24,8 +33,15 @@ QQC2.Frame {
     readonly property real volumeDb: model.volumeDb
     readonly property var levels: model.levels
     readonly property int channels: Math.max(1, model.channels)
+    readonly property int channelPair: model.channelPair
 
-    width: Kirigami.Units.gridUnit * 6
+    readonly property bool ownVirtual: kind !== "hardware"
+    readonly property bool isInput: direction === "input"
+    // Anything apps play into can be the default output: outputs other than
+    // a virtual microphone, and virtual inputs.
+    readonly property bool canBeDefault: (!isInput && kind !== "virtual-source")
+                                         || kind === "virtual-input"
+    readonly property bool hasPairs: kind === "hardware" && channels > 2
 
     function formatDb(db) {
         if (db <= Devices.minimumVolumeDb)
@@ -34,159 +50,168 @@ QQC2.Frame {
         return db > 0.05 ? "+" + text : db < -0.05 ? "−" + text : "0.0 dB";
     }
 
+    implicitWidth: Style.stripWidth
+    padding: Style.stripPadding
+
+    background: Rectangle {
+        color: Style.stripBackground
+        border.color: Style.stripBorder
+        radius: Style.stripRadius
+    }
+
     contentItem: ColumnLayout {
-        spacing: Kirigami.Units.smallSpacing
+        spacing: Style.gap
 
-        QQC2.Label {
+        // --- header
+        ColumnLayout {
             Layout.fillWidth: true
-            text: strip.label
-            font.bold: true
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.Wrap
-            maximumLineCount: 2
-            elide: Text.ElideRight
+            Layout.preferredHeight: Style.headerHeight
+            Layout.maximumHeight: Style.headerHeight
+            spacing: 0
+
+            QQC2.Label {
+                Layout.fillWidth: true
+                text: strip.label
+                font.bold: true
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+                QQC2.ToolTip.text: strip.label
+                QQC2.ToolTip.visible: truncated && labelHover.hovered
+                HoverHandler { id: labelHover }
+            }
+
+            QQC2.Label {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                font: Kirigami.Theme.smallFont
+                elide: Text.ElideRight
+                color: strip.online ? Style.dimText : Style.offlineText
+                text: !strip.online ? qsTr("Offline")
+                    : strip.kind === "virtual-input" ? qsTr("Virtual input")
+                    : strip.kind === "virtual-sink" ? qsTr("Virtual output")
+                    : strip.kind === "virtual-source" ? qsTr("Virtual mic")
+                    : strip.hasPairs && strip.channelPair > 0
+                      ? qsTr("Ch %1–%2").arg(strip.channelPair * 2 - 1).arg(strip.channelPair * 2)
+                    : ""
+            }
+
+            Item { Layout.fillHeight: true }
         }
 
-        QQC2.Label {
-            Layout.fillWidth: true
-            visible: !strip.online
-            text: qsTr("Offline")
-            color: Kirigami.Theme.neutralTextColor
-            horizontalAlignment: Text.AlignHCenter
-            font: Kirigami.Theme.smallFont
-        }
-
+        // --- body: meters and fader
         RowLayout {
+            Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.alignment: Qt.AlignHCenter
-            spacing: Kirigami.Units.smallSpacing
+            spacing: Style.gap
 
-            // Meters: one bar per channel, 60 dB scale.
+            Item { Layout.fillWidth: true }
+
             Row {
                 Layout.fillHeight: true
-                spacing: 2
+                spacing: Style.meterGap
 
                 Repeater {
                     model: strip.levels.length > 0 ? strip.levels.length : strip.channels
 
-                    delegate: Rectangle {
+                    delegate: LevelMeter {
                         required property int index
-                        readonly property real level: index < strip.levels.length
-                                                      ? strip.levels[index] : 0
-
-                        width: Kirigami.Units.smallSpacing * 2
                         height: parent.height
-                        radius: 2
-                        color: Kirigami.Theme.alternateBackgroundColor
-                        border.color: Kirigami.Theme.disabledTextColor
-                        border.width: 1
-
-                        Rectangle {
-                            anchors.bottom: parent.bottom
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            width: parent.width - 2
-                            height: (parent.height - 2) * parent.level
-                            radius: 1
-                            color: parent.level > 0.95 ? Kirigami.Theme.negativeTextColor
-                                 : parent.level > 0.8 ? Kirigami.Theme.neutralTextColor
-                                 : Kirigami.Theme.positiveTextColor
-                            opacity: strip.muted ? 0.4 : 1
-                        }
+                        level: index < strip.levels.length ? strip.levels[index] : 0
+                        dimmed: strip.muted
                     }
                 }
             }
 
-            QQC2.Slider {
-                id: fader
-
+            VolumeFader {
                 Layout.fillHeight: true
-                orientation: Qt.Vertical
-                from: Devices.minimumVolumeDb
-                to: Devices.maximumVolumeDb
+                label: strip.label
+                volumeDb: strip.volumeDb
                 enabled: Devices.daemonRunning
-                // Half-dB steps, rounded here: a stepSize makes Breeze draw ticks.
-                onMoved: Devices.setVolume(strip.key, Math.round(value * 2) / 2)
-                Accessible.name: qsTr("Level for %1").arg(strip.label)
-
-                // Follow the daemon, except while the user is dragging.
-                Binding on value {
-                    when: !fader.pressed
-                    value: strip.volumeDb
-                    restoreMode: Binding.RestoreNone
-                }
-
-                TapHandler {
-                    onDoubleTapped: Devices.setVolume(strip.key, 0)
-                }
-
-                QQC2.ToolTip.text: qsTr("Double-click for 0 dB")
-                QQC2.ToolTip.visible: hovered && !pressed
-                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                onRequested: db => Devices.setVolume(strip.key, db)
+                onPressedChanged: readout.dragging = pressed
+                onValueChanged: readout.draggedDb = value
             }
+
+            Item { Layout.fillWidth: true }
         }
 
+        // --- readout
         QQC2.Label {
+            id: readout
+
+            property bool dragging: false
+            property real draggedDb: 0
+
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
-            text: strip.formatDb(fader.pressed ? fader.value : strip.volumeDb)
             font.family: "monospace"
+            text: strip.formatDb(dragging ? draggedDb : strip.volumeDb)
         }
 
-        // Clicking a checkable button breaks a plain `checked:` binding, so the
-        // daemon's state is bound with Binding elements, which stay in force.
-        QQC2.Button {
-            id: muteButton
+        // --- toggles
+        RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            checkable: true
-            icon.name: strip.muted ? "audio-volume-muted" : "audio-volume-high"
-            text: qsTr("Mute")
-            enabled: Devices.daemonRunning
-            onToggled: Devices.setMuted(strip.key, checked)
-            Binding on checked {
-                value: strip.muted
+            Layout.preferredHeight: Style.controlHeight
+            spacing: 0
+
+            StripToggle {
+                icon.name: strip.muted ? "audio-volume-muted" : "audio-volume-high"
+                text: qsTr("Mute")
+                on: strip.muted
+                enabled: Devices.daemonRunning
+                onRequested: on => Devices.setMuted(strip.key, on)
+            }
+
+            StripToggle {
+                visible: strip.isInput
+                icon.name: "audio-input-microphone"
+                text: qsTr("Mono")
+                tip: qsTr("Mono: mix all of this input's channels into one, heard in both ears. For a microphone on one input of a stereo interface.")
+                on: strip.mono
+                enabled: Devices.daemonRunning
+                onRequested: on => Devices.setMono(strip.key, on)
+            }
+
+            StripToggle {
+                visible: strip.canBeDefault
+                icon.name: strip.busIsDefault ? "starred-symbolic" : "non-starred-symbolic"
+                text: qsTr("Default")
+                // A virtual device has no hardware to bypass to, so it stays
+                // the default until another strip takes over.
+                checkable: !(strip.ownVirtual && strip.busIsDefault)
+                on: strip.busIsDefault
+                enabled: Devices.daemonRunning && strip.online
+                onRequested: on => Devices.setDefaultOutput(strip.key, on)
+                tip: strip.busIsDefault && strip.ownVirtual
+                     ? qsTr("The system default output. Make another strip the default to change that.")
+                     : strip.busIsDefault
+                     ? qsTr("The system default output: apps play through this strip. Click to send them straight to the device instead.")
+                     : qsTr("Make this the system default output, so apps play through this strip.")
             }
         }
 
-        QQC2.Button {
-            Layout.alignment: Qt.AlignHCenter
-            visible: strip.direction === "input"
-            checkable: true
-            icon.name: "audio-input-microphone"
-            text: qsTr("Mono")
-            enabled: Devices.daemonRunning
-            onToggled: Devices.setMono(strip.key, checked)
-            Binding on checked {
-                value: strip.mono
-            }
-            QQC2.ToolTip.text: qsTr("Mix all of this input's channels into one, heard in both ears. For a microphone on one input of a stereo interface.")
-            QQC2.ToolTip.visible: hovered
-            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
-        }
+        // --- options
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: Style.controlHeight
 
-        QQC2.Button {
-            Layout.alignment: Qt.AlignHCenter
-            // Anything apps play into: outputs, and virtual inputs. A virtual
-            // source is a microphone, not something to play into.
-            readonly property bool ownVirtual: strip.kind !== "hardware"
-            visible: (strip.direction === "output" && strip.kind !== "virtual-source")
-                     || strip.kind === "virtual-input"
-            // A virtual device has no hardware to bypass to, so it stays the
-            // default until another strip takes over.
-            checkable: !(ownVirtual && strip.busIsDefault)
-            icon.name: strip.busIsDefault ? "starred-symbolic" : "non-starred-symbolic"
-            text: qsTr("Default")
-            enabled: Devices.daemonRunning && strip.online
-            onToggled: Devices.setDefaultOutput(strip.key, checked)
-            Binding on checked {
-                value: strip.busIsDefault
+            QQC2.ComboBox {
+                anchors.fill: parent
+                visible: strip.hasPairs
+                enabled: Devices.daemonRunning
+                model: {
+                    const list = [qsTr("All %1 ch").arg(strip.channels)];
+                    for (let pair = 1; pair * 2 <= strip.channels; ++pair)
+                        list.push(qsTr("Ch %1–%2").arg(pair * 2 - 1).arg(pair * 2));
+                    return list;
+                }
+                currentIndex: strip.channelPair
+                onActivated: index => Devices.setChannelPair(strip.key, index)
+                Accessible.name: qsTr("Channels of %1").arg(strip.label)
+                QQC2.ToolTip.text: qsTr("Use every channel of this device, or only one stereo pair (for example the front headphone jack of a card in pro-audio mode).")
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
             }
-            QQC2.ToolTip.text: strip.busIsDefault && ownVirtual
-                ? qsTr("Apps that use the system default output play into this strip. Make another strip the default to change that.")
-                : strip.busIsDefault
-                ? qsTr("Apps that use the system default output play through this strip. Click to send them straight to the device instead.")
-                : qsTr("Make this the system default output, so apps play through this strip.")
-            QQC2.ToolTip.visible: hovered
-            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
         }
     }
 }
