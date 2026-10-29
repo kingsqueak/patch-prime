@@ -166,9 +166,11 @@ private Q_SLOTS:
         if (!m_module.isEmpty()) {
             run(QStringLiteral("pactl"), {QStringLiteral("unload-module"), m_module});
         }
-        // Anything the routing test's engine left behind.
+        // Anything the tests' engines left behind (each test has its own
+        // settings file, so its own owner tag). Send nodes, for one, can
+        // outlive a test's BusManager by a reconcile.
         for (const auto &[id, node] : m_graph.nodes()) {
-            if (!m_owner.empty() && prop(node, "patchprime.owner") == m_owner) {
+            if (m_owners.contains(prop(node, "patchprime.owner"))) {
                 m_graph.destroyObject(id);
             }
         }
@@ -182,6 +184,7 @@ private Q_SLOTS:
         DeviceModel devices(&store);
         devices.attach(&m_graph);
         BusManager buses(&m_graph, &devices);
+        m_owners.insert(busOwnerFor(store.path()));
 
         const auto key = makeEndpointKey("Audio/Sink", m_sinkName);
         QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(key) >= 0; }, 5000));
@@ -277,7 +280,7 @@ private Q_SLOTS:
         DeviceModel devices(&store);
         devices.attach(&m_graph);
         BusManager buses(&m_graph, &devices);
-        m_owner = busOwnerFor(store.path());
+        m_owners.insert(busOwnerFor(store.path()));
 
         const auto desktopKey =
             devices.createVirtual(QStringLiteral("Test Desktop"), EndpointKind::VirtualInput);
@@ -377,7 +380,7 @@ private Q_SLOTS:
         DeviceModel devices(&store);
         devices.attach(&m_graph);
         BusManager buses(&m_graph, &devices);
-        m_owner = busOwnerFor(store.path());
+        m_owners.insert(busOwnerFor(store.path()));
 
         const auto micKey = makeEndpointKey("Audio/Source", mic);
         QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(micKey) >= 0; }, 5000));
@@ -490,7 +493,7 @@ private Q_SLOTS:
         DeviceModel devices(&store);
         devices.attach(&m_graph);
         BusManager buses(&m_graph, &devices);
-        m_owner = busOwnerFor(store.path());
+        m_owners.insert(busOwnerFor(store.path()));
 
         const auto key = makeEndpointKey("Audio/Sink", name);
         QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(key) >= 0; }, 5000));
@@ -626,7 +629,7 @@ private:
     std::string m_sinkName;
     std::string m_busName;
     std::string m_originalDefault;
-    std::string m_owner;
+    std::set<std::string> m_owners;
     QString m_module;
 };
 

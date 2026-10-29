@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 KC2RGW Chris
+
+[Desktop Entry]
+Type=Application
+Name=Patch Prime
+GenericName=Audio Mixer
+Comment=Mix and route audio between devices and apps
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/patchprime
+Icon=audio-card
+Terminal=false
+Categories=AudioVideo;Audio;Mixer;Qt;KDE;
+Keywords=mixer;audio;routing;pipewire;stream;
+StartupNotify=true

@@ -43,12 +43,14 @@ build/gcc-debug/probe/patchprime-probe --summary  # short device list
 ## Running
 
 ```sh
-cmake --preset gcc-release && cmake --build --preset gcc-release
-cmake --install build/gcc-release --prefix ~/.local
+cmake --preset gcc-release -DCMAKE_INSTALL_PREFIX=$HOME/.local
+cmake --build --preset gcc-release
+cmake --install build/gcc-release
 systemctl --user daemon-reload
 systemctl --user enable --now patchprimed
-~/.local/bin/patchprime
 ```
+
+Set the prefix when configuring, not with `cmake --install --prefix`: the systemd unit, the D-Bus activation file and the `.desktop` launcher are written with the full path to the programs. The engine then starts at login, and **Patch Prime** is in the application menu. After rebuilding, `cmake --install build/gcc-release && systemctl --user restart patchprimed` updates it.
 
 To take everything out of PipeWire again: `patchprimed --remove-buses`.
 

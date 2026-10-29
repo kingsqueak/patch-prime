@@ -7,7 +7,10 @@ function(patchprime_set_warnings target)
         -Wall -Wextra -Wpedantic
         -Wshadow -Wconversion -Wsign-conversion
         -Wnon-virtual-dtor -Wold-style-cast -Woverloaded-virtual
-        -Wnull-dereference -Wimplicit-fallthrough)
+        -Wimplicit-fallthrough)
+    # No -Wnull-dereference: it only runs when optimizing, and then flags
+    # inlined code in PipeWire's and Qt's headers (false positives).
+    # clang-tidy checks ours.
     if(PATCHPRIME_WERROR)
         target_compile_options(${target} PRIVATE -Werror)
     endif()

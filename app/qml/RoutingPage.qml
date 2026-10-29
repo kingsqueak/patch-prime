@@ -116,7 +116,7 @@ Kirigami.ScrollablePage {
 
                         required property var model
                         readonly property bool sent: inputRow.sends.indexOf(model.key) >= 0
-                        readonly property real levelDb: inputRow.sendLevels[model.key] ?? 0
+                        readonly property real levelDb: (inputRow.sendLevels ?? {})[model.key] ?? 0
                         readonly property bool allowed: page.rank(model.stage) > page.rank(inputRow.model.stage)
 
                         Layout.preferredWidth: page.cellWidth

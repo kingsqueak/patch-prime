@@ -25,3 +25,9 @@ target_link_libraries(patchprime PRIVATE
 target_compile_definitions(patchprime PRIVATE QT_NO_CAST_FROM_ASCII)
 patchprime_set_warnings(patchprime)
 install(TARGETS patchprime)
+
+# The launcher; its name matches QGuiApplication::desktopFileName().
+configure_file(${PROJECT_SOURCE_DIR}/data/org.kingsqueak.patchprime.desktop.in
+               ${CMAKE_CURRENT_BINARY_DIR}/org.kingsqueak.patchprime.desktop @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/org.kingsqueak.patchprime.desktop
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
