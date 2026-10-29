@@ -57,6 +57,7 @@ public:
         BusNameRole,     // node.name of the strip's bus while enabled, else empty
         ChannelPairRole, // hardware: 0 = all channels, n = stereo pair 2n-1/2n
         StageRole,       // "input", "bus" or "output"
+        SendLevelsRole,  // {destination key: dB} for this strip's sends (0 dB when missing)
     };
     Q_ENUM(Role)
 
@@ -88,6 +89,8 @@ public:
     // Sends (or stops sending) a strip to one in a later stage: an input to a
     // mix bus or an output, a mix bus to an output.
     Q_INVOKABLE void setSend(int row, const QString &destinationKey, bool enabled);
+    // The level of an existing send, clamped like the fader.
+    Q_INVOKABLE void setSendLevel(int row, const QString &destinationKey, double db);
     // Makes a new virtual device, enabled, and returns its key.
     QString createVirtual(const QString &name, EndpointKind kind);
 

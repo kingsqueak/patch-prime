@@ -33,6 +33,7 @@ QQC2.Control {
     readonly property bool mono: model.mono
     readonly property real volumeDb: model.volumeDb
     readonly property var levels: model.levels
+    readonly property bool signal: model.signal
     readonly property int channels: Math.max(1, model.channels)
     readonly property int channelPair: model.channelPair
     readonly property string stage: model.stage
@@ -72,15 +73,32 @@ QQC2.Control {
             Layout.maximumHeight: Style.headerHeight
             spacing: 0
 
-            QQC2.Label {
+            RowLayout {
                 Layout.fillWidth: true
-                text: strip.label
-                font.bold: true
-                horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
-                QQC2.ToolTip.text: strip.label
-                QQC2.ToolTip.visible: truncated && labelHover.hovered
-                HoverHandler { id: labelHover }
+                spacing: Style.gap
+
+                // Signal light: lit while audio passes, even too quiet to meter.
+                Rectangle {
+                    implicitWidth: Style.signalSize
+                    implicitHeight: Style.signalSize
+                    radius: width / 2
+                    color: strip.signal ? Style.signalOn : Style.signalOff
+                    QQC2.ToolTip.text: strip.signal ? qsTr("Audio is passing through")
+                                                    : qsTr("No audio")
+                    QQC2.ToolTip.visible: signalHover.hovered
+                    HoverHandler { id: signalHover }
+                }
+
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    text: strip.label
+                    font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                    QQC2.ToolTip.text: strip.label
+                    QQC2.ToolTip.visible: truncated && labelHover.hovered
+                    HoverHandler { id: labelHover }
+                }
             }
 
             QQC2.Label {
@@ -157,7 +175,8 @@ QQC2.Control {
             spacing: 0
 
             StripToggle {
-                icon.name: strip.muted ? "audio-volume-muted" : "audio-volume-high"
+                letter: qsTr("M", "mute button")
+                onColor: Style.muteOn
                 text: qsTr("Mute")
                 on: strip.muted
                 enabled: Devices.daemonRunning

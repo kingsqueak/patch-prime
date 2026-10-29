@@ -182,6 +182,14 @@ void PatchPrimeService::SetSend(const QString &inputKey, const QString &destinat
     }
 }
 
+void PatchPrimeService::SetSendLevel(const QString &inputKey, const QString &destinationKey,
+                                     double db)
+{
+    if (const int row = rowFor(inputKey); row >= 0) {
+        m_devices->setSendLevel(row, destinationKey, db);
+    }
+}
+
 QString PatchPrimeService::CreateVirtual(const QString &name, const QString &kind)
 {
     const auto trimmed = name.trimmed();

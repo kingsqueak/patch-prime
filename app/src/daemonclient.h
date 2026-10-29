@@ -60,6 +60,8 @@ public:
     // A strip's label by key; empty when there's no such strip.
     [[nodiscard]] Q_INVOKABLE QString labelFor(const QString &key) const;
     Q_INVOKABLE void setSend(const QString &inputKey, const QString &destinationKey, bool enabled);
+    Q_INVOKABLE void setSendLevel(const QString &inputKey, const QString &destinationKey,
+                                  double db);
     // kind: "sink", "source" or "input"
     Q_INVOKABLE void createVirtual(const QString &name, const QString &kind);
     // nodeName: a target's name; empty for the system default.
@@ -91,8 +93,10 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QHash<int, QByteArray> m_roles;
     QHash<QByteArray, int> m_roleIds;
     int m_levelsRole = 0;
+    int m_signalRole = 0;
     QList<QVariantMap> m_rows;
     QHash<QString, QList<double>> m_levels; // key -> displayed meter fractions
+    QHash<QString, int> m_signalHold;       // key -> updates left showing "signal present"
     QDBusServiceWatcher m_watcher;
     bool m_daemonRunning = false;
     bool m_connected = false;

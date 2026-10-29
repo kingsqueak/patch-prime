@@ -461,6 +461,22 @@ private Q_SLOTS:
                  std::vector<std::string>{"Audio/Sink|phones"});
         model.forget(model.rowForKey(other.toStdString()));
 
+        // Send levels: only for a send that exists, clamped like the fader.
+        model.setSendLevel(model.rowForKey(mix.toStdString()), QStringLiteral("Audio/Sink|phones"),
+                           -12.5);
+        model.setSendLevel(model.rowForKey(mix.toStdString()), QStringLiteral("Audio/Source|mic"),
+                           -3.0);
+        model.setSendLevel(model.rowForKey("Audio/Source|mic"), mix, 99.0);
+        QCOMPARE(store.find(mix.toStdString())->sendLevels,
+                 (std::map<std::string, double>{{"Audio/Sink|phones", -12.5}}));
+        QCOMPARE(store.find("Audio/Source|mic")->sendLevels.at(mix.toStdString()),
+                 DeviceModel::maximumVolumeDb());
+        QCOMPARE(role(model, model.rowForKey(mix.toStdString()), DeviceModel::SendLevelsRole)
+                     .toMap()
+                     .value(QStringLiteral("Audio/Sink|phones"))
+                     .toDouble(),
+                 -12.5);
+
         // Mono is for inputs only.
         model.setMono(model.rowForKey("Audio/Source|mic"), true);
         QVERIFY(role(model, model.rowForKey("Audio/Source|mic"), DeviceModel::MonoRole).toBool());

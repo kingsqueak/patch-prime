@@ -84,6 +84,7 @@ private Q_SLOTS:
         {
             DeviceStore store(path);
             store.upsert("mic").sends = {"phones", "mix"};
+            store.upsert("mic").sendLevels = {{"mix", -6.0}};
             store.upsert("mic").mono = true;
             store.upsert("mix").kind = EndpointKind::VirtualSink;
             store.upsert("chat").kind = EndpointKind::VirtualSource;
@@ -93,6 +94,7 @@ private Q_SLOTS:
         DeviceStore store(path);
         QVERIFY(store.load());
         QCOMPARE(store.find("mic")->sends, (std::vector<std::string>{"phones", "mix"}));
+        QCOMPARE(store.find("mic")->sendLevels.at("mix"), -6.0);
         QVERIFY(store.find("mic")->mono);
         QCOMPARE(store.find("mix")->kind, EndpointKind::VirtualSink);
         QCOMPARE(store.find("chat")->kind, EndpointKind::VirtualSource);
@@ -103,8 +105,11 @@ private Q_SLOTS:
         // A re-attached destination keeps its sends; a removed one drops them.
         QVERIFY(store.rekey("phones", "phones2"));
         QCOMPARE(store.find("mic")->sends, (std::vector<std::string>{"phones2", "mix"}));
-        QVERIFY(store.remove("mix"));
+        QVERIFY(store.rekey("mix", "mix2")); // the send level follows its destination
+        QCOMPARE(store.find("mic")->sendLevels.at("mix2"), -6.0);
+        QVERIFY(store.remove("mix2"));
         QCOMPARE(store.find("mic")->sends, std::vector<std::string>{"phones2"});
+        QVERIFY(store.find("mic")->sendLevels.empty());
         QCOMPARE(DeviceStore::virtualKey("ab12cd34"), "patchprime-virtual|ab12cd34");
     }
 

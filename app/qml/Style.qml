@@ -34,5 +34,19 @@ QtObject {
     readonly property color meterWarnColor: Kirigami.Theme.neutralTextColor
     readonly property color meterClipColor: Kirigami.Theme.negativeTextColor
     readonly property color dimText: Kirigami.Theme.disabledTextColor
+
+    // Strip toggles: background when off, hovered, and on. `onColor` is the
+    // usual on color; a toggle can set its own (mute is red).
+    readonly property real toggleRadius: Kirigami.Units.cornerRadius
+    readonly property color toggleOff: "transparent"
+    readonly property color toggleHover: Qt.alpha(Kirigami.Theme.textColor, 0.1)
+    readonly property color toggleOn: Kirigami.Theme.highlightColor
+    readonly property color toggleOnText: Kirigami.Theme.highlightedTextColor
+    readonly property color muteOn: Kirigami.Theme.negativeTextColor
+
+    // Signal light: lit while any audio passes, even below the meter's range.
+    readonly property real signalSize: Kirigami.Units.smallSpacing * 2
+    readonly property color signalOn: Kirigami.Theme.positiveTextColor
+    readonly property color signalOff: Qt.alpha(Kirigami.Theme.textColor, 0.15)
     readonly property color offlineText: Kirigami.Theme.neutralTextColor
 }

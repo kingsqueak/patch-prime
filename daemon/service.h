@@ -56,6 +56,8 @@ public Q_SLOTS:
     void SetChannelPair(const QString &key, int pair);
     // Sends an input to an output or virtual device, or stops sending it.
     void SetSend(const QString &inputKey, const QString &destinationKey, bool enabled);
+    // The level of an existing send in dB (-60 = silent .. +12).
+    void SetSendLevel(const QString &inputKey, const QString &destinationKey, double db);
     // kind: "sink" (apps play into it; record its monitor, e.g. "Stream Mix"),
     // "source" (apps record from it like a microphone, e.g. "Chat Mic") or
     // "input" (apps play into it, and it's routed like an input, e.g. "Desktop").

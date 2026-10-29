@@ -194,6 +194,15 @@ QVariant DeviceModel::data(const QModelIndex &index, int role) const
         return saved != nullptr && saved->mono;
     case ChannelPairRole:
         return saved != nullptr ? saved->channelPair : 0;
+    case SendLevelsRole: {
+        QVariantMap levels;
+        if (saved != nullptr) {
+            for (const auto &[key, db] : saved->sendLevels) {
+                levels.insert(qs(key), db);
+            }
+        }
+        return levels;
+    }
     case StageRole:
         return qs(stageName(stageOfRow(row)));
     case BusNameRole:
@@ -233,6 +242,7 @@ QHash<int, QByteArray> DeviceModel::roleNames() const
         {KindRole, "kind"},
         {BusNameRole, "busName"},
         {StageRole, "stage"},
+        {SendLevelsRole, "sendLevels"},
         {ChannelPairRole, "channelPair"},
         {SendsRole, "sends"},
         {MonoRole, "mono"},
@@ -348,6 +358,30 @@ void DeviceModel::setMono(int row, bool mono)
     saveStore();
     const auto i = index(row);
     Q_EMIT dataChanged(i, i, {MonoRole, SavedRole});
+    Q_EMIT settingsChanged(qs(r.endpoint.key));
+}
+
+void DeviceModel::setSendLevel(int row, const QString &destinationKey, double db)
+{
+    if (row < 0 || row >= rowCount()) {
+        return;
+    }
+    const auto &r = m_rows[static_cast<std::size_t>(row)];
+    const auto *saved = m_store->find(r.endpoint.key);
+    const auto destination = destinationKey.toStdString();
+    if (saved == nullptr || std::ranges::find(saved->sends, destination) == saved->sends.end()) {
+        return; // only for a send that exists
+    }
+    db = std::clamp(db, minimumVolumeDb(), maximumVolumeDb());
+    auto &levels = m_store->upsert(r.endpoint.key).sendLevels;
+    if (const auto it = levels.find(destination);
+        it != levels.end() ? it->second == db : db == 0.0) {
+        return;
+    }
+    levels[destination] = db;
+    saveLater();
+    const auto i = index(row);
+    Q_EMIT dataChanged(i, i, {SendLevelsRole});
     Q_EMIT settingsChanged(qs(r.endpoint.key));
 }
 

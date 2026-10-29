@@ -31,11 +31,16 @@ constexpr std::array fields{
     "key",       "label",        "customLabel", "description", "nodeName",    "direction",
     "isVirtual", "online",       "isEnabled",   "channels",    "positions",   "isDefault",
     "saved",     "sectionStart", "volumeDb",    "muted",       "busId",       "busIsDefault",
-    "kind",      "sends",        "mono",        "busName",     "channelPair", "stage",
+    "kind",      "sends",        "mono",        "busName",     "channelPair", "stage",       "sendLevels",
 };
 
 // How far a meter falls per update (about 30 per second): 60 dB in ~1.6 s.
 constexpr double meterFallPerUpdate = 0.02;
+// "Signal present" lights for anything above -100 dBFS (far below the meter's
+// range, so a path turned down too far still shows it works), and stays lit
+// for about half a second.
+constexpr double signalThreshold = 1e-5;
+constexpr int signalHoldUpdates = 15;
 
 } // namespace
 
@@ -49,6 +54,8 @@ DaemonClient::DaemonClient(QObject *parent) : QAbstractListModel(parent)
     }
     m_levelsRole = role;
     m_roles.insert(m_levelsRole, QByteArrayLiteral("levels"));
+    m_signalRole = role + 1;
+    m_roles.insert(m_signalRole, QByteArrayLiteral("signal"));
 
     auto bus = QDBusConnection::sessionBus();
     bus.connect(service, path, interface, QStringLiteral("StateChanged"), this,
@@ -99,6 +106,9 @@ QVariant DaemonClient::data(const QModelIndex &index, int role) const
             out.append(level);
         }
         return out;
+    }
+    if (role == m_signalRole) {
+        return m_signalHold.value(row.value(QStringLiteral("key")).toString()) > 0;
     }
     if (role == Qt::DisplayRole) {
         role = m_roleIds.value("label");
@@ -221,6 +231,12 @@ void DaemonClient::setDefaultOutput(const QString &key, bool throughMixer)
 void DaemonClient::setMono(const QString &key, bool mono)
 {
     call(QStringLiteral("SetMono"), {key, mono});
+}
+
+void DaemonClient::setSendLevel(const QString &inputKey, const QString &destinationKey,
+                                double db)
+{
+    call(QStringLiteral("SetSendLevel"), {inputKey, destinationKey, db});
 }
 
 void DaemonClient::setChannelPair(const QString &key, int pair)
@@ -351,13 +367,22 @@ void DaemonClient::onLevels(const QVariantMap &levels)
         for (qsizetype c = 0; c < peaks.size(); ++c) {
             shown[c] = std::max(meterFraction(peaks[c]), shown[c] - meterFallPerUpdate);
         }
+        auto &hold = m_signalHold[it.key()];
+        const bool wasLit = hold > 0;
+        hold = std::ranges::any_of(peaks, [](double p) { return p > signalThreshold; })
+                   ? signalHoldUpdates
+                   : std::max(hold - 1, 0);
 
         const auto row = std::ranges::find_if(m_rows, [&](const QVariantMap &r) {
             return r.value(QStringLiteral("key")).toString() == it.key();
         });
         if (row != m_rows.end()) {
             const auto i = index(static_cast<int>(row - m_rows.begin()));
-            Q_EMIT dataChanged(i, i, {m_levelsRole});
+            if (wasLit != (hold > 0)) {
+                Q_EMIT dataChanged(i, i, {m_levelsRole, m_signalRole});
+            } else {
+                Q_EMIT dataChanged(i, i, {m_levelsRole});
+            }
         }
     }
 }

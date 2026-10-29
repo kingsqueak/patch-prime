@@ -89,6 +89,29 @@ const GraphObject *nodeNamed(const PipeWireGraph &graph, const std::string &name
     return nullptr;
 }
 
+std::ptrdiff_t linkCount(const PipeWireGraph &graph, const std::string &from,
+                         const std::string &to)
+{
+    const auto *a = nodeNamed(graph, from);
+    const auto *b = nodeNamed(graph, to);
+    if (a == nullptr || b == nullptr) {
+        return 0;
+    }
+    return std::ranges::count_if(graph.links(), [&](const auto &entry) {
+        return prop(entry.second, "link.output.node") == std::to_string(a->id) &&
+               prop(entry.second, "link.input.node") == std::to_string(b->id);
+    });
+}
+
+// A send goes from one bus through its gain node to the other; true when
+// both hops have `links` links.
+bool sentThrough(const PipeWireGraph &graph, const std::string &from, const std::string &to,
+                 const std::string &send, std::ptrdiff_t links)
+{
+    return linkCount(graph, from, send) == links && linkCount(graph, send, to) == links &&
+           linkCount(graph, from, to) == 0;
+}
+
 } // namespace
 
 class TestBusLive : public QObject
@@ -267,17 +290,12 @@ private Q_SLOTS:
         QVERIFY(QTest::qWaitFor(
             [&] { return nodeNamed(m_graph, desktopNode) && nodeNamed(m_graph, mixNode); }, 5000));
         QCOMPARE(prop(*nodeNamed(m_graph, desktopNode), "media.class"), "Audio/Sink");
+        const auto desktopSend = sendNodeName(store.find(desktopKey.toStdString())->busId,
+                                              store.find(mixKey.toStdString())->busId);
         QVERIFY(QTest::qWaitFor(
-            [&] {
-                const auto *a = nodeNamed(m_graph, desktopNode);
-                const auto *b = nodeNamed(m_graph, mixNode);
-                return a != nullptr && b != nullptr &&
-                       std::ranges::count_if(m_graph.links(), [&](const auto &entry) {
-                           return prop(entry.second, "link.output.node") == std::to_string(a->id) &&
-                                  prop(entry.second, "link.input.node") == std::to_string(b->id);
-                       }) == 2;
-            },
-            5000));
+            [&] { return sentThrough(m_graph, desktopNode, mixNode, desktopSend, 2); }, 5000));
+        // The send node is hidden from Plasma and pactl: its own media class.
+        QCOMPARE(prop(*nodeNamed(m_graph, desktopSend), "media.class"), sendMediaClass);
 
         // Console style: the mix bus goes on to an output (the test sink).
         const auto outKey = makeEndpointKey("Audio/Sink", m_sinkName);
@@ -286,17 +304,10 @@ private Q_SLOTS:
         devices.setSend(devices.rowForKey(mixKey.toStdString()), QString::fromStdString(outKey),
                         true);
         const auto outBus = busNodeName(Direction::Output, store.find(outKey)->busId);
-        QVERIFY(QTest::qWaitFor(
-            [&] {
-                const auto *a = nodeNamed(m_graph, mixNode);
-                const auto *b = nodeNamed(m_graph, outBus);
-                return a != nullptr && b != nullptr &&
-                       std::ranges::count_if(m_graph.links(), [&](const auto &entry) {
-                           return prop(entry.second, "link.output.node") == std::to_string(a->id) &&
-                                  prop(entry.second, "link.input.node") == std::to_string(b->id);
-                       }) == 2;
-            },
-            5000));
+        const auto mixSend =
+            sendNodeName(store.find(mixKey.toStdString())->busId, store.find(outKey)->busId);
+        QVERIFY(QTest::qWaitFor([&] { return sentThrough(m_graph, mixNode, outBus, mixSend, 2); },
+                                5000));
 
         // An app plays into the virtual input; it reaches the mix and the output.
         buses.setMetering(true);
@@ -382,21 +393,11 @@ private Q_SLOTS:
         QCOMPARE(prop(*nodeNamed(m_graph, inBus), "media.class"), "Audio/Source/Virtual");
         QCOMPARE(prop(*nodeNamed(m_graph, mixNode), "node.description"), "Test Mix");
 
-        auto linksBetween = [&](const std::string &from, const std::string &to) {
-            const auto *a = nodeNamed(m_graph, from);
-            const auto *b = nodeNamed(m_graph, to);
-            if (a == nullptr || b == nullptr) {
-                return std::ptrdiff_t{0};
-            }
-            const auto outId = std::to_string(a->id);
-            const auto inId = std::to_string(b->id);
-            return std::ranges::count_if(m_graph.links(), [&](const auto &entry) {
-                return prop(entry.second, "link.output.node") == outId &&
-                       prop(entry.second, "link.input.node") == inId;
-            });
-        };
-        QVERIFY(QTest::qWaitFor([&] { return linksBetween(mic, inBus) == 2; }, 5000));
-        QVERIFY(QTest::qWaitFor([&] { return linksBetween(inBus, mixNode) == 2; }, 5000));
+        const auto send =
+            sendNodeName(store.find(micKey)->busId, store.find(mixKey.toStdString())->busId);
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, mic, inBus) == 2; }, 5000));
+        QVERIFY(
+            QTest::qWaitFor([&] { return sentThrough(m_graph, inBus, mixNode, send, 2); }, 5000));
 
         // Sound goes all the way: tone -> fake mic -> input bus -> Test Mix.
         buses.setMetering(true);
@@ -420,7 +421,31 @@ private Q_SLOTS:
             5000));
         player.kill();
         player.waitForFinished();
+
+        // The send level: -20 dB into the mix (the tone peaks at about -6 dBFS).
+        devices.setSendLevel(devices.rowForKey(micKey), mixKey, -20.0);
+        QTest::qWait(300);
+        buses.takeLevels();
+        player.start(QStringLiteral("pw-play"),
+                     {QStringLiteral("--target"), QString::fromStdString(feed), tone});
+        mixPeak = 0.0F;
+        // Collects for the whole time: the peak is checked afterwards.
+        [[maybe_unused]] const bool never = QTest::qWaitFor(
+            [&] {
+                if (const auto levels = buses.takeLevels();
+                    levels.contains(mixKey.toStdString())) {
+                    for (const float level : levels.at(mixKey.toStdString())) {
+                        mixPeak = std::max(mixPeak, level);
+                    }
+                }
+                return false;
+            },
+            1500);
+        player.kill();
+        player.waitForFinished();
         buses.setMetering(false);
+        QVERIFY2(mixPeak > 0.02F && mixPeak < 0.1F, qPrintable(QString::number(mixPeak)));
+        QCOMPARE(store.find(micKey)->sendLevels.at(mixKey.toStdString()), -20.0);
 
         // Mono: the input bus is rebuilt with one channel; both mic channels
         // feed it, and it feeds both channels of the mix.
@@ -429,13 +454,15 @@ private Q_SLOTS:
             [&] {
                 const auto *bus = nodeNamed(m_graph, inBus);
                 return bus != nullptr && prop(*bus, "audio.channels") == "1" &&
-                       linksBetween(mic, inBus) == 2 && linksBetween(inBus, mixNode) == 2;
+                       linkCount(m_graph, mic, inBus) == 2 &&
+                       linkCount(m_graph, inBus, send) == 1 && // the send node is mono too
+                       linkCount(m_graph, send, mixNode) == 2;
             },
             5000));
 
         // Unsend: the links go. Delete the mix and disable the mic: all gone.
         devices.setSend(devices.rowForKey(micKey), mixKey, false);
-        QVERIFY(QTest::qWaitFor([&] { return linksBetween(inBus, mixNode) == 0; }, 5000));
+        QVERIFY(QTest::qWaitFor([&] { return nodeNamed(m_graph, send) == nullptr; }, 5000));
         devices.forget(devices.rowForKey(mixKey.toStdString()));
         devices.setEnabled(devices.rowForKey(micKey), false);
         QVERIFY(QTest::qWaitFor(

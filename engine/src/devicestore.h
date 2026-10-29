@@ -58,6 +58,8 @@ struct DeviceSettings
     bool muted = false;
     // Inputs and mix buses: the keys of the strips this one is sent to.
     std::vector<std::string> sends;
+    // The level of each send in dB, by destination key; 0 dB when missing.
+    std::map<std::string, double> sendLevels;
     // Inputs only: mix every hardware channel into a one-channel bus, so a mic
     // on one input of a stereo interface is heard in both ears.
     bool mono = false;

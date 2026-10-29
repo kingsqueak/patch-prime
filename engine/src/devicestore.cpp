@@ -41,9 +41,14 @@ QJsonObject toJson(const DeviceSettings &d)
     for (const auto &s : d.sends) {
         sends.append(qs(s));
     }
+    QJsonObject sendLevels;
+    for (const auto &[key, db] : d.sendLevels) {
+        sendLevels.insert(qs(key), db);
+    }
     return QJsonObject{
         {QStringLiteral("kind"), qs(kindName(d.kind))},
         {QStringLiteral("sends"), sends},
+        {QStringLiteral("sendLevels"), sendLevels},
         {QStringLiteral("mono"), d.mono},
         {QStringLiteral("channelPair"), d.channelPair},
         {QStringLiteral("busId"), qs(d.busId)},
@@ -79,6 +84,10 @@ DeviceSettings fromJson(const QJsonObject &o)
     d.channelPair = std::max(0, o.value(QLatin1String("channelPair")).toInt());
     for (const auto &s : o.value(QLatin1String("sends")).toArray()) {
         d.sends.push_back(s.toString().toStdString());
+    }
+    const auto sendLevels = o.value(QLatin1String("sendLevels")).toObject();
+    for (auto it = sendLevels.begin(); it != sendLevels.end(); ++it) {
+        d.sendLevels[it.key().toStdString()] = it.value().toDouble();
     }
     d.busId = str(o, "busId");
     d.enabled = o.value(QLatin1String("enabled")).toBool();
@@ -251,6 +260,7 @@ bool DeviceStore::remove(const std::string &key)
     }
     for (auto &[other, settings] : m_entries) {
         std::erase(settings.sends, key);
+        settings.sendLevels.erase(key);
     }
     return true;
 }
@@ -268,6 +278,10 @@ bool DeviceStore::rekey(const std::string &from, const std::string &to)
     m_entries.insert(std::move(node));
     for (auto &[key, settings] : m_entries) {
         std::ranges::replace(settings.sends, from, to);
+        if (auto level = settings.sendLevels.extract(from)) {
+            level.key() = to;
+            settings.sendLevels.insert(std::move(level));
+        }
     }
     return true;
 }

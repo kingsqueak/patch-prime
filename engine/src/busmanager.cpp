@@ -51,6 +51,31 @@ std::string virtualNodeName(const std::string &busId)
     return std::string(virtualNamePrefix) + busId;
 }
 
+std::string sendNodeName(const std::string &fromBusId, const std::string &toBusId)
+{
+    return std::string(sendNamePrefix) + fromBusId + "." + toBusId;
+}
+
+Properties sendProperties(const std::string &name, const std::vector<std::string> &positions,
+                          const std::string &description, const std::string &owner)
+{
+    return {
+        {"factory.name", "support.null-audio-sink"},
+        {"node.name", name},
+        {"node.description", description},
+        {"media.class", std::string(sendMediaClass)},
+        {"audio.channels", std::to_string(positions.size())},
+        {"audio.position", joinPositions(positions)},
+        {"node.autoconnect", "false"},
+        {"node.virtual", "true"},
+        {"monitor.channel-volumes", "true"},
+        {"object.linger", "true"},
+        {"priority.session", "0"},
+        {"priority.driver", "0"},
+        {"patchprime.owner", owner},
+    };
+}
+
 float dbToLinear(double db, double minimumDb)
 {
     if (db <= minimumDb) {
@@ -245,7 +270,8 @@ std::map<std::string, std::vector<float>> BusManager::takeLevels()
 void BusManager::removeAllBusesIn(PipeWireGraph &graph)
 {
     for (const auto &[id, node] : graph.nodes()) {
-        if (prop(node, "node.name").starts_with(busNamePrefix)) {
+        if (const auto &name = prop(node, "node.name");
+            name.starts_with(busNamePrefix) || name.starts_with(sendNamePrefix)) {
             graph.destroyObject(id);
         }
     }
@@ -338,12 +364,14 @@ void BusManager::reconcile()
     std::erase_if(m_pendingLinks, [now](const auto &p) { return now - p.second > pendingTimeout; });
 
     const auto wanted = wantedBuses();
+    const auto sends = wantedSends(wanted);
 
     std::map<std::string, std::uint32_t> existing;
     for (const auto &[id, node] : m_graph->nodes()) {
         const auto &name = prop(node, "node.name");
         const auto &owner = prop(node, "patchprime.owner");
-        if ((name.starts_with(busNamePrefix) || name.starts_with(virtualNamePrefix)) &&
+        if ((name.starts_with(busNamePrefix) || name.starts_with(virtualNamePrefix) ||
+             name.starts_with(sendNamePrefix)) &&
             (owner.empty() || owner == m_owner)) {
             existing[name] = id;
         }
@@ -361,7 +389,7 @@ void BusManager::reconcile()
     // is the system default output, hand the default back to its hardware
     // first; otherwise WirePlumber would pick some other device.
     for (const auto &[name, id] : existing) {
-        if (wanted.contains(name)) {
+        if (wanted.contains(name) || sends.contains(name)) {
             continue;
         }
         if (name == m_graph->defaultSinkName()) {
@@ -414,16 +442,7 @@ void BusManager::reconcile()
         }
         ready[name] = busId;
 
-        // Fader and mute.
-        const std::vector<float> volumes(
-            channels, dbToLinear(w.settings->volumeDb, DeviceModel::minimumVolumeDb()));
-        const std::pair state{volumes, w.settings->muted};
-        if (auto applied = m_applied.find(busId);
-            applied == m_applied.end() || applied->second != state) {
-            if (m_graph->setNodeVolume(busId, volumes, w.settings->muted)) {
-                m_applied[busId] = state;
-            }
-        }
+        applyVolume(busId, channels, w.settings->volumeDb, w.settings->muted); // fader and mute
 
         linkHardware(busId, w, existingLinks);
 
@@ -435,7 +454,28 @@ void BusManager::reconcile()
         }
     }
 
-    linkSends(wanted, ready, existingLinks);
+    // Send gain nodes, made and checked like buses.
+    std::map<std::string, std::uint32_t> readySends;
+    for (const auto &[name, s] : sends) {
+        const auto it = existing.find(name);
+        if (it == existing.end()) {
+            if (!m_pendingBuses.contains(name) &&
+                m_graph->createNode(sendProperties(name, s.positions, s.description, m_owner))) {
+                m_pendingBuses[name] = now;
+            }
+            continue;
+        }
+        m_pendingBuses.erase(name);
+        if (parseId(prop(m_graph->nodes().at(it->second), "audio.channels")) !=
+            s.positions.size()) {
+            m_graph->destroyObject(it->second); // the sending bus changed shape (mono)
+            continue;
+        }
+        readySends[name] = it->second;
+        applyVolume(it->second, s.positions.size(), s.levelDb, false);
+    }
+
+    linkSends(ready, wanted, sends, readySends, existingLinks);
 
     // Meters whose bus is gone or no longer wanted.
     for (auto it = m_meters.begin(); it != m_meters.end();) {
@@ -448,54 +488,103 @@ void BusManager::reconcile()
     }
 }
 
-void BusManager::linkSends(const std::map<std::string, Wanted> &wanted,
-                           const std::map<std::string, std::uint32_t> &ready,
-                           const LinkMap &existingLinks)
+void BusManager::applyVolume(std::uint32_t nodeId, std::size_t channels, double db, bool muted)
 {
-    // Every bus's node id, by endpoint key.
-    std::map<std::string, std::uint32_t> busByKey;
-    for (const auto &[name, id] : ready) {
-        busByKey[wanted.at(name).key] = id;
+    const std::vector<float> volumes(channels, dbToLinear(db, DeviceModel::minimumVolumeDb()));
+    const std::pair state{volumes, muted};
+    if (auto applied = m_applied.find(nodeId);
+        applied == m_applied.end() || applied->second != state) {
+        if (m_graph->setNodeVolume(nodeId, volumes, muted)) {
+            m_applied[nodeId] = state;
+        }
     }
+}
 
-    std::set<std::pair<std::uint32_t, std::uint32_t>> desired;
-    std::set<std::uint32_t> senders; // input buses and mix buses
-    std::set<std::uint32_t> allBuses;
-    for (const auto &[name, id] : ready) {
-        allBuses.insert(id);
-        const auto &w = wanted.at(name);
+std::map<std::string, BusManager::WantedSend>
+BusManager::wantedSends(const std::map<std::string, Wanted> &buses)
+{
+    std::map<std::string, const std::pair<const std::string, Wanted> *> byKey;
+    for (const auto &entry : buses) {
+        byKey[entry.second.key] = &entry;
+    }
+    std::map<std::string, WantedSend> out;
+    for (const auto &[name, w] : buses) {
         if (stageOf(w.endpoint.direction, w.settings->kind) == Stage::Output) {
             continue;
         }
-        senders.insert(id);
         for (const auto &destination : w.settings->sends) {
-            const auto target = busByKey.find(destination);
-            if (target == busByKey.end()) {
-                continue; // destination disabled, offline-and-unmade, or forgotten
+            const auto target = byKey.find(destination);
+            if (target == byKey.end()) {
+                continue; // destination disabled or forgotten
             }
-            for (const auto &[out, in] :
-                 pairPorts(portsOf(id, "out", true), portsOf(target->second, "in", false))) {
-                desired.emplace(out.portId, in.portId);
-                if (!existingLinks.contains({out.portId, in.portId}) &&
-                    !m_pendingLinks.contains({out.portId, in.portId}) &&
-                    m_graph->createLink(out.nodeId, out.portId, in.nodeId, in.portId, true)) {
-                    m_pendingLinks[{out.portId, in.portId}] = Clock::now();
-                }
-            }
+            const auto &[toName, to] = *target->second;
+            const auto level = w.settings->sendLevels.find(destination);
+            out[sendNodeName(w.settings->busId, to.settings->busId)] = WantedSend{
+                .from = name,
+                .to = toName,
+                .positions = busPositions(w.endpoint),
+                .levelDb = level != w.settings->sendLevels.end() ? level->second : 0.0,
+                .description = "Patch Prime send: " + busDescription(w.endpoint, *w.settings) +
+                               " → " + busDescription(to.endpoint, *to.settings),
+            };
         }
     }
+    return out;
+}
 
-    // Links from one of our sending buses into another of our buses are ours
-    // to manage: remove the ones no send asks for. Links to anything else (an
-    // app recording an input bus) are left alone.
-    for (const auto &[id, link] : m_graph->links()) {
-        const auto outNode = parseId(prop(link, "link.output.node"));
-        const auto inNode = parseId(prop(link, "link.input.node"));
-        if (!senders.contains(outNode) || !allBuses.contains(inNode)) {
+void BusManager::linkSends(const std::map<std::string, std::uint32_t> &ready,
+                           const std::map<std::string, Wanted> &wanted,
+                           const std::map<std::string, WantedSend> &sends,
+                           const std::map<std::string, std::uint32_t> &readySends,
+                           const LinkMap &existingLinks)
+{
+    std::set<std::pair<std::uint32_t, std::uint32_t>> desired;
+    auto link = [&](const std::vector<PortRef> &outputs, const std::vector<PortRef> &inputs) {
+        for (const auto &[out, in] : pairPorts(outputs, inputs)) {
+            const std::pair ports{out.portId, in.portId};
+            desired.insert(ports);
+            if (!existingLinks.contains(ports) && !m_pendingLinks.contains(ports) &&
+                m_graph->createLink(out.nodeId, out.portId, in.nodeId, in.portId, true)) {
+                m_pendingLinks[ports] = Clock::now();
+            }
+        }
+    };
+
+    // Our nodes that send (input buses, mix buses, send nodes), and all of them.
+    std::set<std::uint32_t> senders;
+    std::set<std::uint32_t> ours;
+    for (const auto &[name, id] : ready) {
+        ours.insert(id);
+        const auto &w = wanted.at(name);
+        if (stageOf(w.endpoint.direction, w.settings->kind) != Stage::Output) {
+            senders.insert(id);
+        }
+    }
+    for (const auto &[name, id] : readySends) {
+        senders.insert(id);
+        ours.insert(id);
+        const auto &s = sends.at(name);
+        const auto from = ready.find(s.from);
+        const auto to = ready.find(s.to);
+        if (from == ready.end() || to == ready.end()) {
             continue;
         }
-        const std::pair ports{parseId(prop(link, "link.output.port")),
-                              parseId(prop(link, "link.input.port"))};
+        link(portsOf(from->second, "out", true), portsOf(id, "in", false));
+        link(portsOf(id, "out", true), portsOf(to->second, "in", false));
+    }
+
+    // Links from one of our sending nodes into another of our nodes are ours
+    // to manage: remove the ones no send asks for (direct links from before
+    // send nodes, too). Links to anything else (an app recording an input
+    // bus) are left alone.
+    for (const auto &[id, l] : m_graph->links()) {
+        const auto outNode = parseId(prop(l, "link.output.node"));
+        const auto inNode = parseId(prop(l, "link.input.node"));
+        if (!senders.contains(outNode) || !ours.contains(inNode)) {
+            continue;
+        }
+        const std::pair ports{parseId(prop(l, "link.output.port")),
+                              parseId(prop(l, "link.input.port"))};
         if (!desired.contains(ports)) {
             m_graph->destroyObject(id);
         }
