@@ -203,6 +203,10 @@ QVariant DeviceModel::data(const QModelIndex &index, int role) const
         }
         return levels;
     }
+    case DeviceRateRole:
+        return saved != nullptr ? saved->sampleRate : 0;
+    case SchedulingRole:
+        return qs(schedulingName(saved != nullptr ? saved->scheduling : Scheduling::Auto));
     case StageRole:
         return qs(stageName(stageOfRow(row)));
     case BusNameRole:
@@ -243,6 +247,8 @@ QHash<int, QByteArray> DeviceModel::roleNames() const
         {BusNameRole, "busName"},
         {StageRole, "stage"},
         {SendLevelsRole, "sendLevels"},
+        {DeviceRateRole, "deviceRate"},
+        {SchedulingRole, "scheduling"},
         {ChannelPairRole, "channelPair"},
         {SendsRole, "sends"},
         {MonoRole, "mono"},
@@ -369,7 +375,64 @@ void DeviceModel::setClock(ClockMode clock)
     m_store->setClock(clock);
     saveStore();
     Q_EMIT clockChanged();
+    Q_EMIT audioSettingsChanged(); // Auto scheduling depends on the clock
     Q_EMIT settingsChanged({});
+}
+
+void DeviceModel::setSampleRate(int rate)
+{
+    if (rate <= 0 || rate == m_store->sampleRate()) {
+        return;
+    }
+    m_store->setSampleRate(rate);
+    saveStore();
+    Q_EMIT audioSettingsChanged();
+}
+
+void DeviceModel::setBlockSize(int frames)
+{
+    if (frames < 0 || frames == m_store->blockSize()) {
+        return;
+    }
+    m_store->setBlockSize(frames);
+    saveStore();
+    Q_EMIT audioSettingsChanged();
+}
+
+void DeviceModel::setDeviceSampleRate(int row, int rate)
+{
+    if (row < 0 || row >= rowCount() || rate < 0) {
+        return;
+    }
+    const auto &r = m_rows[static_cast<std::size_t>(row)];
+    if (r.endpoint.nodeName.starts_with(virtualNamePrefix)) {
+        return; // hardware only
+    }
+    m_store->upsert(r.endpoint.key);
+    remember(r, r.nodeId.has_value());
+    m_store->upsert(r.endpoint.key).sampleRate = rate;
+    saveStore();
+    const auto i = index(row);
+    Q_EMIT dataChanged(i, i, {DeviceRateRole, SavedRole});
+    Q_EMIT audioSettingsChanged();
+}
+
+void DeviceModel::setDeviceScheduling(int row, Scheduling scheduling)
+{
+    if (row < 0 || row >= rowCount()) {
+        return;
+    }
+    const auto &r = m_rows[static_cast<std::size_t>(row)];
+    if (r.endpoint.nodeName.starts_with(virtualNamePrefix)) {
+        return; // hardware only
+    }
+    m_store->upsert(r.endpoint.key);
+    remember(r, r.nodeId.has_value());
+    m_store->upsert(r.endpoint.key).scheduling = scheduling;
+    saveStore();
+    const auto i = index(row);
+    Q_EMIT dataChanged(i, i, {SchedulingRole, SavedRole});
+    Q_EMIT audioSettingsChanged();
 }
 
 void DeviceModel::setSendLevel(int row, const QString &destinationKey, double db)

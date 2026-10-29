@@ -6,6 +6,7 @@
 
 #include "approuter.h"
 #include "appstore.h"
+#include "audiosetup.h"
 #include "busmanager.h"
 #include "devicemodel.h"
 #include "devicestore.h"
@@ -117,6 +118,7 @@ int run(int &argc, char **argv)
 
     pp::BusManager buses(&graph, &devices);
     pp::AppRouter apps(&graph, &appStore);
+    pp::AudioSetup setup(&graph, &devices);
     PatchPrimeService service(&graph, &devices, &buses, &apps);
     bus.registerObject(QString::fromLatin1(PatchPrimeService::objectPath), &service,
                        QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);

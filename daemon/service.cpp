@@ -15,6 +15,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include <algorithm>
+#include <array>
+
 PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *devices,
                                      pp::BusManager *buses, pp::AppRouter *apps, QObject *parent)
     : QObject(parent), m_graph(graph), m_devices(devices), m_buses(buses), m_apps(apps)
@@ -30,6 +33,8 @@ PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *
     connect(devices, &pp::DeviceModel::connectedChanged, this, &PatchPrimeService::scheduleState);
     connect(apps, &pp::AppRouter::changed, this, &PatchPrimeService::scheduleState);
     connect(devices, &pp::DeviceModel::clockChanged, this, &PatchPrimeService::scheduleState);
+    connect(devices, &pp::DeviceModel::audioSettingsChanged, this,
+            &PatchPrimeService::scheduleState);
 
     m_levelsTimer.setInterval(33);
     connect(&m_levelsTimer, &QTimer::timeout, this, &PatchPrimeService::emitLevels);
@@ -76,6 +81,8 @@ QString PatchPrimeService::GetState() const
         {QStringLiteral("apps"), apps},
         {QStringLiteral("clock"),
          QString::fromStdString(pp::clockModeName(m_devices->store().clock()))},
+        {QStringLiteral("sampleRate"), m_devices->store().sampleRate()},
+        {QStringLiteral("blockSize"), m_devices->store().blockSize()},
     };
     return QString::fromUtf8(QJsonDocument(state).toJson(QJsonDocument::Compact));
 }
@@ -195,6 +202,44 @@ void PatchPrimeService::SetClock(const QString &mode)
         return;
     }
     m_devices->setClock(pp::clockModeFromName(mode.toStdString()));
+}
+
+void PatchPrimeService::SetSampleRate(int rate)
+{
+    static constexpr std::array rates{44100, 48000, 88200, 96000, 176400, 192000};
+    if (std::ranges::find(rates, rate) == rates.end()) {
+        if (calledFromDBus()) {
+            sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("unsupported sample rate"));
+        }
+        return;
+    }
+    m_devices->setSampleRate(rate);
+}
+
+void PatchPrimeService::SetBlockSize(int frames)
+{
+    if (frames != 0 && (frames < 32 || frames > 8192 || (frames & (frames - 1)) != 0)) {
+        if (calledFromDBus()) {
+            sendErrorReply(QDBusError::InvalidArgs,
+                           QStringLiteral("block size must be 0 or a power of two, 32..8192"));
+        }
+        return;
+    }
+    m_devices->setBlockSize(frames);
+}
+
+void PatchPrimeService::SetDeviceSampleRate(const QString &key, int rate)
+{
+    if (const int row = rowFor(key); row >= 0) {
+        m_devices->setDeviceSampleRate(row, std::max(rate, 0));
+    }
+}
+
+void PatchPrimeService::SetDeviceScheduling(const QString &key, const QString &scheduling)
+{
+    if (const int row = rowFor(key); row >= 0) {
+        m_devices->setDeviceScheduling(row, pp::schedulingFromName(scheduling.toStdString()));
+    }
 }
 
 void PatchPrimeService::SetSendLevel(const QString &inputKey, const QString &destinationKey,

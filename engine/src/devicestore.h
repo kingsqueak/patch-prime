@@ -53,6 +53,21 @@ enum class ClockMode : std::uint8_t
     Hardware,
 };
 
+// How a hardware device's driver is woken (ALSA scheduling).
+enum class Scheduling : std::uint8_t
+{
+    Auto,      // timer while it follows Patch Prime's clock, else the device's default
+    Timer,     // timer-based: follows another clock smoothly (rate matching)
+    Interrupt, // the device's interrupts: tightest timing when it is the clock
+};
+
+// "auto" / "timer" / "interrupt"; anything unknown is Auto.
+std::string schedulingName(Scheduling scheduling);
+Scheduling schedulingFromName(std::string_view name);
+
+// The mixer's sample rate when nothing has been chosen.
+constexpr int defaultSampleRate = 48000;
+
 // "internal" / "hardware"; anything unknown is Internal.
 std::string clockModeName(ClockMode mode);
 ClockMode clockModeFromName(std::string_view name);
@@ -82,6 +97,10 @@ struct DeviceSettings
     // every channel; n uses only the stereo pair 2n-1 and 2n (1 = channels
     // 1-2, 2 = 3-4, ...), and the bus is stereo.
     int channelPair = 0;
+    // Hardware: a sample rate for this device (resampled to the mixer's), or
+    // 0 to run at the mixer's rate; and how its driver is scheduled.
+    int sampleRate = 0;
+    Scheduling scheduling = Scheduling::Auto;
     // Last seen details, so an offline endpoint can still be shown and matched.
     std::string nodeName;
     std::string mediaClass;
@@ -112,6 +131,11 @@ public:
 
     [[nodiscard]] ClockMode clock() const { return m_clock; }
     void setClock(ClockMode clock) { m_clock = clock; }
+    // The mixer's sample rate (Hz) and block size (frames; 0 = PipeWire picks).
+    [[nodiscard]] int sampleRate() const { return m_sampleRate; }
+    void setSampleRate(int rate) { m_sampleRate = rate; }
+    [[nodiscard]] int blockSize() const { return m_blockSize; }
+    void setBlockSize(int frames) { m_blockSize = frames; }
 
     [[nodiscard]] const std::map<std::string, DeviceSettings> &entries() const { return m_entries; }
     [[nodiscard]] const DeviceSettings *find(const std::string &key) const;
@@ -132,6 +156,8 @@ private:
     QString m_path;
     QString m_lastError;
     ClockMode m_clock = ClockMode::Internal;
+    int m_sampleRate = defaultSampleRate;
+    int m_blockSize = 0;
     std::map<std::string, DeviceSettings> m_entries;
 };
 

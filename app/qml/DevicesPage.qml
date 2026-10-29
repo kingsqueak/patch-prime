@@ -64,11 +64,62 @@ Kirigami.ScrollablePage {
         }
     }
 
+    // One hardware device's own settings. Applying them restarts WirePlumber,
+    // which takes a few seconds and briefly interrupts all audio.
+    Kirigami.Dialog {
+        id: deviceDialog
+
+        property string key
+        property int rate
+        property string scheduling
+
+        standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
+        padding: Kirigami.Units.largeSpacing
+        onAccepted: {
+            Devices.setDeviceSampleRate(key, rateChoice.currentValue);
+            Devices.setDeviceScheduling(key, schedulingChoice.currentValue);
+        }
+
+        Kirigami.FormLayout {
+            QQC2.ComboBox {
+                id: rateChoice
+                Kirigami.FormData.label: qsTr("Sample rate:")
+                textRole: "text"
+                valueRole: "value"
+                model: [{ value: 0, text: qsTr("Same as the mixer") }].concat(
+                    [44100, 48000, 88200, 96000].map(r => ({ value: r, text: qsTr("%1 kHz").arg(r / 1000) })))
+                currentIndex: Math.max(0, model.findIndex(m => m.value === deviceDialog.rate))
+            }
+
+            QQC2.ComboBox {
+                id: schedulingChoice
+                Kirigami.FormData.label: qsTr("Scheduling:")
+                textRole: "text"
+                valueRole: "value"
+                model: [
+                    { value: "auto", text: qsTr("Automatic") },
+                    { value: "timer", text: qsTr("Timer") },
+                    { value: "interrupt", text: qsTr("Interrupt") },
+                ]
+                currentIndex: Math.max(0, model.findIndex(m => m.value === deviceDialog.scheduling))
+            }
+
+            QQC2.Label {
+                Layout.maximumWidth: Kirigami.Units.gridUnit * 22
+                wrapMode: Text.Wrap
+                font: Kirigami.Theme.smallFont
+                color: Kirigami.Theme.disabledTextColor
+                text: qsTr("Timer scheduling lets a device follow another clock smoothly; Automatic uses it while Patch Prime is the clock. Interrupt suits a device that is the clock itself. Changing these restarts WirePlumber: audio stops for a few seconds.")
+            }
+        }
+    }
+
     ListView {
         id: list
 
         model: Devices
 
+        // Settings for the whole mixer, above the device list.
         // Settings for the whole mixer, above the device list.
         header: ColumnLayout {
             width: ListView.view.width
@@ -76,16 +127,16 @@ Kirigami.ScrollablePage {
 
             Kirigami.ListSectionHeader {
                 Layout.fillWidth: true
-                text: qsTr("Audio clock")
+                text: qsTr("Audio engine")
             }
 
-            RowLayout {
+            Kirigami.FormLayout {
                 Layout.fillWidth: true
                 Layout.margins: Kirigami.Units.largeSpacing
-                spacing: Kirigami.Units.largeSpacing
 
                 QQC2.ComboBox {
                     id: clockChoice
+                    Kirigami.FormData.label: qsTr("Clock:")
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 14
                     enabled: Devices.daemonRunning
                     textRole: "text"
@@ -96,17 +147,43 @@ Kirigami.ScrollablePage {
                     ]
                     currentIndex: Devices.clock === "hardware" ? 1 : 0
                     onActivated: Devices.setClock(currentValue)
-                    Accessible.name: qsTr("Audio clock")
                 }
 
                 QQC2.Label {
-                    Layout.fillWidth: true
+                    Layout.maximumWidth: Kirigami.Units.gridUnit * 30
                     wrapMode: Text.Wrap
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
                     text: clockChoice.currentIndex === 1
                         ? qsTr("PipeWire uses an interface's own clock: the lowest latency, but unplugging that interface briefly stops all audio, and some apps pause.")
                         : qsTr("Patch Prime keeps time itself, so unplugging any interface doesn't interrupt the others. Interfaces follow it with PipeWire's rate matching.")
+                }
+
+                QQC2.ComboBox {
+                    Kirigami.FormData.label: qsTr("Sample rate:")
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                    enabled: Devices.daemonRunning
+                    textRole: "text"
+                    valueRole: "value"
+                    model: [44100, 48000, 88200, 96000, 176400, 192000].map(r => ({
+                        value: r, text: qsTr("%1 kHz").arg(r / 1000) }))
+                    currentIndex: Math.max(0, model.findIndex(m => m.value === Devices.sampleRate))
+                    onActivated: Devices.setSampleRate(currentValue)
+                }
+
+                QQC2.ComboBox {
+                    Kirigami.FormData.label: qsTr("Block size:")
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                    enabled: Devices.daemonRunning
+                    textRole: "text"
+                    valueRole: "value"
+                    model: [{ value: 0, text: qsTr("Automatic") }].concat(
+                        [64, 128, 256, 512, 1024, 2048].map(f => ({
+                            value: f,
+                            text: qsTr("%1 frames (%2 ms)").arg(f)
+                                  .arg((f * 1000 / Math.max(Devices.sampleRate, 1)).toFixed(1)) })))
+                    currentIndex: Math.max(0, model.findIndex(m => m.value === Devices.blockSize))
+                    onActivated: Devices.setBlockSize(currentValue)
                 }
             }
         }
@@ -144,6 +221,8 @@ Kirigami.ScrollablePage {
             readonly property bool sectionStart: model.sectionStart
             readonly property string kind: model.kind
             readonly property bool ownVirtual: kind !== "hardware"
+            readonly property int deviceRate: model.deviceRate
+            readonly property string scheduling: model.scheduling
 
             width: ListView.view.width
             spacing: 0
@@ -230,6 +309,23 @@ Kirigami.ScrollablePage {
                         visible: !row.online
                         text: qsTr("Offline")
                         color: Kirigami.Theme.neutralTextColor
+                    }
+
+                    QQC2.ToolButton {
+                        visible: !row.ownVirtual && row.nodeName.startsWith("alsa_")
+                        icon.name: "configure"
+                        text: qsTr("Device settings")
+                        display: QQC2.AbstractButton.IconOnly
+                        onClicked: {
+                            deviceDialog.key = row.key;
+                            deviceDialog.title = row.customLabel.length > 0 ? row.customLabel : row.description;
+                            deviceDialog.rate = row.deviceRate;
+                            deviceDialog.scheduling = row.scheduling;
+                            deviceDialog.open();
+                        }
+                        QQC2.ToolTip.text: text
+                        QQC2.ToolTip.visible: hovered
+                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
                     }
 
                     QQC2.ToolButton {

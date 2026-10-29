@@ -13,6 +13,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace pp {
@@ -98,6 +99,12 @@ public:
     // Sets a stream's target.object (see streamTarget()); an empty value clears it.
     bool setStreamTarget(std::uint32_t nodeId, const std::string &value);
 
+    // PipeWire's runtime settings (the "settings" metadata): clock.rate,
+    // clock.allowed-rates, clock.force-quantum and so on. setting() is empty
+    // until the value is known.
+    [[nodiscard]] std::string setting(const std::string &key) const;
+    bool setSetting(const std::string &key, const std::string &value);
+
     // Starts a small capture stream on targetNodeName (the monitor of a sink,
     // or a source itself) and returns its peak levels. Meters belong to the
     // current connection: after a reconnect they must be added again.
@@ -113,6 +120,8 @@ Q_SIGNALS:
     void objectRemoved(const pp::GraphObject &object);
     void defaultsChanged();
     void streamTargetChanged(std::uint32_t nodeId);
+    // A value in PipeWire's "settings" metadata changed (see setting()).
+    void settingsChanged();
 
 public:
     // One connection's PipeWire state; defined in the .cpp. Public only so the
@@ -132,10 +141,12 @@ private:
     void handleRemoved(int generation, std::uint32_t id);
     void handleMetadata(int generation, std::uint32_t subject, const std::string &key,
                         const std::string &value);
+    void handleSetting(int generation, const std::string &key, const std::string &value);
     void handleConnectionLost(int generation, const std::string &reason);
 
     std::map<std::uint32_t, GraphObject> *mapFor(const std::string &type);
-    bool setMetadata(std::uint32_t subject, const char *key, const char *type, const char *value);
+    bool setMetadata(std::uint32_t subject, const char *key, const char *type, const char *value,
+                     std::string_view metadataName = "default");
 
     std::unique_ptr<Session> m_session;
     QTimer m_reconnectTimer;
@@ -150,6 +161,7 @@ private:
     std::string m_defaultSink;
     std::string m_defaultSource;
     std::map<std::uint32_t, std::string> m_streamTargets;
+    std::map<std::string, std::string, std::less<>> m_settings;
 };
 
 } // namespace pp

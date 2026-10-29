@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 KC2RGW Chris
+
+#include "audiosetup.h"
+#include "devicemodel.h"
+#include "devicestore.h"
+#include "pipewiregraph.h"
+
+#include <QFile>
+#include <QTemporaryDir>
+#include <QTest>
+
+using namespace pp;
+
+class TestAudioSetup : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+    void mixerSettings()
+    {
+        DeviceStore store(QStringLiteral("/dev/null/unused"));
+        auto wanted = wantedSettings(store); // the defaults: 48 kHz, PipeWire's block size
+        QCOMPARE(wanted["clock.rate"], "48000");
+        QCOMPARE(wanted["clock.allowed-rates"], "[ 48000 ]");
+        QCOMPARE(wanted["clock.force-quantum"], "0");
+        store.setSampleRate(96000);
+        store.setBlockSize(256);
+        wanted = wantedSettings(store);
+        QCOMPARE(wanted["clock.rate"], "96000");
+        QCOMPARE(wanted["clock.allowed-rates"], "[ 96000 ]");
+        QCOMPARE(wanted["clock.force-quantum"], "256");
+    }
+
+    void deviceRules()
+    {
+        DeviceStore store(QStringLiteral("/dev/null/unused"));
+        auto &scarlett = store.upsert("Audio/Source|alsa_input.usb-Scarlett.pro-input-0");
+        scarlett.nodeName = "alsa_input.usb-Scarlett.pro-input-0";
+        auto &onboard = store.upsert("Audio/Sink|alsa_output.pci.pro-output-0");
+        onboard.nodeName = "alsa_output.pci.pro-output-0";
+        onboard.scheduling = Scheduling::Interrupt;
+        onboard.sampleRate = 44100;
+        store.upsert("Audio/Sink|bluez_output.x").nodeName = "bluez_output.x"; // not ALSA
+        auto &mix = store.upsert(DeviceStore::virtualKey("12345678"));
+        mix.kind = EndpointKind::VirtualSink;
+        mix.nodeName = "patchprime.virtual.12345678";
+
+        // Patch Prime's clock: automatic means timer scheduling.
+        auto rules = wirePlumberRules(store);
+        QVERIFY(rules.starts_with("# Written by Patch Prime"));
+        QVERIFY(rules.contains("monitor.alsa.rules = ["));
+        QVERIFY(rules.contains("node.name = \"alsa_input.usb-Scarlett.pro-input-0\" } ]\n"
+                               "    actions = { update-props = { api.alsa.disable-tsched = false } }"));
+        QVERIFY(rules.contains("node.name = \"alsa_output.pci.pro-output-0\" } ]\n"
+                               "    actions = { update-props = { api.alsa.disable-tsched = true, "
+                               "audio.rate = 44100 } }"));
+        QVERIFY(!rules.contains("bluez"));
+        QVERIFY(!rules.contains("patchprime.virtual"));
+
+        // A hardware clock: automatic leaves the device's own default.
+        store.setClock(ClockMode::Hardware);
+        rules = wirePlumberRules(store);
+        QVERIFY(!rules.contains("Scarlett"));
+        QVERIFY(rules.contains("alsa_output.pci.pro-output-0"));
+    }
+
+    void rulesFileOnlyChangesWithTheSettings()
+    {
+        QTemporaryDir dir;
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel devices(&store);
+        PipeWireGraph graph; // never started: only the rule file is tested
+        const auto path = dir.filePath(QStringLiteral("conf.d/60-patchprime.conf"));
+        AudioSetup setup(&graph, &devices, path, false);
+        QVERIFY(QFile::exists(path)); // written at start
+        QVERIFY(!setup.writeRules()); // nothing changed
+
+        store.upsert("Audio/Sink|alsa_output.x").nodeName = "alsa_output.x";
+        QVERIFY(setup.writeRules());
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QVERIFY(file.readAll().contains("alsa_output.x"));
+        QVERIFY(!setup.writeRules());
+    }
+};
+
+QTEST_GUILESS_MAIN(TestAudioSetup)
+#include "test_audiosetup.moc"

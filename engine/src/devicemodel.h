@@ -58,6 +58,8 @@ public:
         ChannelPairRole, // hardware: 0 = all channels, n = stereo pair 2n-1/2n
         StageRole,       // "input", "bus" or "output"
         SendLevelsRole,  // {destination key: dB} for this strip's sends (0 dB when missing)
+        DeviceRateRole,  // hardware: its own sample rate, 0 = the mixer's
+        SchedulingRole,  // hardware: "auto", "timer" or "interrupt"
     };
     Q_ENUM(Role)
 
@@ -93,6 +95,12 @@ public:
     Q_INVOKABLE void setSendLevel(int row, const QString &destinationKey, double db);
     // What clocks the graph; buses are rebuilt with the new driver priority.
     void setClock(ClockMode clock);
+    // The mixer's sample rate and block size (0 = PipeWire picks).
+    void setSampleRate(int rate);
+    void setBlockSize(int frames);
+    // Per hardware device: its own rate (0 = the mixer's) and scheduling.
+    void setDeviceSampleRate(int row, int rate);
+    void setDeviceScheduling(int row, Scheduling scheduling);
     // Makes a new virtual device, enabled, and returns its key.
     QString createVirtual(const QString &name, EndpointKind kind);
 
@@ -125,6 +133,8 @@ Q_SIGNALS:
     // A saved endpoint was recognised under a new node.name.
     void reattached(const QString &label, const QString &oldNodeName, const QString &newNodeName);
     void clockChanged();
+    // The mixer's rate or block size, or a device's rate or scheduling.
+    void audioSettingsChanged();
 
 private:
     [[nodiscard]] static bool lessThan(const Row &a, const Row &b);

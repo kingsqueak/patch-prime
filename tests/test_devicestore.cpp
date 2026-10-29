@@ -91,6 +91,11 @@ private Q_SLOTS:
             store.upsert("phones").channelPair = 2;
             QCOMPARE(store.clock(), ClockMode::Internal); // the default
             store.setClock(ClockMode::Hardware);
+            QCOMPARE(store.sampleRate(), 48000); // the default
+            store.setSampleRate(96000);
+            store.setBlockSize(512);
+            store.upsert("phones").sampleRate = 44100;
+            store.upsert("phones").scheduling = Scheduling::Timer;
             QVERIFY(store.save());
         }
         DeviceStore store(path);
@@ -103,6 +108,11 @@ private Q_SLOTS:
         QCOMPARE(store.find("phones")->kind, EndpointKind::Hardware);
         QCOMPARE(store.find("phones")->channelPair, 2);
         QCOMPARE(store.clock(), ClockMode::Hardware);
+        QCOMPARE(store.sampleRate(), 96000);
+        QCOMPARE(store.blockSize(), 512);
+        QCOMPARE(store.find("phones")->sampleRate, 44100);
+        QCOMPARE(store.find("phones")->scheduling, Scheduling::Timer);
+        QCOMPARE(store.find("mic")->scheduling, Scheduling::Auto);
         QCOMPARE(store.find("mic")->channelPair, 0);
 
         // A re-attached destination keeps its sends; a removed one drops them.

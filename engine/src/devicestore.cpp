@@ -51,6 +51,8 @@ QJsonObject toJson(const DeviceSettings &d)
         {QStringLiteral("sendLevels"), sendLevels},
         {QStringLiteral("mono"), d.mono},
         {QStringLiteral("channelPair"), d.channelPair},
+        {QStringLiteral("sampleRate"), d.sampleRate},
+        {QStringLiteral("scheduling"), qs(schedulingName(d.scheduling))},
         {QStringLiteral("busId"), qs(d.busId)},
         {QStringLiteral("enabled"), d.enabled},
         {QStringLiteral("label"), qs(d.label)},
@@ -82,6 +84,8 @@ DeviceSettings fromJson(const QJsonObject &o)
     d.kind = kindFromName(str(o, "kind"));
     d.mono = o.value(QLatin1String("mono")).toBool();
     d.channelPair = std::max(0, o.value(QLatin1String("channelPair")).toInt());
+    d.sampleRate = std::max(0, o.value(QLatin1String("sampleRate")).toInt());
+    d.scheduling = schedulingFromName(str(o, "scheduling"));
     for (const auto &s : o.value(QLatin1String("sends")).toArray()) {
         d.sends.push_back(s.toString().toStdString());
     }
@@ -165,6 +169,30 @@ std::string stageName(Stage stage)
     return "output";
 }
 
+std::string schedulingName(Scheduling scheduling)
+{
+    switch (scheduling) {
+    case Scheduling::Timer:
+        return "timer";
+    case Scheduling::Interrupt:
+        return "interrupt";
+    case Scheduling::Auto:
+        break;
+    }
+    return "auto";
+}
+
+Scheduling schedulingFromName(std::string_view name)
+{
+    if (name == "timer") {
+        return Scheduling::Timer;
+    }
+    if (name == "interrupt") {
+        return Scheduling::Interrupt;
+    }
+    return Scheduling::Auto;
+}
+
 std::string clockModeName(ClockMode mode)
 {
     return mode == ClockMode::Hardware ? "hardware" : "internal";
@@ -187,6 +215,8 @@ bool DeviceStore::load()
 {
     m_entries.clear();
     m_clock = ClockMode::Internal;
+    m_sampleRate = defaultSampleRate;
+    m_blockSize = 0;
     m_lastError.clear();
     QFile file(m_path);
     if (!file.exists()) {
@@ -202,8 +232,10 @@ bool DeviceStore::load()
         m_lastError = parseError.errorString();
         return false;
     }
-    m_clock = clockModeFromName(
-        document.object().value(QLatin1String("clock")).toString().toStdString());
+    const auto root = document.object();
+    m_clock = clockModeFromName(root.value(QLatin1String("clock")).toString().toStdString());
+    m_sampleRate = root.value(QLatin1String("sampleRate")).toInt(defaultSampleRate);
+    m_blockSize = std::max(0, root.value(QLatin1String("blockSize")).toInt());
     const auto devices = document.object().value(QLatin1String("devices")).toObject();
     for (auto it = devices.begin(); it != devices.end(); ++it) {
         auto settings = fromJson(it.value().toObject());
@@ -229,6 +261,8 @@ bool DeviceStore::save()
     const QJsonObject root{
         {QStringLiteral("version"), formatVersion},
         {QStringLiteral("clock"), qs(clockModeName(m_clock))},
+        {QStringLiteral("sampleRate"), m_sampleRate},
+        {QStringLiteral("blockSize"), m_blockSize},
         {QStringLiteral("devices"), devices},
     };
 

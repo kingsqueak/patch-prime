@@ -6,6 +6,8 @@ add_library(patchprime-engine STATIC
     src/approuter.h
     src/appstore.cpp
     src/appstore.h
+    src/audiosetup.cpp
+    src/audiosetup.h
     src/busmanager.cpp
     src/busmanager.h
     src/devicemodel.cpp

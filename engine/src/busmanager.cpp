@@ -421,8 +421,8 @@ void BusManager::reconcile()
         if (it == existing.end()) {
             if (!m_pendingBuses.contains(name)) {
                 qCInfo(lcBus, "creating bus %s for %s", name.c_str(), w.key.c_str());
-                if (m_graph->createNode(
-                        busProperties(w.endpoint, *w.settings, m_owner, m_devices->store().clock()))) {
+                if (m_graph->createNode(busProperties(w.endpoint, *w.settings, m_owner,
+                                                      m_devices->store().clock()))) {
                     m_pendingBuses[name] = now;
                 }
             }

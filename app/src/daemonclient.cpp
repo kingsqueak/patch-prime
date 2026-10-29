@@ -28,10 +28,11 @@ const QString interface = QStringLiteral("org.kingsqueak.PatchPrime1");
 
 // Field names in the daemon's state JSON (DeviceModel's role names).
 constexpr std::array fields{
-    "key",       "label",        "customLabel", "description", "nodeName",    "direction",
-    "isVirtual", "online",       "isEnabled",   "channels",    "positions",   "isDefault",
-    "saved",     "sectionStart", "volumeDb",    "muted",       "busId",       "busIsDefault",
-    "kind",      "sends",        "mono",        "busName",     "channelPair", "stage",       "sendLevels",
+    "key",        "label",        "customLabel", "description", "nodeName",    "direction",
+    "isVirtual",  "online",       "isEnabled",   "channels",    "positions",   "isDefault",
+    "saved",      "sectionStart", "volumeDb",    "muted",       "busId",       "busIsDefault",
+    "kind",       "sends",        "mono",        "busName",     "channelPair", "stage",
+    "sendLevels", "deviceRate",   "scheduling",
 };
 
 // How far a meter falls per update (about 30 per second): 60 dB in ~1.6 s.
@@ -233,8 +234,7 @@ void DaemonClient::setMono(const QString &key, bool mono)
     call(QStringLiteral("SetMono"), {key, mono});
 }
 
-void DaemonClient::setSendLevel(const QString &inputKey, const QString &destinationKey,
-                                double db)
+void DaemonClient::setSendLevel(const QString &inputKey, const QString &destinationKey, double db)
 {
     call(QStringLiteral("SetSendLevel"), {inputKey, destinationKey, db});
 }
@@ -279,6 +279,26 @@ void DaemonClient::setClock(const QString &mode)
     call(QStringLiteral("SetClock"), {mode});
 }
 
+void DaemonClient::setSampleRate(int rate)
+{
+    call(QStringLiteral("SetSampleRate"), {rate});
+}
+
+void DaemonClient::setBlockSize(int frames)
+{
+    call(QStringLiteral("SetBlockSize"), {frames});
+}
+
+void DaemonClient::setDeviceSampleRate(const QString &key, int rate)
+{
+    call(QStringLiteral("SetDeviceSampleRate"), {key, rate});
+}
+
+void DaemonClient::setDeviceScheduling(const QString &key, const QString &scheduling)
+{
+    call(QStringLiteral("SetDeviceScheduling"), {key, scheduling});
+}
+
 void DaemonClient::onStateChanged(const QString &state)
 {
     const auto root = QJsonDocument::fromJson(state.toUtf8()).object();
@@ -288,8 +308,13 @@ void DaemonClient::onStateChanged(const QString &state)
         Q_EMIT connectedChanged();
     }
 
-    if (const auto clock = root.value(QLatin1String("clock")).toString(); clock != m_clock) {
+    const auto clock = root.value(QLatin1String("clock")).toString();
+    const auto rate = root.value(QLatin1String("sampleRate")).toInt();
+    const auto block = root.value(QLatin1String("blockSize")).toInt();
+    if (clock != m_clock || rate != m_sampleRate || block != m_blockSize) {
         m_clock = clock;
+        m_sampleRate = rate;
+        m_blockSize = block;
         Q_EMIT clockChanged();
     }
 

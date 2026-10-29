@@ -310,7 +310,8 @@ void PipeWireGraph::Session::onGlobal(void *data, std::uint32_t id, std::uint32_
     if (typeName == PW_TYPE_INTERFACE_Node || typeName == PW_TYPE_INTERFACE_Device) {
         self->bind(object, version);
     } else if (typeName == PW_TYPE_INTERFACE_Metadata) {
-        if (prop(object, PW_KEY_METADATA_NAME) == "default") {
+        if (const auto &name = prop(object, PW_KEY_METADATA_NAME);
+            name == "default" || name == "settings") {
             self->bind(object, version);
         }
     } else if (typeName == PW_TYPE_INTERFACE_Port || typeName == PW_TYPE_INTERFACE_Link) {
@@ -412,10 +413,15 @@ int PipeWireGraph::Session::onMetadataProperty(void *data, std::uint32_t subject
 {
     auto *b = static_cast<Bound *>(data);
     // A null key clears every property; it's passed on as an empty key.
-    b->session->post([owner = b->session->owner, generation = b->session->generation, subject,
+    b->session->post([owner = b->session->owner, generation = b->session->generation,
+                      settings = prop(b->object, PW_KEY_METADATA_NAME) == "settings", subject,
                       key = std::string(key != nullptr ? key : ""),
                       value = std::string(value != nullptr ? value : "")] {
-        owner->handleMetadata(generation, subject, key, value);
+        if (settings) {
+            owner->handleSetting(generation, key, value);
+        } else {
+            owner->handleMetadata(generation, subject, key, value);
+        }
     });
     return 0;
 }
@@ -533,6 +539,7 @@ void PipeWireGraph::disconnectNow()
         }
     }
     m_streamTargets.clear();
+    m_settings.clear();
     if (!m_defaultSink.empty() || !m_defaultSource.empty()) {
         m_defaultSink.clear();
         m_defaultSource.clear();
@@ -651,8 +658,34 @@ bool PipeWireGraph::setStreamTarget(std::uint32_t nodeId, const std::string &val
                          : setMetadata(nodeId, "target.object", "Spa:Id", value.c_str());
 }
 
+bool PipeWireGraph::setSetting(const std::string &key, const std::string &value)
+{
+    return setMetadata(PW_ID_CORE, key.c_str(), nullptr, value.c_str(), "settings");
+}
+
+std::string PipeWireGraph::setting(const std::string &key) const
+{
+    const auto it = m_settings.find(key);
+    return it != m_settings.end() ? it->second : std::string{};
+}
+
+void PipeWireGraph::handleSetting(int generation, const std::string &key, const std::string &value)
+{
+    if (generation != m_generation) {
+        return;
+    }
+    if (key.empty()) {
+        m_settings.clear();
+    } else if (value.empty()) {
+        m_settings.erase(key);
+    } else {
+        m_settings[key] = value;
+    }
+    Q_EMIT settingsChanged();
+}
+
 bool PipeWireGraph::setMetadata(std::uint32_t subject, const char *key, const char *type,
-                                const char *value)
+                                const char *value, std::string_view metadataName)
 {
     if (!m_session) {
         return false;
@@ -661,7 +694,8 @@ bool PipeWireGraph::setMetadata(std::uint32_t subject, const char *key, const ch
     pw_thread_loop_lock(session.loop);
     bool ok = false;
     for (const auto &[id, b] : session.bound) {
-        if (b->object.type == PW_TYPE_INTERFACE_Metadata) { // only "default" is bound
+        if (b->object.type == PW_TYPE_INTERFACE_Metadata &&
+            prop(b->object, PW_KEY_METADATA_NAME) == metadataName) {
             ok = pw_metadata_set_property(reinterpret_cast<pw_metadata *>(b->proxy), subject, key,
                                           type, value) >= 0;
             break;

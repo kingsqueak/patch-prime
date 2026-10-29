@@ -60,6 +60,15 @@ public Q_SLOTS:
     // an interface doesn't interrupt the rest) or "hardware" (PipeWire picks a
     // device; lowest latency). In the state as "clock".
     void SetClock(const QString &mode);
+    // The mixer's sample rate in Hz (48000 by default) and block size in
+    // frames (0 = PipeWire picks). In the state as "sampleRate", "blockSize".
+    void SetSampleRate(int rate);
+    void SetBlockSize(int frames);
+    // Per hardware device: its own sample rate (0 = the mixer's), and its
+    // scheduling: "auto", "timer" or "interrupt". Applying these restarts
+    // WirePlumber (a few seconds' dropout).
+    void SetDeviceSampleRate(const QString &key, int rate);
+    void SetDeviceScheduling(const QString &key, const QString &scheduling);
     // The level of an existing send in dB (-60 = silent .. +12).
     void SetSendLevel(const QString &inputKey, const QString &destinationKey, double db);
     // kind: "sink" (apps play into it; record its monitor, e.g. "Stream Mix"),
