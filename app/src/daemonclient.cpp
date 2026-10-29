@@ -28,10 +28,10 @@ const QString interface = QStringLiteral("org.kingsqueak.PatchPrime1");
 
 // Field names in the daemon's state JSON (DeviceModel's role names).
 constexpr std::array fields{
-    "key",       "label",     "customLabel",  "description",  "nodeName",
-    "direction", "isVirtual", "online",       "isEnabled",    "channels",
-    "positions", "isDefault", "saved",        "sectionStart", "volumeDb",
-    "muted",     "busId",     "busIsDefault", "kind",         "sends",
+    "key",       "label",        "customLabel", "description", "nodeName",  "direction",
+    "isVirtual", "online",       "isEnabled",   "channels",    "positions", "isDefault",
+    "saved",     "sectionStart", "volumeDb",    "muted",       "busId",     "busIsDefault",
+    "kind",      "sends",        "mono",
 };
 
 // How far a meter falls per update (about 30 per second): 60 dB in ~1.6 s.
