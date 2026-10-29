@@ -5,6 +5,8 @@
 
 #include "graphsnapshot.h"
 
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLoggingCategory>
 
 #include <pipewire/extensions/metadata.h>
@@ -615,6 +617,31 @@ bool PipeWireGraph::setNodeVolume(std::uint32_t nodeId, const std::vector<float>
         auto *param = static_cast<spa_pod *>(spa_pod_builder_pop(&b, &frame));
         ok = pw_node_set_param(reinterpret_cast<pw_node *>(it->second->proxy), SPA_PARAM_Props, 0,
                                param) >= 0;
+    }
+    pw_thread_loop_unlock(session.loop);
+    return ok;
+}
+
+bool PipeWireGraph::setConfiguredDefault(Direction direction, const std::string &nodeName)
+{
+    if (!m_session || nodeName.empty()) {
+        return false;
+    }
+    const auto *key = direction == Direction::Output ? "default.configured.audio.sink"
+                                                     : "default.configured.audio.source";
+    const auto value =
+        QJsonDocument(QJsonObject{{QStringLiteral("name"), QString::fromStdString(nodeName)}})
+            .toJson(QJsonDocument::Compact)
+            .toStdString();
+    auto &session = *m_session;
+    pw_thread_loop_lock(session.loop);
+    bool ok = false;
+    for (const auto &[id, b] : session.bound) {
+        if (b->object.type == PW_TYPE_INTERFACE_Metadata) { // only "default" is bound
+            ok = pw_metadata_set_property(reinterpret_cast<pw_metadata *>(b->proxy), PW_ID_CORE,
+                                          key, "Spa:String:JSON", value.c_str()) >= 0;
+            break;
+        }
     }
     pw_thread_loop_unlock(session.loop);
     return ok;

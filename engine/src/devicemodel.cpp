@@ -3,6 +3,7 @@
 
 #include "devicemodel.h"
 
+#include "busmanager.h"
 #include "pipewiregraph.h"
 
 #include <QLoggingCategory>
@@ -178,6 +179,10 @@ QVariant DeviceModel::data(const QModelIndex &index, int role) const
         return saved != nullptr && saved->muted;
     case BusIdRole:
         return qs(saved != nullptr ? saved->busId : std::string{});
+    case BusDefaultRole:
+        return saved != nullptr && saved->enabled && e.direction == Direction::Output &&
+               !m_defaultSink.empty() &&
+               m_defaultSink == busNodeName(Direction::Output, saved->busId);
     case SectionStartRole:
         return index.row() == 0 ||
                m_rows[static_cast<std::size_t>(index.row()) - 1].endpoint.direction != e.direction;
@@ -206,6 +211,7 @@ QHash<int, QByteArray> DeviceModel::roleNames() const
         {VolumeRole, "volumeDb"},
         {MutedRole, "muted"},
         {BusIdRole, "busId"},
+        {BusDefaultRole, "busIsDefault"},
     };
 }
 
@@ -362,7 +368,7 @@ void DeviceModel::setDefaults(const std::string &sinkName, const std::string &so
     m_defaultSink = sinkName;
     m_defaultSource = sourceName;
     if (!m_rows.empty()) {
-        Q_EMIT dataChanged(index(0), index(rowCount() - 1), {DefaultRole});
+        Q_EMIT dataChanged(index(0), index(rowCount() - 1), {DefaultRole, BusDefaultRole});
     }
 }
 

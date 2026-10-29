@@ -17,6 +17,8 @@ QQC2.Frame {
     readonly property string label: model.label
     readonly property bool online: model.online
     readonly property bool muted: model.muted
+    readonly property string direction: model.direction
+    readonly property bool busIsDefault: model.busIsDefault
     readonly property real volumeDb: model.volumeDb
     readonly property var levels: model.levels
     readonly property int channels: Math.max(1, model.channels)
@@ -128,14 +130,37 @@ QQC2.Frame {
             font.family: "monospace"
         }
 
+        // Clicking a checkable button breaks a plain `checked:` binding, so the
+        // daemon's state is bound with Binding elements, which stay in force.
         QQC2.Button {
+            id: muteButton
             Layout.alignment: Qt.AlignHCenter
             checkable: true
-            checked: strip.muted
             icon.name: strip.muted ? "audio-volume-muted" : "audio-volume-high"
             text: qsTr("Mute")
             enabled: Devices.daemonRunning
             onToggled: Devices.setMuted(strip.key, checked)
+            Binding on checked {
+                value: strip.muted
+            }
+        }
+
+        QQC2.Button {
+            Layout.alignment: Qt.AlignHCenter
+            visible: strip.direction === "output"
+            checkable: true
+            icon.name: strip.busIsDefault ? "starred-symbolic" : "non-starred-symbolic"
+            text: qsTr("Default")
+            enabled: Devices.daemonRunning && strip.online
+            onToggled: Devices.setDefaultOutput(strip.key, checked)
+            Binding on checked {
+                value: strip.busIsDefault
+            }
+            QQC2.ToolTip.text: strip.busIsDefault
+                ? qsTr("Apps that use the system default output play through this strip. Click to send them straight to the device instead.")
+                : qsTr("Make this the system default output, so apps play through this strip.")
+            QQC2.ToolTip.visible: hovered
+            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
         }
     }
 }

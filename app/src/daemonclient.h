@@ -46,6 +46,7 @@ public:
     Q_INVOKABLE void setVolume(const QString &key, double volumeDb);
     Q_INVOKABLE void setMuted(const QString &key, bool muted);
     Q_INVOKABLE void forget(const QString &key);
+    Q_INVOKABLE void setDefaultOutput(const QString &key, bool throughMixer);
     // D-Bus activation first; failing that, a patchprimed next to this program
     // (installed side by side, or in the build tree).
     Q_INVOKABLE void startDaemon();

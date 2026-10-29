@@ -86,6 +86,10 @@ private Q_SLOTS:
         QCOMPARE(props["object.linger"], "true");
         QCOMPARE(props["monitor.channel-volumes"], "true");
         QCOMPARE(props["patchprime.key"], "Audio/Source|mic");
+        QCOMPARE(busProperties(e, s, "cafe1234")["patchprime.owner"], "cafe1234");
+        QCOMPARE(busOwnerFor(QStringLiteral("/a/devices.json")).size(), std::size_t{8});
+        QVERIFY(busOwnerFor(QStringLiteral("/a/devices.json")) !=
+                busOwnerFor(QStringLiteral("/b/devices.json")));
         s.label = "Desk";
         QCOMPARE(busProperties(e, s)["node.description"], "Patch Prime In: Desk");
     }

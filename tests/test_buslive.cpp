@@ -105,6 +105,8 @@ private Q_SLOTS:
             qWarning("no PipeWire server");
             std::exit(77);
         }
+        m_originalDefault = m_graph.defaultSinkName();
+
         m_sinkName = "pp_bus_test_" + std::to_string(QCoreApplication::applicationPid());
         m_module = QString::fromUtf8(
             run(QStringLiteral("pactl"),
@@ -116,6 +118,12 @@ private Q_SLOTS:
 
     void cleanupTestCase()
     {
+        // Put the user's default output back, whatever happened.
+        if (!m_originalDefault.empty() && m_graph.defaultSinkName() != m_originalDefault) {
+            m_graph.setConfiguredDefault(Direction::Output, m_originalDefault);
+            [[maybe_unused]] const bool restored = QTest::qWaitFor(
+                [this] { return m_graph.defaultSinkName() == m_originalDefault; }, 3000);
+        }
         // Don't leave lingering buses behind, even when a check failed.
         if (!m_busName.empty()) {
             if (const auto *bus = nodeNamed(m_graph, m_busName)) {
@@ -208,9 +216,17 @@ private Q_SLOTS:
         QVERIFY2(peak < 0.3F, qPrintable(QString::number(peak)));
         buses.setMetering(false);
 
-        // Disable: the bus goes, and its links with it.
+        // The bus as system default output.
+        QVERIFY(m_graph.setConfiguredDefault(Direction::Output, m_busName));
+        QVERIFY(QTest::qWaitFor([&] { return m_graph.defaultSinkName() == m_busName; }, 5000));
+        QVERIFY(devices.data(devices.index(devices.rowForKey(key)), DeviceModel::BusDefaultRole)
+                    .toBool());
+
+        // Disable: the bus goes, and its links with it. Being the default, it
+        // first hands the default back to its device.
         devices.setEnabled(devices.rowForKey(key), false);
         QVERIFY(QTest::qWaitFor([&] { return nodeNamed(m_graph, m_busName) == nullptr; }, 5000));
+        QVERIFY(QTest::qWaitFor([&] { return m_graph.defaultSinkName() == m_sinkName; }, 5000));
         QCOMPARE(linksToSink(), 0);
         m_busName.clear();
     }
@@ -219,6 +235,7 @@ private:
     PipeWireGraph m_graph;
     std::string m_sinkName;
     std::string m_busName;
+    std::string m_originalDefault;
     QString m_module;
 };
 

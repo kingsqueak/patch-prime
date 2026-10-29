@@ -50,6 +50,7 @@ public:
         VolumeRole,       // fader position in dB; minimumVolumeDb() means silent
         MutedRole,
         BusIdRole,
+        BusDefaultRole, // this output's bus is the system default output
     };
     Q_ENUM(Role)
 

@@ -30,7 +30,7 @@ const QString interface = QStringLiteral("org.kingsqueak.PatchPrime1");
 constexpr std::array fields{
     "key",       "label",        "customLabel", "description", "nodeName",  "direction",
     "isVirtual", "online",       "isEnabled",   "channels",    "positions", "isDefault",
-    "saved",     "sectionStart", "volumeDb",    "muted",       "busId",
+    "saved",     "sectionStart", "volumeDb",    "muted",       "busId",     "busIsDefault",
 };
 
 // How far a meter falls per update (about 30 per second): 60 dB in ~1.6 s.
@@ -210,6 +210,11 @@ void DaemonClient::setMuted(const QString &key, bool muted)
 void DaemonClient::forget(const QString &key)
 {
     call(QStringLiteral("Forget"), {key});
+}
+
+void DaemonClient::setDefaultOutput(const QString &key, bool throughMixer)
+{
+    call(QStringLiteral("SetDefaultOutput"), {key, throughMixer});
 }
 
 void DaemonClient::onStateChanged(const QString &state)

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 KC2RGW Chris
 
+#include "busmanager.h"
 #include "devicemodel.h"
 
 #include <QAbstractItemModelTester>
@@ -314,6 +315,20 @@ private Q_SLOTS:
         DeviceStore store(m_path);
         QVERIFY(store.load());
         QCOMPARE(store.find("Audio/Sink|speakers")->volumeDb, -3.0);
+    }
+
+    void busDefault()
+    {
+        DeviceStore store(m_path);
+        DeviceModel model(&store);
+        model.upsertNode(sinkNode(10, "speakers", nullptr), nullptr);
+        model.setEnabled(0, true);
+        const auto bus = busNodeName(Direction::Output, store.find("Audio/Sink|speakers")->busId);
+        model.setDefaults(bus, "");
+        QVERIFY(role(model, 0, DeviceModel::BusDefaultRole).toBool());
+        QVERIFY(!role(model, 0, DeviceModel::DefaultRole).toBool()); // the device itself isn't
+        model.setEnabled(0, false);
+        QVERIFY(!role(model, 0, DeviceModel::BusDefaultRole).toBool());
     }
 
     void defaults()

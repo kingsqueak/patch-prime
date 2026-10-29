@@ -43,6 +43,10 @@ public Q_SLOTS:
     void SetVolume(const QString &key, double volumeDb);
     void SetMuted(const QString &key, bool muted);
     void Forget(const QString &key);
+    // throughMixer: make this output's bus the system default output, so apps
+    // that follow the default play through the mixer. Otherwise make the
+    // hardware output itself the default.
+    void SetDefaultOutput(const QString &key, bool throughMixer);
     void WatchLevels();
     void UnwatchLevels();
 

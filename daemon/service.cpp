@@ -106,6 +106,34 @@ void PatchPrimeService::Forget(const QString &key)
     }
 }
 
+void PatchPrimeService::SetDefaultOutput(const QString &key, bool throughMixer)
+{
+    const int row = rowFor(key);
+    if (row < 0) {
+        return;
+    }
+    const auto &endpoint = m_devices->rows()[static_cast<std::size_t>(row)].endpoint;
+    const auto *settings = m_devices->store().find(endpoint.key);
+    auto fail = [this](const QString &why) {
+        if (calledFromDBus()) {
+            sendErrorReply(QDBusError::Failed, why);
+        }
+    };
+    if (endpoint.direction != pp::Direction::Output) {
+        fail(QStringLiteral("not an output: ") + key);
+        return;
+    }
+    if (throughMixer && (settings == nullptr || !settings->enabled)) {
+        fail(QStringLiteral("enable the device first: ") + key);
+        return;
+    }
+    const auto name =
+        throughMixer ? pp::busNodeName(pp::Direction::Output, settings->busId) : endpoint.nodeName;
+    if (!m_graph->setConfiguredDefault(pp::Direction::Output, name)) {
+        fail(QStringLiteral("PipeWire refused the default device change"));
+    }
+}
+
 void PatchPrimeService::WatchLevels()
 {
     if (!calledFromDBus()) {

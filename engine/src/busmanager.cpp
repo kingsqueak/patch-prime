@@ -6,6 +6,7 @@
 #include "devicemodel.h"
 #include "pipewiregraph.h"
 
+#include <QCryptographicHash>
 #include <QLoggingCategory>
 
 #include <algorithm>
@@ -73,7 +74,16 @@ std::vector<std::string> busPositions(const Endpoint &endpoint)
     return out;
 }
 
-Properties busProperties(const Endpoint &endpoint, const DeviceSettings &settings)
+std::string busOwnerFor(const QString &storePath)
+{
+    return QCryptographicHash::hash(storePath.toUtf8(), QCryptographicHash::Sha1)
+        .toHex()
+        .left(8)
+        .toStdString();
+}
+
+Properties busProperties(const Endpoint &endpoint, const DeviceSettings &settings,
+                         const std::string &owner)
 {
     const auto positions = busPositions(endpoint);
     const auto &name = settings.label.empty() ? endpoint.description : settings.label;
@@ -93,6 +103,7 @@ Properties busProperties(const Endpoint &endpoint, const DeviceSettings &setting
         {"priority.session", "0"},
         {"priority.driver", "0"},
         {"patchprime.key", endpoint.key},
+        {"patchprime.owner", owner},
     };
 }
 
@@ -141,7 +152,8 @@ std::vector<std::pair<PortRef, PortRef>> pairPorts(const std::vector<PortRef> &o
 }
 
 BusManager::BusManager(PipeWireGraph *graph, DeviceModel *devices, QObject *parent)
-    : QObject(parent), m_graph(graph), m_devices(devices)
+    : QObject(parent), m_graph(graph), m_devices(devices),
+      m_owner(busOwnerFor(devices->store().path()))
 {
     // Graph events come in bursts (a device brings a node and its ports);
     // reconcile once after the burst.
@@ -275,7 +287,8 @@ void BusManager::reconcile()
     std::map<std::string, std::uint32_t> existing;
     for (const auto &[id, node] : m_graph->nodes()) {
         const auto &name = prop(node, "node.name");
-        if (name.starts_with(busNamePrefix)) {
+        const auto &owner = prop(node, "patchprime.owner");
+        if (name.starts_with(busNamePrefix) && (owner.empty() || owner == m_owner)) {
             existing[name] = id;
         }
     }
@@ -288,12 +301,24 @@ void BusManager::reconcile()
         m_pendingLinks.erase(ports);
     }
 
-    // Buses nobody wants any more, including leftovers from a crash.
+    // Buses nobody wants any more, including leftovers from a crash. If one
+    // is the system default output, hand the default back to its hardware
+    // first; otherwise WirePlumber would pick some other device.
     for (const auto &[name, id] : existing) {
-        if (!wanted.contains(name)) {
-            qCInfo(lcBus, "removing bus %s", name.c_str());
-            m_graph->destroyObject(id);
+        if (wanted.contains(name)) {
+            continue;
         }
+        if (name == m_graph->defaultSinkName()) {
+            const auto &key = prop(m_graph->nodes().at(id), "patchprime.key");
+            const int row = m_devices->rowForKey(key);
+            if (row >= 0 && m_devices->rows()[static_cast<std::size_t>(row)].nodeId) {
+                m_graph->setConfiguredDefault(
+                    Direction::Output,
+                    m_devices->rows()[static_cast<std::size_t>(row)].endpoint.nodeName);
+            }
+        }
+        qCInfo(lcBus, "removing bus %s", name.c_str());
+        m_graph->destroyObject(id);
     }
 
     for (const auto &[name, w] : wanted) {
@@ -301,7 +326,7 @@ void BusManager::reconcile()
         if (it == existing.end()) {
             if (!m_pendingBuses.contains(name)) {
                 qCInfo(lcBus, "creating bus %s for %s", name.c_str(), w.key.c_str());
-                if (m_graph->createNode(busProperties(w.endpoint, *w.settings))) {
+                if (m_graph->createNode(busProperties(w.endpoint, *w.settings, m_owner))) {
                     m_pendingBuses[name] = now;
                 }
             }

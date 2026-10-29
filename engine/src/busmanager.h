@@ -40,7 +40,13 @@ std::vector<std::string> busPositions(const Endpoint &endpoint);
 
 // The node props for an endpoint's bus: a null sink that never links itself,
 // lingers after the daemon exits, and applies its volume to its monitor.
-Properties busProperties(const Endpoint &endpoint, const DeviceSettings &settings);
+// `owner` tags the bus with the settings it belongs to (see BusManager).
+Properties busProperties(const Endpoint &endpoint, const DeviceSettings &settings,
+                         const std::string &owner = {});
+
+// A short tag for a settings file, so engines with different settings (the
+// daemon and a test, say) leave each other's buses alone.
+std::string busOwnerFor(const QString &storePath);
 
 struct PortRef
 {
@@ -68,7 +74,8 @@ std::vector<std::pair<PortRef, PortRef>> pairPorts(const std::vector<PortRef> &o
 // bus's channelVolumes and mute; the hardware volume is never touched. Buses
 // and their links linger, so audio keeps flowing if the daemon exits. On every
 // graph or settings change the manager compares what exists with what should
-// and fixes the difference; nothing is relinked on a timer.
+// and fixes the difference; nothing is relinked on a timer. It only removes
+// buses tagged with its own owner, or untagged ones (from older versions).
 class BusManager : public QObject
 {
     Q_OBJECT
@@ -109,6 +116,7 @@ private:
 
     PipeWireGraph *m_graph;
     DeviceModel *m_devices;
+    std::string m_owner;
     QTimer m_reconcileTimer;
     bool m_metering = false;
 

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "endpoint.h"
 #include "graphtypes.h"
 
 #include <QObject>
@@ -82,6 +83,11 @@ public:
     bool destroyObject(std::uint32_t id);
     // Sets the node's Props: one linear volume per channel, and mute.
     bool setNodeVolume(std::uint32_t nodeId, const std::vector<float> &channelVolumes, bool mute);
+
+    // Makes nodeName the configured default sink or source, as `wpctl
+    // set-default` does (writes default.configured.audio.sink/source in the
+    // "default" metadata). WirePlumber then updates the effective default.
+    bool setConfiguredDefault(Direction direction, const std::string &nodeName);
 
     // Starts a small capture stream on the monitor of the sink named
     // targetNodeName and returns its peak levels. Meters belong to the current
