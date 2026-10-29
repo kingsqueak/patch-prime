@@ -193,7 +193,7 @@ QVariant DeviceModel::data(const QModelIndex &index, int role) const
     case MonoRole:
         return saved != nullptr && saved->mono;
     case BusDefaultRole:
-        return saved != nullptr && saved->enabled && e.direction == Direction::Output &&
+        return saved != nullptr && saved->enabled && playsInto(e) &&
                !m_defaultSink.empty() && m_defaultSink == busNameFor(e, *saved);
     case SectionStartRole:
         return index.row() == 0 ||
@@ -385,8 +385,9 @@ QString DeviceModel::createVirtual(const QString &name, EndpointKind kind)
     s.enabled = true;
     s.label = name.trimmed().toStdString();
     s.nodeName = virtualNodeName(busId);
-    s.mediaClass = kind == EndpointKind::VirtualSink ? "Audio/Sink" : "Audio/Source/Virtual";
-    s.direction = Direction::Output; // a routing destination
+    s.mediaClass = kind == EndpointKind::VirtualSource ? "Audio/Source/Virtual" : "Audio/Sink";
+    // A virtual input feeds sends like a hardware input; the others are destinations.
+    s.direction = kind == EndpointKind::VirtualInput ? Direction::Input : Direction::Output;
     s.isVirtual = true;
     s.description = s.label;
     s.channels = 2;
@@ -544,8 +545,9 @@ bool DeviceModel::isDefault(const Row &row) const
     if (!row.nodeId) {
         return false;
     }
+    // A virtual input is a sink, so it's the default output, not input.
     const auto &name =
-        row.endpoint.direction == Direction::Output ? m_defaultSink : m_defaultSource;
+        playsInto(row.endpoint) ? m_defaultSink : m_defaultSource;
     return !name.empty() && name == row.endpoint.nodeName;
 }
 

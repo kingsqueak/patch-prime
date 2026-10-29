@@ -97,6 +97,7 @@ std::string busMediaClass(const Endpoint &endpoint, const DeviceSettings &settin
 {
     switch (settings.kind) {
     case EndpointKind::VirtualSink:
+    case EndpointKind::VirtualInput: // apps play into both; only the routing differs
         return "Audio/Sink";
     case EndpointKind::VirtualSource:
         return "Audio/Source/Virtual";
@@ -351,7 +352,10 @@ void BusManager::reconcile()
         if (name == m_graph->defaultSinkName()) {
             const auto &key = prop(m_graph->nodes().at(id), "patchprime.key");
             const int row = m_devices->rowForKey(key);
-            if (row >= 0 && m_devices->rows()[static_cast<std::size_t>(row)].nodeId) {
+            // A virtual device has no hardware to hand back to; WirePlumber then
+            // picks a device by priority, and buses have the lowest.
+            if (row >= 0 && m_devices->rows()[static_cast<std::size_t>(row)].nodeId &&
+                m_devices->rows()[static_cast<std::size_t>(row)].endpoint.nodeName != name) {
                 m_graph->setConfiguredDefault(
                     Direction::Output,
                     m_devices->rows()[static_cast<std::size_t>(row)].endpoint.nodeName);

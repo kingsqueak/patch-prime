@@ -239,6 +239,69 @@ private Q_SLOTS:
         m_busName.clear();
     }
 
+    void routesVirtualInput()
+    {
+        QTemporaryDir dir;
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel devices(&store);
+        devices.attach(&m_graph);
+        BusManager buses(&m_graph, &devices);
+        m_owner = busOwnerFor(store.path());
+
+        const auto desktopKey =
+            devices.createVirtual(QStringLiteral("Test Desktop"), EndpointKind::VirtualInput);
+        const auto mixKey =
+            devices.createVirtual(QStringLiteral("Test Mix"), EndpointKind::VirtualSink);
+        devices.setSend(devices.rowForKey(desktopKey.toStdString()), mixKey, true);
+
+        const auto desktopNode = virtualNodeName(store.find(desktopKey.toStdString())->busId);
+        const auto mixNode = virtualNodeName(store.find(mixKey.toStdString())->busId);
+        QVERIFY(QTest::qWaitFor(
+            [&] { return nodeNamed(m_graph, desktopNode) && nodeNamed(m_graph, mixNode); }, 5000));
+        QCOMPARE(prop(*nodeNamed(m_graph, desktopNode), "media.class"), "Audio/Sink");
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                const auto *a = nodeNamed(m_graph, desktopNode);
+                const auto *b = nodeNamed(m_graph, mixNode);
+                return a != nullptr && b != nullptr &&
+                       std::ranges::count_if(m_graph.links(), [&](const auto &entry) {
+                           return prop(entry.second, "link.output.node") == std::to_string(a->id) &&
+                                  prop(entry.second, "link.input.node") == std::to_string(b->id);
+                       }) == 2;
+            },
+            5000));
+
+        // An app plays into the virtual input, and it reaches the mix.
+        buses.setMetering(true);
+        QTemporaryDir toneDir;
+        const auto tone = toneDir.filePath(QStringLiteral("tone.wav"));
+        QVERIFY(writeTone(tone));
+        QProcess player;
+        player.start(QStringLiteral("pw-play"),
+                     {QStringLiteral("--target"), QString::fromStdString(desktopNode), tone});
+        float mixPeak = 0.0F;
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                const auto levels = buses.takeLevels();
+                if (const auto it = levels.find(mixKey.toStdString()); it != levels.end()) {
+                    for (const float level : it->second) {
+                        mixPeak = std::max(mixPeak, level);
+                    }
+                }
+                return mixPeak > 0.3F;
+            },
+            5000));
+        player.kill();
+        player.waitForFinished();
+        buses.setMetering(false);
+
+        devices.forget(devices.rowForKey(desktopKey.toStdString()));
+        devices.forget(devices.rowForKey(mixKey.toStdString()));
+        QVERIFY(QTest::qWaitFor(
+            [&] { return !nodeNamed(m_graph, desktopNode) && !nodeNamed(m_graph, mixNode); },
+            5000));
+    }
+
     void routesInputToVirtualSink()
     {
         // A fake microphone: pw-loopback turns what plays into pp_feed_<pid>

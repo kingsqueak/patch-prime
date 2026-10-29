@@ -364,6 +364,41 @@ private Q_SLOTS:
         QVERIFY(model.createVirtual(QStringLiteral("x"), EndpointKind::Hardware).isEmpty());
     }
 
+    void virtualInputs()
+    {
+        DeviceStore store(m_path);
+        DeviceModel model(&store);
+        QAbstractItemModelTester tester(&model);
+        model.upsertNode(sourceNode(11, "mic"), nullptr);
+        model.upsertNode(sinkNode(10, "phones", nullptr), nullptr);
+        const auto desktop =
+            model.createVirtual(QStringLiteral("Desktop"), EndpointKind::VirtualInput);
+        const auto row = [&] { return model.rowForKey(desktop.toStdString()); };
+        QCOMPARE(role(model, row(), DeviceModel::KindRole).toString(),
+                 QStringLiteral("virtual-input"));
+        QCOMPARE(role(model, row(), DeviceModel::DirectionRole).toString(), QStringLiteral("input"));
+        QCOMPARE(store.find(desktop.toStdString())->mediaClass, "Audio/Sink");
+
+        // It sends like an input, and is never a destination itself.
+        model.setSend(row(), QStringLiteral("Audio/Sink|phones"), true);
+        QCOMPARE(role(model, row(), DeviceModel::SendsRole).toStringList(),
+                 QStringList{QStringLiteral("Audio/Sink|phones")});
+        model.setSend(model.rowForKey("Audio/Source|mic"), desktop, true);
+        QVERIFY(store.find("Audio/Source|mic") == nullptr);
+
+        // Apps play into it, so it's a default *output*.
+        const auto nodeName = virtualNodeName(store.find(desktop.toStdString())->busId);
+        model.upsertNode({.id = 78,
+                          .type = "PipeWire:Interface:Node",
+                          .version = 3,
+                          .props = {{"node.name", nodeName}, {"media.class", "Audio/Sink"}}},
+                         nullptr);
+        model.setDefaults(nodeName, "mic");
+        QVERIFY(role(model, row(), DeviceModel::DefaultRole).toBool());
+        QVERIFY(role(model, row(), DeviceModel::BusDefaultRole).toBool());
+        QVERIFY(role(model, model.rowForKey("Audio/Source|mic"), DeviceModel::DefaultRole).toBool());
+    }
+
     void sendsOnlyGoFromInputsToOutputs()
     {
         DeviceStore store(m_path);

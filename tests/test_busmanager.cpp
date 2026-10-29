@@ -116,6 +116,9 @@ private Q_SLOTS:
         QCOMPARE(busDescription(mix, sink), "Stream Mix");
         sink.kind = EndpointKind::VirtualSource;
         QCOMPARE(busMediaClass(mix, sink), "Audio/Source/Virtual");
+        sink.kind = EndpointKind::VirtualInput; // played into, routed like an input
+        QCOMPARE(busMediaClass(mix, sink), "Audio/Sink");
+        QCOMPARE(busNameFor(mix, sink), "patchprime.virtual.22222222");
     }
 
     void pairing()

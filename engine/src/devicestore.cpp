@@ -111,6 +111,8 @@ std::string kindName(EndpointKind kind)
         return "virtual-sink";
     case EndpointKind::VirtualSource:
         return "virtual-source";
+    case EndpointKind::VirtualInput:
+        return "virtual-input";
     case EndpointKind::Hardware:
         break;
     }
@@ -124,6 +126,9 @@ EndpointKind kindFromName(std::string_view name)
     }
     if (name == "virtual-source") {
         return EndpointKind::VirtualSource;
+    }
+    if (name == "virtual-input") {
+        return EndpointKind::VirtualInput;
     }
     return EndpointKind::Hardware;
 }

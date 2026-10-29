@@ -49,7 +49,7 @@ public:
     Q_INVOKABLE void setDefaultOutput(const QString &key, bool throughMixer);
     Q_INVOKABLE void setMono(const QString &key, bool mono);
     Q_INVOKABLE void setSend(const QString &inputKey, const QString &destinationKey, bool enabled);
-    // kind: "sink" or "source"
+    // kind: "sink", "source" or "input"
     Q_INVOKABLE void createVirtual(const QString &name, const QString &kind);
     // D-Bus activation first; failing that, a patchprimed next to this program
     // (installed side by side, or in the build tree).

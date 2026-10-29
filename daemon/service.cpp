@@ -119,8 +119,12 @@ void PatchPrimeService::SetDefaultOutput(const QString &key, bool throughMixer)
             sendErrorReply(QDBusError::Failed, why);
         }
     };
-    if (endpoint.direction != pp::Direction::Output) {
-        fail(QStringLiteral("not an output: ") + key);
+    if (!pp::playsInto(endpoint)) {
+        fail(QStringLiteral("not something apps play into: ") + key);
+        return;
+    }
+    if (!throughMixer && settings != nullptr && settings->kind != pp::EndpointKind::Hardware) {
+        fail(QStringLiteral("a virtual device has no device to bypass to; make another strip the default"));
         return;
     }
     if (throughMixer && (settings == nullptr || !settings->enabled)) {
@@ -158,12 +162,12 @@ void PatchPrimeService::SetSend(const QString &inputKey, const QString &destinat
 QString PatchPrimeService::CreateVirtual(const QString &name, const QString &kind)
 {
     const auto trimmed = name.trimmed();
-    // "sink" / "source" here, "virtual-sink" / "virtual-source" in the state.
+    // "sink" / "source" / "input" here, "virtual-sink" etc. in the state.
     const auto type = pp::kindFromName("virtual-" + kind.toStdString());
     if (trimmed.isEmpty() || type == pp::EndpointKind::Hardware) {
         if (calledFromDBus()) {
             sendErrorReply(QDBusError::InvalidArgs,
-                           QStringLiteral("need a name and a kind of \"sink\" or \"source\""));
+                           QStringLiteral("need a name and a kind of \"sink\", \"source\" or \"input\""));
         }
         return {};
     }

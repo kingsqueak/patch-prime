@@ -165,9 +165,14 @@ QQC2.Frame {
 
         QQC2.Button {
             Layout.alignment: Qt.AlignHCenter
-            // A virtual source is a microphone, not something to play into.
-            visible: strip.direction === "output" && strip.kind !== "virtual-source"
-            checkable: true
+            // Anything apps play into: outputs, and virtual inputs. A virtual
+            // source is a microphone, not something to play into.
+            readonly property bool ownVirtual: strip.kind !== "hardware"
+            visible: (strip.direction === "output" && strip.kind !== "virtual-source")
+                     || strip.kind === "virtual-input"
+            // A virtual device has no hardware to bypass to, so it stays the
+            // default until another strip takes over.
+            checkable: !(ownVirtual && strip.busIsDefault)
             icon.name: strip.busIsDefault ? "starred-symbolic" : "non-starred-symbolic"
             text: qsTr("Default")
             enabled: Devices.daemonRunning && strip.online
@@ -175,7 +180,9 @@ QQC2.Frame {
             Binding on checked {
                 value: strip.busIsDefault
             }
-            QQC2.ToolTip.text: strip.busIsDefault
+            QQC2.ToolTip.text: strip.busIsDefault && ownVirtual
+                ? qsTr("Apps that use the system default output play into this strip. Make another strip the default to change that.")
+                : strip.busIsDefault
                 ? qsTr("Apps that use the system default output play through this strip. Click to send them straight to the device instead.")
                 : qsTr("Make this the system default output, so apps play through this strip.")
             QQC2.ToolTip.visible: hovered

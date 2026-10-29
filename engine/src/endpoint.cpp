@@ -101,4 +101,9 @@ Match matchSignature(const Signature &saved, const Signature &live)
     return Match::SameModel;
 }
 
+bool playsInto(const Endpoint &endpoint)
+{
+    return endpoint.mediaClass == "Audio/Sink";
+}
+
 } // namespace pp

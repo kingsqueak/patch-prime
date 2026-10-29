@@ -49,6 +49,10 @@ struct Endpoint
 
 std::string makeEndpointKey(const std::string &mediaClass, const std::string &nodeName);
 
+// True for an endpoint apps play into (an output, or a Patch Prime virtual
+// input), which is what can be the system default output.
+bool playsInto(const Endpoint &endpoint);
+
 // Turns a node into an Endpoint when it's an audio input or output the mixer
 // should offer. Streams, MIDI, video, driver nodes, Patch Prime's own nodes and
 // duplex nodes (not handled yet) return nullopt. `device` is the node's card,

@@ -22,9 +22,11 @@ enum class EndpointKind : std::uint8_t
     Hardware,      // any endpoint PipeWire reports (cards, other apps' virtual devices)
     VirtualSink,   // apps play into it, others record its monitor ("Stream Mix")
     VirtualSource, // apps record from it, like a microphone ("Chat Mic")
+    VirtualInput,  // apps play into it, and it's routed like an input ("Desktop", "Music")
 };
 
-// "hardware", "virtual-sink", "virtual-source" (in the settings file and the D-Bus state).
+// "hardware", "virtual-sink", "virtual-source", "virtual-input" (in the settings
+// file and the D-Bus state).
 std::string kindName(EndpointKind kind);
 // The reverse; anything unknown is Hardware.
 EndpointKind kindFromName(std::string_view name);

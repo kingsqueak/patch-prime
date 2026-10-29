@@ -32,7 +32,8 @@ Kirigami.ScrollablePage {
         }
         onAccepted: {
             if (nameField.text.trim().length > 0)
-                Devices.createVirtual(nameField.text, sinkButton.checked ? "sink" : "source");
+                Devices.createVirtual(nameField.text, inputButton.checked ? "input"
+                                                    : sinkButton.checked ? "sink" : "source");
         }
 
         ColumnLayout {
@@ -41,13 +42,19 @@ Kirigami.ScrollablePage {
             QQC2.TextField {
                 id: nameField
                 Layout.fillWidth: true
-                placeholderText: sinkButton.checked ? qsTr("e.g. Stream Mix") : qsTr("e.g. Chat Mic")
+                placeholderText: inputButton.checked ? qsTr("e.g. Desktop")
+                               : sinkButton.checked ? qsTr("e.g. Stream Mix") : qsTr("e.g. Chat Mic")
                 onAccepted: addDialog.accept()
             }
 
             QQC2.RadioButton {
-                id: sinkButton
+                id: inputButton
                 checked: true
+                text: qsTr("Input: apps play into it, and you route it to outputs (desktop sound on several headphones)")
+            }
+
+            QQC2.RadioButton {
+                id: sinkButton
                 text: qsTr("Output: apps play into it, others can record it (a mix for OBS)")
             }
 
@@ -123,7 +130,8 @@ Kirigami.ScrollablePage {
                     }
 
                     Kirigami.Icon {
-                        source: row.direction === "input" ? "audio-input-microphone"
+                        source: row.kind === "virtual-input" ? "audio-volume-high"
+                              : row.direction === "input" ? "audio-input-microphone"
                               : row.isVirtual ? "audio-volume-high" : "audio-speakers"
                         implicitWidth: Kirigami.Units.iconSizes.medium
                         implicitHeight: Kirigami.Units.iconSizes.medium
@@ -151,7 +159,8 @@ Kirigami.ScrollablePage {
                                 const parts = [];
                                 if (row.customLabel.length > 0)
                                     parts.push(row.description);
-                                parts.push(row.kind === "virtual-sink" ? qsTr("Patch Prime virtual output")
+                                parts.push(row.kind === "virtual-input" ? qsTr("Patch Prime virtual input")
+                                           : row.kind === "virtual-sink" ? qsTr("Patch Prime virtual output")
                                            : row.kind === "virtual-source" ? qsTr("Patch Prime virtual microphone")
                                            : row.isVirtual ? qsTr("virtual") : qsTr("hardware"));
                                 if (row.channels > 0)
