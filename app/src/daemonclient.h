@@ -22,6 +22,11 @@ class DaemonClient : public QAbstractListModel
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
     Q_PROPERTY(double minimumVolumeDb READ minimumVolumeDb CONSTANT)
     Q_PROPERTY(double maximumVolumeDb READ maximumVolumeDb CONSTANT)
+    // Applications: [{key, name, icon, direction, target, streams}], see the daemon's state.
+    Q_PROPERTY(QVariantList apps READ apps NOTIFY appsChanged)
+    // Where apps can play to / record from: [{name (a node.name), label, kind}].
+    Q_PROPERTY(QVariantList playbackTargets READ playbackTargets NOTIFY appsChanged)
+    Q_PROPERTY(QVariantList recordTargets READ recordTargets NOTIFY appsChanged)
 
 public:
     explicit DaemonClient(QObject *parent = nullptr);
@@ -38,6 +43,9 @@ public:
     [[nodiscard]] bool isDaemonRunning() const { return m_daemonRunning; }
     [[nodiscard]] bool isConnected() const { return m_connected; }
     [[nodiscard]] QString lastError() const { return m_lastError; }
+    [[nodiscard]] QVariantList apps() const { return m_apps; }
+    [[nodiscard]] QVariantList playbackTargets() const { return m_playbackTargets; }
+    [[nodiscard]] QVariantList recordTargets() const { return m_recordTargets; }
     static constexpr double minimumVolumeDb() { return -60.0; }
     static constexpr double maximumVolumeDb() { return 12.0; }
 
@@ -51,6 +59,9 @@ public:
     Q_INVOKABLE void setSend(const QString &inputKey, const QString &destinationKey, bool enabled);
     // kind: "sink", "source" or "input"
     Q_INVOKABLE void createVirtual(const QString &name, const QString &kind);
+    // nodeName: a target's name; empty for the system default.
+    Q_INVOKABLE void setAppTarget(const QString &appKey, const QString &nodeName);
+    Q_INVOKABLE void forgetApp(const QString &appKey);
     // D-Bus activation first; failing that, a patchprimed next to this program
     // (installed side by side, or in the build tree).
     Q_INVOKABLE void startDaemon();
@@ -62,6 +73,7 @@ Q_SIGNALS:
     void daemonRunningChanged();
     void connectedChanged();
     void lastErrorChanged();
+    void appsChanged();
 
 private Q_SLOTS:
     void onStateChanged(const QString &state);
@@ -82,6 +94,9 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     bool m_daemonRunning = false;
     bool m_connected = false;
     QString m_lastError;
+    QVariantList m_apps;
+    QVariantList m_playbackTargets;
+    QVariantList m_recordTargets;
 };
 
 // The enabled devices of one direction, for a row of mixer strips.

@@ -192,6 +192,8 @@ QVariant DeviceModel::data(const QModelIndex &index, int role) const
     }
     case MonoRole:
         return saved != nullptr && saved->mono;
+    case BusNameRole:
+        return qs(saved != nullptr && saved->enabled ? busNameFor(e, *saved) : std::string{});
     case BusDefaultRole:
         return saved != nullptr && saved->enabled && playsInto(e) &&
                !m_defaultSink.empty() && m_defaultSink == busNameFor(e, *saved);
@@ -225,6 +227,7 @@ QHash<int, QByteArray> DeviceModel::roleNames() const
         {BusIdRole, "busId"},
         {BusDefaultRole, "busIsDefault"},
         {KindRole, "kind"},
+        {BusNameRole, "busName"},
         {SendsRole, "sends"},
         {MonoRole, "mono"},
     };
@@ -241,7 +244,7 @@ void DeviceModel::setEnabled(int row, bool enabled)
     m_store->upsert(r.endpoint.key).enabled = enabled;
     saveStore();
     const auto i = index(row);
-    Q_EMIT dataChanged(i, i, {EnabledRole, SavedRole, BusIdRole});
+    Q_EMIT dataChanged(i, i, {EnabledRole, SavedRole, BusIdRole, BusNameRole});
     Q_EMIT settingsChanged(qs(r.endpoint.key));
 }
 

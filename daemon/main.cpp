@@ -4,6 +4,8 @@
 // patchprimed: the Patch Prime engine. Owns the buses and links in PipeWire and
 // offers them to the GUI over D-Bus. Meant to run as a systemd user service.
 
+#include "approuter.h"
+#include "appstore.h"
 #include "busmanager.h"
 #include "devicemodel.h"
 #include "devicestore.h"
@@ -80,6 +82,11 @@ int run(int &argc, char **argv)
         qWarning("could not read %s: %s; starting with no saved devices", qPrintable(store.path()),
                  qPrintable(store.lastError()));
     }
+    pp::AppStore appStore;
+    if (!appStore.load()) {
+        qWarning("could not read %s: %s; starting with no saved app routes",
+                 qPrintable(appStore.path()), qPrintable(appStore.lastError()));
+    }
     pp::PipeWireGraph graph;
     pp::DeviceModel devices(&store);
     devices.attach(&graph);
@@ -109,7 +116,8 @@ int run(int &argc, char **argv)
     }
 
     pp::BusManager buses(&graph, &devices);
-    PatchPrimeService service(&graph, &devices, &buses);
+    pp::AppRouter apps(&graph, &appStore);
+    PatchPrimeService service(&graph, &devices, &buses, &apps);
     bus.registerObject(QString::fromLatin1(PatchPrimeService::objectPath), &service,
                        QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);
 

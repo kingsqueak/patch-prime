@@ -24,6 +24,7 @@
 #include <cstring>
 #include <mutex>
 #include <string_view>
+#include <utility>
 
 Q_LOGGING_CATEGORY(lcGraph, "patchprime.graph")
 
@@ -531,6 +532,7 @@ void PipeWireGraph::disconnectNow()
             Q_EMIT objectRemoved(object);
         }
     }
+    m_streamTargets.clear();
     if (!m_defaultSink.empty() || !m_defaultSource.empty()) {
         m_defaultSink.clear();
         m_defaultSource.clear();
@@ -624,7 +626,7 @@ bool PipeWireGraph::setNodeVolume(std::uint32_t nodeId, const std::vector<float>
 
 bool PipeWireGraph::setConfiguredDefault(Direction direction, const std::string &nodeName)
 {
-    if (!m_session || nodeName.empty()) {
+    if (nodeName.empty()) {
         return false;
     }
     const auto *key = direction == Direction::Output ? "default.configured.audio.sink"
@@ -633,13 +635,35 @@ bool PipeWireGraph::setConfiguredDefault(Direction direction, const std::string 
         QJsonDocument(QJsonObject{{QStringLiteral("name"), QString::fromStdString(nodeName)}})
             .toJson(QJsonDocument::Compact)
             .toStdString();
+    return setMetadata(PW_ID_CORE, key, "Spa:String:JSON", value.c_str());
+}
+
+std::string PipeWireGraph::streamTarget(std::uint32_t nodeId) const
+{
+    const auto it = m_streamTargets.find(nodeId);
+    return it != m_streamTargets.end() ? it->second : std::string{};
+}
+
+bool PipeWireGraph::setStreamTarget(std::uint32_t nodeId, const std::string &value)
+{
+    // The same form WirePlumber uses when it restores a target: a serial as Spa:Id.
+    return value.empty() ? setMetadata(nodeId, "target.object", nullptr, nullptr)
+                         : setMetadata(nodeId, "target.object", "Spa:Id", value.c_str());
+}
+
+bool PipeWireGraph::setMetadata(std::uint32_t subject, const char *key, const char *type,
+                                const char *value)
+{
+    if (!m_session) {
+        return false;
+    }
     auto &session = *m_session;
     pw_thread_loop_lock(session.loop);
     bool ok = false;
     for (const auto &[id, b] : session.bound) {
         if (b->object.type == PW_TYPE_INTERFACE_Metadata) { // only "default" is bound
-            ok = pw_metadata_set_property(reinterpret_cast<pw_metadata *>(b->proxy), PW_ID_CORE,
-                                          key, "Spa:String:JSON", value.c_str()) >= 0;
+            ok = pw_metadata_set_property(reinterpret_cast<pw_metadata *>(b->proxy), subject, key,
+                                          type, value) >= 0;
             break;
         }
     }
@@ -784,7 +808,18 @@ void PipeWireGraph::handleRemoved(int generation, std::uint32_t id)
 void PipeWireGraph::handleMetadata(int generation, std::uint32_t subject, const std::string &key,
                                    const std::string &value)
 {
-    if (generation != m_generation || subject != PW_ID_CORE) {
+    if (generation != m_generation) {
+        return;
+    }
+    if (subject != PW_ID_CORE) {
+        if (key.empty() || key == "target.object") {
+            const bool changed =
+                value.empty() ? m_streamTargets.erase(subject) > 0
+                              : std::exchange(m_streamTargets[subject], value) != value;
+            if (changed) {
+                Q_EMIT streamTargetChanged(subject);
+            }
+        }
         return;
     }
     const auto sink = m_defaultSink;

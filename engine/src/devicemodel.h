@@ -51,9 +51,10 @@ public:
         MutedRole,
         BusIdRole,
         BusDefaultRole, // this output's bus is the system default output
-        KindRole,       // "hardware", "virtual-sink" or "virtual-source"
+        KindRole,       // "hardware", "virtual-sink", "virtual-source" or "virtual-input"
         SendsRole,      // inputs: keys of the outputs this input is sent to
         MonoRole,       // inputs: mixed down to one channel
+        BusNameRole,    // node.name of the strip's bus while enabled, else empty
     };
     Q_ENUM(Role)
 

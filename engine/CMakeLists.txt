@@ -2,6 +2,10 @@
 # SPDX-FileCopyrightText: 2026 KC2RGW Chris
 
 add_library(patchprime-engine STATIC
+    src/approuter.cpp
+    src/approuter.h
+    src/appstore.cpp
+    src/appstore.h
     src/busmanager.cpp
     src/busmanager.h
     src/devicemodel.cpp

@@ -7,7 +7,7 @@ import org.kde.kirigami as Kirigami
 Kirigami.ApplicationWindow {
     id: root
 
-    // "devices" opens the Devices page first (set from PATCHPRIME_PAGE).
+    // "devices", "routing" or "apps" opens that page first (set from PATCHPRIME_PAGE).
     property string startPage
 
     title: "Patch Prime"
@@ -17,6 +17,12 @@ Kirigami.ApplicationWindow {
     pageStack.initialPage: MixerPage {
         onOpenDevices: root.pageStack.push(devicesPage)
         onOpenRouting: root.pageStack.push(routingPage)
+        onOpenApps: root.pageStack.push(appsPage)
+    }
+
+    Component {
+        id: appsPage
+        AppsPage {}
     }
 
     Component {
@@ -34,5 +40,7 @@ Kirigami.ApplicationWindow {
             pageStack.push(devicesPage);
         else if (startPage === "routing")
             pageStack.push(routingPage);
+        else if (startPage === "apps")
+            pageStack.push(appsPage);
     }
 }

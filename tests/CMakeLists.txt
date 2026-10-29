@@ -17,6 +17,7 @@ patchprime_add_test(test_endpoint test_endpoint.cpp)
 patchprime_add_test(test_devicestore test_devicestore.cpp)
 patchprime_add_test(test_devicemodel test_devicemodel.cpp)
 patchprime_add_test(test_busmanager test_busmanager.cpp)
+patchprime_add_test(test_approuter test_approuter.cpp)
 
 # Needs a running PipeWire server; skips itself when there isn't one.
 patchprime_add_test(test_graphsnapshot test_graphsnapshot.cpp)

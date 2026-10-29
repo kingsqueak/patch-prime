@@ -3,6 +3,7 @@
 
 #include "service.h"
 
+#include "approuter.h"
 #include "busmanager.h"
 #include "devicemodel.h"
 #include "pipewiregraph.h"
@@ -15,8 +16,9 @@
 #include <QJsonObject>
 
 PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *devices,
-                                     pp::BusManager *buses, QObject *parent)
-    : QObject(parent), m_graph(graph), m_devices(devices), m_buses(buses)
+                                     pp::BusManager *buses, pp::AppRouter *apps,
+                                     QObject *parent)
+    : QObject(parent), m_graph(graph), m_devices(devices), m_buses(buses), m_apps(apps)
 {
     m_stateTimer.setSingleShot(true);
     m_stateTimer.setInterval(30);
@@ -27,6 +29,7 @@ PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *
     connect(devices, &QAbstractItemModel::rowsRemoved, this, &PatchPrimeService::scheduleState);
     connect(devices, &QAbstractItemModel::modelReset, this, &PatchPrimeService::scheduleState);
     connect(devices, &pp::DeviceModel::connectedChanged, this, &PatchPrimeService::scheduleState);
+    connect(apps, &pp::AppRouter::changed, this, &PatchPrimeService::scheduleState);
 
     m_levelsTimer.setInterval(33);
     connect(&m_levelsTimer, &QTimer::timeout, this, &PatchPrimeService::emitLevels);
@@ -55,9 +58,22 @@ QString PatchPrimeService::GetState() const
         }
         devices.append(device);
     }
+    QJsonArray apps;
+    for (const auto &app : m_apps->apps()) {
+        apps.append(QJsonObject{
+            {QStringLiteral("key"), QString::fromStdString(app.key)},
+            {QStringLiteral("name"), QString::fromStdString(app.settings.name)},
+            {QStringLiteral("icon"), QString::fromStdString(app.settings.icon)},
+            {QStringLiteral("direction"),
+             QString::fromStdString(pp::streamDirectionName(app.settings.direction))},
+            {QStringLiteral("target"), QString::fromStdString(app.settings.target)},
+            {QStringLiteral("streams"), app.streams},
+        });
+    }
     const QJsonObject state{
         {QStringLiteral("connected"), m_devices->isConnected()},
         {QStringLiteral("devices"), devices},
+        {QStringLiteral("apps"), apps},
     };
     return QString::fromUtf8(QJsonDocument(state).toJson(QJsonDocument::Compact));
 }
@@ -172,6 +188,21 @@ QString PatchPrimeService::CreateVirtual(const QString &name, const QString &kin
         return {};
     }
     return m_devices->createVirtual(trimmed, type);
+}
+
+void PatchPrimeService::SetAppTarget(const QString &appKey, const QString &nodeName)
+{
+    if (!m_apps->setTarget(appKey.toStdString(), nodeName.toStdString()) && calledFromDBus()) {
+        sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no app with key ") + appKey);
+    }
+}
+
+void PatchPrimeService::ForgetApp(const QString &appKey)
+{
+    if (!m_apps->forget(appKey.toStdString()) && calledFromDBus()) {
+        sendErrorReply(QDBusError::InvalidArgs,
+                       QStringLiteral("no remembered app that isn't running: ") + appKey);
+    }
 }
 
 void PatchPrimeService::WatchLevels()

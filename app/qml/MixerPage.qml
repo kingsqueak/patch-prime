@@ -12,11 +12,17 @@ Kirigami.Page {
 
     signal openDevices()
     signal openRouting()
+    signal openApps()
 
     title: qsTr("Mixer")
     header: EngineMessage {}
 
     actions: [
+        Kirigami.Action {
+            text: qsTr("Apps")
+            icon.name: "applications-multimedia"
+            onTriggered: page.openApps()
+        },
         Kirigami.Action {
             text: qsTr("Routing")
             icon.name: "network-connect"

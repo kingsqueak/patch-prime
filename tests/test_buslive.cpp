@@ -5,6 +5,8 @@
 // in for hardware. Enabling it must create its bus, link the bus monitor to it,
 // apply the fader, meter a tone played into the bus, and remove the bus again.
 
+#include "approuter.h"
+#include "appstore.h"
 #include "busmanager.h"
 #include "devicemodel.h"
 #include "pipewiregraph.h"
@@ -19,6 +21,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <optional>
@@ -39,10 +42,10 @@ std::optional<QByteArray> run(const QString &program, const QStringList &args)
 }
 
 // Writes a 3 s stereo 440 Hz tone at half scale (-6 dBFS) as a WAV file.
-bool writeTone(const QString &path)
+bool writeTone(const QString &path, int seconds = 3)
 {
     constexpr int rate = 48000;
-    constexpr int frames = rate * 3;
+    const auto frames = static_cast<std::uint32_t>(rate * seconds);
     QByteArray data;
     auto put16 = [&data](std::uint16_t v) {
         data.append(static_cast<char>(v & 0xFF));
@@ -65,7 +68,7 @@ bool writeTone(const QString &path)
     put16(16);
     data.append("data");
     put32(frames * 4);
-    for (int i = 0; i < frames; ++i) {
+    for (std::uint32_t i = 0; i < frames; ++i) {
         const auto sample =
             static_cast<std::int16_t>(16383.0 * std::sin(2.0 * M_PI * 440.0 * i / rate));
         put16(static_cast<std::uint16_t>(sample));
@@ -106,6 +109,10 @@ private Q_SLOTS:
             qWarning("no PipeWire server");
             std::exit(77);
         }
+        // The default metadata can arrive after the nodes; without it there'd
+        // be nothing to put back in cleanupTestCase().
+        [[maybe_unused]] const bool haveDefault =
+            QTest::qWaitFor([this] { return !m_graph.defaultSinkName().empty(); }, 2000);
         m_originalDefault = m_graph.defaultSinkName();
 
         m_sinkName = "pp_bus_test_" + std::to_string(QCoreApplication::applicationPid());
@@ -400,6 +407,87 @@ private Q_SLOTS:
         devices.setEnabled(devices.rowForKey(micKey), false);
         QVERIFY(QTest::qWaitFor(
             [&] { return !nodeNamed(m_graph, inBus) && !nodeNamed(m_graph, mixNode); }, 5000));
+    }
+
+    void routesApps()
+    {
+        QTemporaryDir dir;
+        AppStore store(dir.filePath(QStringLiteral("apps.json")));
+        AppRouter router(&m_graph, &store);
+        const std::string key = "playback|patchprime-test";
+        // An earlier test hands the default to the test sink; "the system
+        // default" has to be somewhere else here.
+        if (!m_originalDefault.empty() && m_originalDefault != m_sinkName) {
+            m_graph.setConfiguredDefault(Direction::Output, m_originalDefault);
+            QVERIFY(QTest::qWaitFor(
+                [this] { return m_graph.defaultSinkName() == m_originalDefault; }, 3000));
+        }
+
+        // A silent app (volume 0: one step plays to the real default output).
+        QTemporaryDir toneDir;
+        const auto tone = toneDir.filePath(QStringLiteral("tone.wav"));
+        QVERIFY(writeTone(tone, 20));
+        auto startApp = [&tone](QProcess &player) {
+            player.start(QStringLiteral("pw-play"),
+                         {QStringLiteral("--volume=0"), QStringLiteral("-P"),
+                          QStringLiteral("{ application.name = \"Patch Prime Test\" "
+                                         "application.process.binary = \"patchprime-test\" }"),
+                          tone});
+        };
+        auto *player = new QProcess(this);
+        auto stopPlayer = qScopeGuard([&player] {
+            player->kill();
+            player->waitForFinished();
+            delete player;
+        });
+        startApp(*player);
+
+        auto streamId = [&]() -> std::optional<std::uint32_t> {
+            for (const auto &[id, node] : m_graph.nodes()) {
+                if (const auto app = classifyAppStream(node); app && app->key == key) {
+                    return id;
+                }
+            }
+            return std::nullopt;
+        };
+        auto linkedTo = [&](const std::string &target) {
+            const auto stream = streamId();
+            const auto *node = nodeNamed(m_graph, target);
+            if (!stream || node == nullptr) {
+                return false;
+            }
+            return std::ranges::any_of(m_graph.links(), [&](const auto &entry) {
+                return prop(entry.second, "link.output.node") == std::to_string(*stream) &&
+                       prop(entry.second, "link.input.node") == std::to_string(node->id);
+            });
+        };
+
+        // Remembered once it has settled.
+        QVERIFY(QTest::qWaitFor([&] { return store.find(key) != nullptr; }, 5000));
+        QCOMPARE(store.find(key)->name, "Patch Prime Test");
+
+        // Route it to the test sink, then back to the default.
+        QVERIFY(router.setTarget(key, m_sinkName));
+        QVERIFY(QTest::qWaitFor([&] { return linkedTo(m_sinkName); }, 5000));
+        QVERIFY(router.setTarget(key, {}));
+        QVERIFY(QTest::qWaitFor([&] { return !linkedTo(m_sinkName); }, 5000));
+
+        // A move made elsewhere (as Plasma does it) becomes the route.
+        const auto serial = prop(*nodeNamed(m_graph, m_sinkName), "object.serial");
+        m_graph.setStreamTarget(*streamId(), serial);
+        QVERIFY(QTest::qWaitFor([&] { return store.find(key)->target == m_sinkName; }, 5000));
+        QVERIFY(QTest::qWaitFor([&] { return linkedTo(m_sinkName); }, 5000));
+
+        // Restart the app: the route comes back.
+        player->kill();
+        player->waitForFinished();
+        QVERIFY(QTest::qWaitFor([&] { return !streamId(); }, 5000));
+        startApp(*player);
+        QVERIFY(QTest::qWaitFor([&] { return linkedTo(m_sinkName); }, 5000));
+
+        // Leave WirePlumber's saved target for the test app at the default.
+        QVERIFY(router.setTarget(key, {}));
+        QVERIFY(QTest::qWaitFor([&] { return !linkedTo(m_sinkName); }, 5000));
     }
 
 private:

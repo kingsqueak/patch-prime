@@ -66,6 +66,12 @@ public:
     [[nodiscard]] const std::string &defaultSinkName() const { return m_defaultSink; }
     [[nodiscard]] const std::string &defaultSourceName() const { return m_defaultSource; }
 
+    // A stream's "target.object" in the "default" metadata: the object.serial
+    // (or node.name) of the node it should link to, "-1" for the system
+    // default, or empty when none is set. This is what WirePlumber follows and
+    // what Plasma and pavucontrol write when an app is moved to another device.
+    [[nodiscard]] std::string streamTarget(std::uint32_t nodeId) const;
+
     static constexpr int reconnectInterval() { return 2000; }
 
     // Commands. Each returns false when not connected or when PipeWire refuses
@@ -89,6 +95,9 @@ public:
     // "default" metadata). WirePlumber then updates the effective default.
     bool setConfiguredDefault(Direction direction, const std::string &nodeName);
 
+    // Sets a stream's target.object (see streamTarget()); an empty value clears it.
+    bool setStreamTarget(std::uint32_t nodeId, const std::string &value);
+
     // Starts a small capture stream on targetNodeName (the monitor of a sink,
     // or a source itself) and returns its peak levels. Meters belong to the
     // current connection: after a reconnect they must be added again.
@@ -103,6 +112,7 @@ Q_SIGNALS:
     // The object as it was last seen, so receivers can read its props.
     void objectRemoved(const pp::GraphObject &object);
     void defaultsChanged();
+    void streamTargetChanged(std::uint32_t nodeId);
 
 public:
     // One connection's PipeWire state; defined in the .cpp. Public only so the
@@ -125,6 +135,7 @@ private:
     void handleConnectionLost(int generation, const std::string &reason);
 
     std::map<std::uint32_t, GraphObject> *mapFor(const std::string &type);
+    bool setMetadata(std::uint32_t subject, const char *key, const char *type, const char *value);
 
     std::unique_ptr<Session> m_session;
     QTimer m_reconnectTimer;
@@ -138,6 +149,7 @@ private:
     std::map<std::uint32_t, GraphObject> m_links;
     std::string m_defaultSink;
     std::string m_defaultSource;
+    std::map<std::uint32_t, std::string> m_streamTargets;
 };
 
 } // namespace pp

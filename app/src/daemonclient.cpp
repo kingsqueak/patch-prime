@@ -31,7 +31,7 @@ constexpr std::array fields{
     "key",       "label",        "customLabel", "description", "nodeName",  "direction",
     "isVirtual", "online",       "isEnabled",   "channels",    "positions", "isDefault",
     "saved",     "sectionStart", "volumeDb",    "muted",       "busId",     "busIsDefault",
-    "kind",      "sends",        "mono",
+    "kind",      "sends",        "mono",        "busName",
 };
 
 // How far a meter falls per update (about 30 per second): 60 dB in ~1.6 s.
@@ -233,6 +233,16 @@ void DaemonClient::createVirtual(const QString &name, const QString &kind)
     call(QStringLiteral("CreateVirtual"), {name, kind});
 }
 
+void DaemonClient::setAppTarget(const QString &appKey, const QString &nodeName)
+{
+    call(QStringLiteral("SetAppTarget"), {appKey, nodeName});
+}
+
+void DaemonClient::forgetApp(const QString &appKey)
+{
+    call(QStringLiteral("ForgetApp"), {appKey});
+}
+
 void DaemonClient::onStateChanged(const QString &state)
 {
     const auto root = QJsonDocument::fromJson(state.toUtf8()).object();
@@ -245,6 +255,40 @@ void DaemonClient::onStateChanged(const QString &state)
     QList<QVariantMap> rows;
     for (const auto &device : root.value(QLatin1String("devices")).toArray()) {
         rows.append(device.toObject().toVariantMap());
+    }
+
+    // Targets for the app matrix: every enabled strip's bus. Apps play into
+    // outputs, virtual sinks and virtual inputs; they can record from any bus
+    // (a sink's is its monitor).
+    QVariantList playback;
+    QVariantList record;
+    for (const auto &row : std::as_const(rows)) {
+        const auto busName = row.value(QStringLiteral("busName")).toString();
+        if (busName.isEmpty()) {
+            continue;
+        }
+        const auto kind = row.value(QStringLiteral("kind")).toString();
+        const QVariantMap target{
+            {QStringLiteral("name"), busName},
+            {QStringLiteral("label"), row.value(QStringLiteral("label"))},
+            {QStringLiteral("kind"), kind},
+        };
+        record.append(target);
+        if ((row.value(QStringLiteral("direction")).toString() == QLatin1String("output") &&
+             kind != QLatin1String("virtual-source")) ||
+            kind == QLatin1String("virtual-input")) {
+            playback.append(target);
+        }
+    }
+    QVariantList apps;
+    for (const auto &app : root.value(QLatin1String("apps")).toArray()) {
+        apps.append(app.toObject().toVariantMap());
+    }
+    if (apps != m_apps || playback != m_playbackTargets || record != m_recordTargets) {
+        m_apps = std::move(apps);
+        m_playbackTargets = std::move(playback);
+        m_recordTargets = std::move(record);
+        Q_EMIT appsChanged();
     }
 
     const auto keysOf = [](const QList<QVariantMap> &list) {

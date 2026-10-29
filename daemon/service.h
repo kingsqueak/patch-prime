@@ -11,6 +11,7 @@
 #include <QVariantMap>
 
 namespace pp {
+class AppRouter;
 class BusManager;
 class DeviceModel;
 class PipeWireGraph;
@@ -18,9 +19,12 @@ class PipeWireGraph;
 
 // The daemon's D-Bus API, org.kingsqueak.PatchPrime1 at /org/kingsqueak/PatchPrime.
 //
-// GetState() and StateChanged carry JSON: {"connected": bool, "devices": [..]},
-// one object per device whose fields are DeviceModel's role names. Devices are
-// addressed by their key (media.class|node.name).
+// GetState() and StateChanged carry JSON: {"connected": bool, "devices": [..],
+// "apps": [..]}. One object per device whose fields are DeviceModel's role
+// names; devices are addressed by their key (media.class|node.name). One object
+// per application: key ("playback|<binary>" or "record|<binary>"), name, icon,
+// direction ("playback" or "record"), target (a node.name, empty for the
+// system default) and streams (how many are live; 0 when not running).
 //
 // Levels(a{sv}) maps a device key to its per-channel peaks (ad, linear) about
 // 30 times a second, only while at least one client has called WatchLevels().
@@ -34,7 +38,7 @@ public:
     static constexpr auto objectPath = "/org/kingsqueak/PatchPrime";
 
     PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *devices, pp::BusManager *buses,
-                      QObject *parent = nullptr);
+                      pp::AppRouter *apps, QObject *parent = nullptr);
 
 public Q_SLOTS:
     QString GetState() const;
@@ -50,10 +54,16 @@ public Q_SLOTS:
     void SetMono(const QString &key, bool mono);
     // Sends an input to an output or virtual device, or stops sending it.
     void SetSend(const QString &inputKey, const QString &destinationKey, bool enabled);
-    // kind: "sink" (apps play into it; record its monitor, e.g. "Stream Mix")
-    // or "source" (apps record from it like a microphone, e.g. "Chat Mic").
+    // kind: "sink" (apps play into it; record its monitor, e.g. "Stream Mix"),
+    // "source" (apps record from it like a microphone, e.g. "Chat Mic") or
+    // "input" (apps play into it, and it's routed like an input, e.g. "Desktop").
     // Returns the new device's key. Rename with SetLabel, delete with Forget.
     QString CreateVirtual(const QString &name, const QString &kind);
+    // Sends an app's streams to a node (a strip's busName, say), or to the
+    // system default when nodeName is empty. Remembered for the app.
+    void SetAppTarget(const QString &appKey, const QString &nodeName);
+    // Forgets an app that isn't running.
+    void ForgetApp(const QString &appKey);
     void WatchLevels();
     void UnwatchLevels();
 
@@ -70,6 +80,7 @@ private:
     pp::PipeWireGraph *m_graph;
     pp::DeviceModel *m_devices;
     pp::BusManager *m_buses;
+    pp::AppRouter *m_apps;
     QTimer m_stateTimer;
     QTimer m_levelsTimer;
     QDBusServiceWatcher m_watcher;
