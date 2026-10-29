@@ -44,6 +44,9 @@ struct DeviceSettings
     // Inputs only: the keys of the outputs and virtual devices this input is
     // sent to.
     std::vector<std::string> sends;
+    // Inputs only: mix every hardware channel into a one-channel bus, so a mic
+    // on one input of a stereo interface is heard in both ears.
+    bool mono = false;
     // Last seen details, so an offline endpoint can still be shown and matched.
     std::string nodeName;
     std::string mediaClass;

@@ -133,6 +133,13 @@ void PatchPrimeService::SetDefaultOutput(const QString &key, bool throughMixer)
     }
 }
 
+void PatchPrimeService::SetMono(const QString &key, bool mono)
+{
+    if (const int row = rowFor(key); row >= 0) {
+        m_devices->setMono(row, mono);
+    }
+}
+
 void PatchPrimeService::SetSend(const QString &inputKey, const QString &destinationKey,
                                 bool enabled)
 {

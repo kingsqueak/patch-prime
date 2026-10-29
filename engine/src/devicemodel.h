@@ -53,6 +53,7 @@ public:
         BusDefaultRole, // this output's bus is the system default output
         KindRole,       // "hardware", "virtual-sink" or "virtual-source"
         SendsRole,      // inputs: keys of the outputs this input is sent to
+        MonoRole,       // inputs: mixed down to one channel
     };
     Q_ENUM(Role)
 
@@ -78,6 +79,7 @@ public:
     Q_INVOKABLE void setVolume(int row, double volumeDb);
     Q_INVOKABLE void setMuted(int row, bool muted);
     // Sends (or stops sending) an input to an output or virtual device.
+    Q_INVOKABLE void setMono(int row, bool mono);
     Q_INVOKABLE void setSend(int row, const QString &destinationKey, bool enabled);
     // Makes a new virtual device, enabled, and returns its key.
     QString createVirtual(const QString &name, EndpointKind kind);

@@ -84,6 +84,7 @@ private Q_SLOTS:
         {
             DeviceStore store(path);
             store.upsert("mic").sends = {"phones", "mix"};
+            store.upsert("mic").mono = true;
             store.upsert("mix").kind = EndpointKind::VirtualSink;
             store.upsert("chat").kind = EndpointKind::VirtualSource;
             store.upsert("phones");
@@ -92,6 +93,7 @@ private Q_SLOTS:
         DeviceStore store(path);
         QVERIFY(store.load());
         QCOMPARE(store.find("mic")->sends, (std::vector<std::string>{"phones", "mix"}));
+        QVERIFY(store.find("mic")->mono);
         QCOMPARE(store.find("mix")->kind, EndpointKind::VirtualSink);
         QCOMPARE(store.find("chat")->kind, EndpointKind::VirtualSource);
         QCOMPARE(store.find("phones")->kind, EndpointKind::Hardware);

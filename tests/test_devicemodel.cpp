@@ -390,6 +390,12 @@ private Q_SLOTS:
         QCOMPARE(settings.count(), 2);
         QVERIFY(store.find("Audio/Sink|phones") == nullptr); // nothing was saved for it
 
+        // Mono is for inputs only.
+        model.setMono(model.rowForKey("Audio/Source|mic"), true);
+        QVERIFY(role(model, model.rowForKey("Audio/Source|mic"), DeviceModel::MonoRole).toBool());
+        model.setMono(model.rowForKey("Audio/Sink|phones"), true);
+        QVERIFY(!role(model, model.rowForKey("Audio/Sink|phones"), DeviceModel::MonoRole).toBool());
+
         // Deleting the virtual device removes the send to it.
         model.forget(model.rowForKey(mix.toStdString()));
         QCOMPARE(store.find("Audio/Source|mic")->sends,

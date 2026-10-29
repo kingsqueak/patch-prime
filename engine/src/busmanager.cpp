@@ -280,6 +280,10 @@ std::map<std::string, BusManager::Wanted> BusManager::wantedBuses() const
             w.endpoint.channels =
                 static_cast<int>(portsOf(*w.hardwareNodeId, input ? "out" : "in", false).size());
         }
+        if (settings->mono && w.endpoint.direction == Direction::Input) {
+            w.endpoint.channels = 1;
+            w.endpoint.positions = {"MONO"};
+        }
         out[busNameFor(w.endpoint, *settings)] = std::move(w);
     }
     return out;

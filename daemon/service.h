@@ -47,6 +47,7 @@ public Q_SLOTS:
     // that follow the default play through the mixer. Otherwise make the
     // hardware output itself the default.
     void SetDefaultOutput(const QString &key, bool throughMixer);
+    void SetMono(const QString &key, bool mono);
     // Sends an input to an output or virtual device, or stops sending it.
     void SetSend(const QString &inputKey, const QString &destinationKey, bool enabled);
     // kind: "sink" (apps play into it; record its monitor, e.g. "Stream Mix")

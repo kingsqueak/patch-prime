@@ -20,6 +20,7 @@ QQC2.Frame {
     readonly property string direction: model.direction
     readonly property bool busIsDefault: model.busIsDefault
     readonly property string kind: model.kind
+    readonly property bool mono: model.mono
     readonly property real volumeDb: model.volumeDb
     readonly property var levels: model.levels
     readonly property int channels: Math.max(1, model.channels)
@@ -144,6 +145,22 @@ QQC2.Frame {
             Binding on checked {
                 value: strip.muted
             }
+        }
+
+        QQC2.Button {
+            Layout.alignment: Qt.AlignHCenter
+            visible: strip.direction === "input"
+            checkable: true
+            icon.name: "audio-input-microphone"
+            text: qsTr("Mono")
+            enabled: Devices.daemonRunning
+            onToggled: Devices.setMono(strip.key, checked)
+            Binding on checked {
+                value: strip.mono
+            }
+            QQC2.ToolTip.text: qsTr("Mix all of this input's channels into one, heard in both ears. For a microphone on one input of a stereo interface.")
+            QQC2.ToolTip.visible: hovered
+            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
         }
 
         QQC2.Button {

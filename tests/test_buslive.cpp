@@ -319,6 +319,17 @@ private Q_SLOTS:
         player.waitForFinished();
         buses.setMetering(false);
 
+        // Mono: the input bus is rebuilt with one channel; both mic channels
+        // feed it, and it feeds both channels of the mix.
+        devices.setMono(devices.rowForKey(micKey), true);
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                const auto *bus = nodeNamed(m_graph, inBus);
+                return bus != nullptr && prop(*bus, "audio.channels") == "1" &&
+                       linksBetween(mic, inBus) == 2 && linksBetween(inBus, mixNode) == 2;
+            },
+            5000));
+
         // Unsend: the links go. Delete the mix and disable the mic: all gone.
         devices.setSend(devices.rowForKey(micKey), mixKey, false);
         QVERIFY(QTest::qWaitFor([&] { return linksBetween(inBus, mixNode) == 0; }, 5000));

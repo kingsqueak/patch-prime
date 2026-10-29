@@ -190,6 +190,8 @@ QVariant DeviceModel::data(const QModelIndex &index, int role) const
         }
         return sends;
     }
+    case MonoRole:
+        return saved != nullptr && saved->mono;
     case BusDefaultRole:
         return saved != nullptr && saved->enabled && e.direction == Direction::Output &&
                !m_defaultSink.empty() && m_defaultSink == busNameFor(e, *saved);
@@ -224,6 +226,7 @@ QHash<int, QByteArray> DeviceModel::roleNames() const
         {BusDefaultRole, "busIsDefault"},
         {KindRole, "kind"},
         {SendsRole, "sends"},
+        {MonoRole, "mono"},
     };
 }
 
@@ -319,6 +322,24 @@ void DeviceModel::forget(int row)
     if (!m_rows.empty()) {
         Q_EMIT dataChanged(index(0), index(rowCount() - 1), {SendsRole});
     }
+}
+
+void DeviceModel::setMono(int row, bool mono)
+{
+    if (row < 0 || row >= rowCount()) {
+        return;
+    }
+    const auto &r = m_rows[static_cast<std::size_t>(row)];
+    if (r.endpoint.direction != Direction::Input) {
+        return;
+    }
+    m_store->upsert(r.endpoint.key);
+    remember(r, r.nodeId.has_value());
+    m_store->upsert(r.endpoint.key).mono = mono;
+    saveStore();
+    const auto i = index(row);
+    Q_EMIT dataChanged(i, i, {MonoRole, SavedRole});
+    Q_EMIT settingsChanged(qs(r.endpoint.key));
 }
 
 void DeviceModel::setSend(int row, const QString &destinationKey, bool enabled)

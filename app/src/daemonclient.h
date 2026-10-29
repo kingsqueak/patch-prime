@@ -47,6 +47,7 @@ public:
     Q_INVOKABLE void setMuted(const QString &key, bool muted);
     Q_INVOKABLE void forget(const QString &key);
     Q_INVOKABLE void setDefaultOutput(const QString &key, bool throughMixer);
+    Q_INVOKABLE void setMono(const QString &key, bool mono);
     Q_INVOKABLE void setSend(const QString &inputKey, const QString &destinationKey, bool enabled);
     // kind: "sink" or "source"
     Q_INVOKABLE void createVirtual(const QString &name, const QString &kind);

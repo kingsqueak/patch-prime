@@ -218,6 +218,11 @@ void DaemonClient::setDefaultOutput(const QString &key, bool throughMixer)
     call(QStringLiteral("SetDefaultOutput"), {key, throughMixer});
 }
 
+void DaemonClient::setMono(const QString &key, bool mono)
+{
+    call(QStringLiteral("SetMono"), {key, mono});
+}
+
 void DaemonClient::setSend(const QString &inputKey, const QString &destinationKey, bool enabled)
 {
     call(QStringLiteral("SetSend"), {inputKey, destinationKey, enabled});
