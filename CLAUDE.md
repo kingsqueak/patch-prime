@@ -25,3 +25,4 @@ C++23 (for `std::expected` and `std::print`), CMake + Ninja, Qt 6.10 (QML + Kiri
 
 ## GitHub
 `Kingsqueak/patch-prime` over SSH.
+- Solo project: commit straight to `main`, with no feature branches or PRs, until the app is usable end to end. Every commit must build warning-free with GCC and Clang and pass the tests. Push after each working step.
