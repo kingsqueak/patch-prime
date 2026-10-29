@@ -281,6 +281,41 @@ private Q_SLOTS:
         QVERIFY(role(model, 2, DeviceModel::SectionStartRole).toBool());
     }
 
+    void volumeAndMute()
+    {
+        DeviceStore store(m_path);
+        DeviceModel model(&store);
+        QAbstractItemModelTester tester(&model);
+        QSignalSpy settings(&model, &DeviceModel::settingsChanged);
+        model.upsertNode(sinkNode(10, "speakers", nullptr), nullptr);
+        model.setEnabled(0, true);
+        model.setVolume(0, -9.5);
+        model.setVolume(0, -9.5); // unchanged: no signal
+        model.setVolume(1, 0.0);  // no such row
+        model.setMuted(0, true);
+        QCOMPARE(settings.count(), 3);
+        QCOMPARE(role(model, 0, DeviceModel::VolumeRole).toDouble(), -9.5);
+        QVERIFY(role(model, 0, DeviceModel::MutedRole).toBool());
+        model.setVolume(0, 40.0); // clamped
+        QCOMPARE(role(model, 0, DeviceModel::VolumeRole).toDouble(),
+                 DeviceModel::maximumVolumeDb());
+        QCOMPARE(settings.last().at(0).toString(), QStringLiteral("Audio/Sink|speakers"));
+    }
+
+    void volumeIsSavedEvenWhenTheModelGoesAway()
+    {
+        {
+            DeviceStore store(m_path);
+            DeviceModel model(&store);
+            model.upsertNode(sinkNode(10, "speakers", nullptr), nullptr);
+            model.setEnabled(0, true);
+            model.setVolume(0, -3.0); // saved later, or when the model is destroyed
+        }
+        DeviceStore store(m_path);
+        QVERIFY(store.load());
+        QCOMPARE(store.find("Audio/Sink|speakers")->volumeDb, -3.0);
+    }
+
     void defaults()
     {
         DeviceStore store(m_path);

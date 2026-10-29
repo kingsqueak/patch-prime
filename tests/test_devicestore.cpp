@@ -31,6 +31,9 @@ private Q_SLOTS:
             auto &d = store.upsert("Audio/Source|mic");
             d.enabled = true;
             d.label = "Desk mic";
+            d.volumeDb = -12.5;
+            d.muted = true;
+            d.positions = {"MONO"};
             d.nodeName = "mic";
             d.mediaClass = "Audio/Source";
             d.direction = Direction::Input;
@@ -50,6 +53,10 @@ private Q_SLOTS:
         QVERIFY(d != nullptr);
         QVERIFY(d->enabled);
         QCOMPARE(d->label, "Desk mic");
+        QCOMPARE(d->volumeDb, -12.5);
+        QVERIFY(d->muted);
+        QCOMPARE(d->positions, std::vector<std::string>{"MONO"});
+        QCOMPARE(d->busId.size(), std::size_t{8}); // made by upsert, kept by save/load
         QCOMPARE(d->direction, Direction::Input);
         QCOMPARE(d->channels, 1);
         QCOMPARE(d->signature.deviceSerial, "SN1");
@@ -68,6 +75,16 @@ private Q_SLOTS:
         DeviceStore store(path);
         QVERIFY(!store.load());
         QVERIFY(!store.lastError().isEmpty());
+    }
+
+    void busIdSurvivesRekey()
+    {
+        DeviceStore store(QStringLiteral("/dev/null/unused"));
+        const auto id = store.upsert("a").busId;
+        QVERIFY(!id.empty());
+        QVERIFY(store.upsert("b").busId != id);
+        QVERIFY(store.rekey("a", "c"));
+        QCOMPARE(store.find("c")->busId, id);
     }
 
     void rekey()

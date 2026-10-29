@@ -12,12 +12,7 @@ Kirigami.ScrollablePage {
 
     title: qsTr("Devices")
 
-    header: Kirigami.InlineMessage {
-        visible: !Devices.connected
-        position: Kirigami.InlineMessage.Header
-        type: Kirigami.MessageType.Warning
-        text: qsTr("Not connected to PipeWire. Retrying…")
-    }
+    header: EngineMessage {}
 
     ListView {
         id: list
@@ -29,7 +24,8 @@ Kirigami.ScrollablePage {
             width: parent.width - Kirigami.Units.gridUnit * 4
             visible: list.count === 0
             icon.name: "audio-card"
-            text: Devices.connected ? qsTr("No audio devices") : qsTr("Waiting for PipeWire")
+            text: !Devices.daemonRunning ? qsTr("Waiting for the engine")
+                : Devices.connected ? qsTr("No audio devices") : qsTr("Waiting for PipeWire")
         }
 
         // Section headers are drawn by the delegate, not ListView.section: with
@@ -40,8 +36,8 @@ Kirigami.ScrollablePage {
 
             // Role values come through `model`, which follows the row when rows
             // are inserted above it, rather than one required property per role.
-            required property int index
             required property var model
+            readonly property string key: model.key
             readonly property string customLabel: model.customLabel
             readonly property string description: model.description
             readonly property string nodeName: model.nodeName
@@ -74,7 +70,7 @@ Kirigami.ScrollablePage {
 
                     QQC2.CheckBox {
                         checked: row.isEnabled
-                        onToggled: Devices.setEnabled(row.index, checked)
+                        onToggled: Devices.setEnabled(row.key, checked)
                         QQC2.ToolTip.text: qsTr("Use this device in Patch Prime")
                         QQC2.ToolTip.visible: hovered
                         QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -96,7 +92,7 @@ Kirigami.ScrollablePage {
                             Layout.fillWidth: true
                             text: row.customLabel
                             placeholderText: row.description
-                            onEditingFinished: Devices.setLabel(row.index, text)
+                            onEditingFinished: Devices.setLabel(row.key, text)
                             Accessible.name: qsTr("Label for %1").arg(row.description)
                         }
 
@@ -142,7 +138,7 @@ Kirigami.ScrollablePage {
                         icon.name: "edit-delete-remove"
                         text: qsTr("Forget")
                         display: QQC2.AbstractButton.IconOnly
-                        onClicked: Devices.forget(row.index)
+                        onClicked: Devices.forget(row.key)
                         QQC2.ToolTip.text: qsTr("Forget this device's settings")
                         QQC2.ToolTip.visible: hovered
                         QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay

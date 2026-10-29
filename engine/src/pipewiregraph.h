@@ -8,11 +8,24 @@
 #include <QObject>
 #include <QTimer>
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace pp {
+
+// Peak levels written by a meter stream on the PipeWire data thread and read
+// (and reset) on the main thread. Linear amplitude, 1.0 = 0 dBFS.
+struct MeterLevels
+{
+    explicit MeterLevels(std::size_t channels) : peaks(channels) {}
+    std::vector<std::atomic<float>> peaks;
+
+    // Returns the peaks since the last call and resets them.
+    std::vector<float> take();
+};
 
 // A live mirror of the PipeWire graph: nodes, devices, ports, links and the
 // "default" metadata.
@@ -53,6 +66,28 @@ public:
     [[nodiscard]] const std::string &defaultSourceName() const { return m_defaultSource; }
 
     static constexpr int reconnectInterval() { return 2000; }
+
+    // Commands. Each returns false when not connected or when PipeWire refuses
+    // the request outright; the result shows up later as graph events.
+
+    // Creates an object through a server-side factory, e.g. "adapter" for a
+    // null-sink node or "link-factory" for a link. Set object.linger=true in
+    // props to keep it after this client disconnects.
+    bool createObject(const std::string &factory, const std::string &type, std::uint32_t version,
+                      const Properties &props);
+    bool createNode(const Properties &props);
+    bool createLink(std::uint32_t outputNode, std::uint32_t outputPort, std::uint32_t inputNode,
+                    std::uint32_t inputPort, bool linger);
+    // Asks the server to destroy any object (needs permission on it).
+    bool destroyObject(std::uint32_t id);
+    // Sets the node's Props: one linear volume per channel, and mute.
+    bool setNodeVolume(std::uint32_t nodeId, const std::vector<float> &channelVolumes, bool mute);
+
+    // Starts a small capture stream on the monitor of the sink named
+    // targetNodeName and returns its peak levels. Meters belong to the current
+    // connection: after a reconnect they must be added again.
+    std::shared_ptr<MeterLevels> addMeter(const std::string &targetNodeName, int channels);
+    void removeMeter(const std::shared_ptr<MeterLevels> &meter);
 
 Q_SIGNALS:
     void connectedChanged(bool connected);

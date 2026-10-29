@@ -53,6 +53,7 @@ Endpoint endpointFromSettings(const std::string &key, const DeviceSettings &s)
     e.isVirtual = s.isVirtual;
     e.description = s.description.empty() ? s.nodeName : s.description;
     e.channels = s.channels;
+    e.positions = s.positions;
     e.signature = s.signature;
     return e;
 }
@@ -66,6 +67,18 @@ DeviceModel::DeviceModel(DeviceStore *store, QObject *parent)
         m_rows.push_back({.endpoint = endpointFromSettings(key, settings), .nodeId = {}});
     }
     std::ranges::sort(m_rows, &DeviceModel::lessThan);
+
+    // Fader moves arrive many times a second; write the file once they settle.
+    m_saveTimer.setSingleShot(true);
+    m_saveTimer.setInterval(500);
+    connect(&m_saveTimer, &QTimer::timeout, this, &DeviceModel::saveStore);
+}
+
+DeviceModel::~DeviceModel()
+{
+    if (m_saveTimer.isActive()) {
+        saveStore(); // a fader move still waiting to be written
+    }
 }
 
 void DeviceModel::attach(PipeWireGraph *graph)
@@ -159,6 +172,12 @@ QVariant DeviceModel::data(const QModelIndex &index, int role) const
         return isDefault(row);
     case SavedRole:
         return saved != nullptr;
+    case VolumeRole:
+        return saved != nullptr ? saved->volumeDb : 0.0;
+    case MutedRole:
+        return saved != nullptr && saved->muted;
+    case BusIdRole:
+        return qs(saved != nullptr ? saved->busId : std::string{});
     case SectionStartRole:
         return index.row() == 0 ||
                m_rows[static_cast<std::size_t>(index.row()) - 1].endpoint.direction != e.direction;
@@ -184,6 +203,9 @@ QHash<int, QByteArray> DeviceModel::roleNames() const
         {DefaultRole, "isDefault"},
         {SavedRole, "saved"},
         {SectionStartRole, "sectionStart"},
+        {VolumeRole, "volumeDb"},
+        {MutedRole, "muted"},
+        {BusIdRole, "busId"},
     };
 }
 
@@ -198,7 +220,41 @@ void DeviceModel::setEnabled(int row, bool enabled)
     m_store->upsert(r.endpoint.key).enabled = enabled;
     saveStore();
     const auto i = index(row);
-    Q_EMIT dataChanged(i, i, {EnabledRole, SavedRole});
+    Q_EMIT dataChanged(i, i, {EnabledRole, SavedRole, BusIdRole});
+    Q_EMIT settingsChanged(qs(r.endpoint.key));
+}
+
+void DeviceModel::setVolume(int row, double volumeDb)
+{
+    if (row < 0 || row >= rowCount()) {
+        return;
+    }
+    volumeDb = std::clamp(volumeDb, minimumVolumeDb(), maximumVolumeDb());
+    const auto &r = m_rows[static_cast<std::size_t>(row)];
+    if (const auto *saved = m_store->find(r.endpoint.key);
+        saved != nullptr && saved->volumeDb == volumeDb) {
+        return;
+    }
+    m_store->upsert(r.endpoint.key).volumeDb = volumeDb;
+    saveLater();
+    const auto i = index(row);
+    Q_EMIT dataChanged(i, i, {VolumeRole, SavedRole});
+    Q_EMIT settingsChanged(qs(r.endpoint.key));
+}
+
+void DeviceModel::setMuted(int row, bool muted)
+{
+    if (row < 0 || row >= rowCount()) {
+        return;
+    }
+    const auto &r = m_rows[static_cast<std::size_t>(row)];
+    m_store->upsert(r.endpoint.key);
+    remember(r, r.nodeId.has_value());
+    m_store->upsert(r.endpoint.key).muted = muted;
+    saveStore();
+    const auto i = index(row);
+    Q_EMIT dataChanged(i, i, {MutedRole, SavedRole});
+    Q_EMIT settingsChanged(qs(r.endpoint.key));
 }
 
 void DeviceModel::setLabel(int row, const QString &label)
@@ -218,6 +274,7 @@ void DeviceModel::setLabel(int row, const QString &label)
     saveStore();
     const auto i = index(row);
     Q_EMIT dataChanged(i, i, {LabelRole, CustomLabelRole, Qt::DisplayRole, SavedRole});
+    Q_EMIT settingsChanged(qs(r.endpoint.key));
 }
 
 void DeviceModel::forget(int row)
@@ -226,10 +283,12 @@ void DeviceModel::forget(int row)
         return;
     }
     const auto &r = m_rows[static_cast<std::size_t>(row)];
+    const auto key = qs(r.endpoint.key);
     if (!m_store->remove(r.endpoint.key)) {
         return;
     }
     saveStore();
+    Q_EMIT settingsChanged(key);
     if (r.nodeId) {
         const auto i = index(row);
         Q_EMIT dataChanged(i, i);
@@ -269,6 +328,8 @@ void DeviceModel::upsertNode(const GraphObject &node, const GraphObject *device)
                    endpoint->nodeName.c_str());
             replaceRow(candidate, row);
             remember(row, true);
+            Q_EMIT settingsChanged(qs(old.key));
+            Q_EMIT settingsChanged(qs(endpoint->key));
             Q_EMIT reattached(label, qs(old.nodeName), qs(endpoint->nodeName));
             return;
         }
@@ -441,14 +502,15 @@ void DeviceModel::remember(const Row &row, bool seenNow)
     s.isVirtual = e.isVirtual;
     s.description = e.description;
     s.channels = e.channels;
+    s.positions = e.positions;
     // An offline row carries the saved signature; only a live one refreshes it.
     if (row.nodeId) {
         s.signature = e.signature;
     }
-    const bool detailsChanged = s.nodeName != before.nodeName ||
-                                s.mediaClass != before.mediaClass ||
-                                s.description != before.description ||
-                                s.channels != before.channels || !(s.signature == before.signature);
+    const bool detailsChanged =
+        s.nodeName != before.nodeName || s.mediaClass != before.mediaClass ||
+        s.description != before.description || s.channels != before.channels ||
+        s.positions != before.positions || !(s.signature == before.signature);
     if (seenNow) {
         s.lastSeen = QDateTime::currentDateTimeUtc();
     }
@@ -457,8 +519,14 @@ void DeviceModel::remember(const Row &row, bool seenNow)
     }
 }
 
+void DeviceModel::saveLater()
+{
+    m_saveTimer.start();
+}
+
 void DeviceModel::saveStore()
 {
+    m_saveTimer.stop();
     if (!m_store->save()) {
         qCWarning(lcDevices, "could not save %s: %s", qPrintable(m_store->path()),
                   qPrintable(m_store->lastError()));

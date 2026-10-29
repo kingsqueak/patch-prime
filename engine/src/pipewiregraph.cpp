@@ -9,9 +9,16 @@
 
 #include <pipewire/extensions/metadata.h>
 #include <pipewire/pipewire.h>
+#include <spa/param/audio/format-utils.h>
+#include <spa/param/props.h>
+#include <spa/pod/builder.h>
 #include <spa/utils/result.h>
 
+#include <algorithm>
+#include <array>
 #include <cerrno>
+#include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <mutex>
 #include <string_view>
@@ -36,7 +43,35 @@ Properties toProperties(const spa_dict *dict)
     return out;
 }
 
+pw_properties *toPwProperties(const Properties &props)
+{
+    pw_properties *out = pw_properties_new(nullptr, nullptr);
+    for (const auto &[key, value] : props) {
+        pw_properties_set(out, key.c_str(), value.c_str());
+    }
+    return out;
+}
+
+// Lock-free "store the larger value", for peaks written on the data thread.
+void atomicMax(std::atomic<float> &target, float value)
+{
+    float current = target.load(std::memory_order_relaxed);
+    while (value > current &&
+           !target.compare_exchange_weak(current, value, std::memory_order_relaxed)) {
+    }
+}
+
 } // namespace
+
+std::vector<float> MeterLevels::take()
+{
+    std::vector<float> out;
+    out.reserve(peaks.size());
+    for (auto &peak : peaks) {
+        out.push_back(peak.exchange(0.0F, std::memory_order_relaxed));
+    }
+    return out;
+}
 
 // Everything owned by one connection to the server. All members except owner
 // and generation are touched only on the PipeWire thread, or on the main thread
@@ -71,8 +106,24 @@ struct PipeWireGraph::Session
         QMetaObject::invokeMethod(owner, std::forward<F>(function), Qt::QueuedConnection);
     }
 
+    // A proxy for an object we asked a factory to create. It's kept until the
+    // server removes the object or the session ends.
+    struct Created
+    {
+        Session *session = nullptr;
+        pw_proxy *proxy = nullptr;
+        spa_hook listener{};
+    };
+
+    // A capture stream measuring peaks on a sink's monitor.
+    struct Meter
+    {
+        pw_stream *stream = nullptr;
+        spa_hook listener{};
+        std::shared_ptr<MeterLevels> levels;
+    };
+
     void bind(const GraphObject &object, std::uint32_t version);
-    void unbind(std::unique_ptr<Bound> bound);
 
     static void onCoreError(void *data, std::uint32_t id, int seq, int res, const char *message);
     static void onGlobal(void *data, std::uint32_t id, std::uint32_t permissions, const char *type,
@@ -82,6 +133,9 @@ struct PipeWireGraph::Session
     static void onDeviceInfo(void *data, const pw_device_info *info);
     static int onMetadataProperty(void *data, std::uint32_t subject, const char *key,
                                   const char *type, const char *value);
+    static void onCreatedRemoved(void *data);
+    static void onCreatedDestroy(void *data);
+    static void onMeterProcess(void *data);
 
     void announce(Bound &bound, const spa_dict *props, bool propsChanged);
 
@@ -98,6 +152,8 @@ struct PipeWireGraph::Session
 
     std::map<std::uint32_t, std::unique_ptr<Bound>> bound; // nodes, devices, metadata
     std::map<std::uint32_t, bool> plain;                   // ports and links, announced at once
+    std::map<pw_proxy *, std::unique_ptr<Created>> created;
+    std::map<const MeterLevels *, std::unique_ptr<Meter>> meters;
 };
 
 namespace {
@@ -139,6 +195,21 @@ const pw_metadata_events metadataEvents = [] {
     return e;
 }();
 
+const pw_proxy_events createdEvents = [] {
+    pw_proxy_events e{};
+    e.version = PW_VERSION_PROXY_EVENTS;
+    e.removed = &PipeWireGraph::Session::onCreatedRemoved;
+    e.destroy = &PipeWireGraph::Session::onCreatedDestroy;
+    return e;
+}();
+
+const pw_stream_events meterEvents = [] {
+    pw_stream_events e{};
+    e.version = PW_VERSION_STREAM_EVENTS;
+    e.process = &PipeWireGraph::Session::onMeterProcess;
+    return e;
+}();
+
 } // namespace
 
 std::string PipeWireGraph::Session::open()
@@ -175,6 +246,17 @@ PipeWireGraph::Session::~Session()
         return;
     }
     pw_thread_loop_lock(loop);
+    for (auto &[levels, meter] : meters) {
+        spa_hook_remove(&meter->listener);
+        pw_stream_destroy(meter->stream);
+    }
+    meters.clear();
+    // Lingering objects (buses, links) stay on the server after this.
+    for (auto &[proxy, c] : created) {
+        spa_hook_remove(&c->listener);
+        pw_proxy_destroy(proxy);
+    }
+    created.clear();
     for (auto &[id, b] : bound) {
         spa_hook_remove(&b->listener);
         pw_proxy_destroy(b->proxy);
@@ -335,6 +417,52 @@ int PipeWireGraph::Session::onMetadataProperty(void *data, std::uint32_t subject
     return 0;
 }
 
+void PipeWireGraph::Session::onCreatedRemoved(void *data)
+{
+    // The server removed the object; our proxy has to be destroyed too.
+    pw_proxy_destroy(static_cast<Created *>(data)->proxy);
+}
+
+void PipeWireGraph::Session::onCreatedDestroy(void *data)
+{
+    auto *c = static_cast<Created *>(data);
+    spa_hook_remove(&c->listener);
+    c->session->created.erase(c->proxy); // frees c
+}
+
+// Realtime data thread: no allocation, no locks.
+void PipeWireGraph::Session::onMeterProcess(void *data)
+{
+    auto *meter = static_cast<Meter *>(data);
+    pw_buffer *buffer = pw_stream_dequeue_buffer(meter->stream);
+    if (buffer == nullptr) {
+        return;
+    }
+    const spa_data &d = buffer->buffer->datas[0];
+    auto &peaks = meter->levels->peaks;
+    if (d.data != nullptr && d.chunk != nullptr && !peaks.empty()) {
+        const auto *bytes = static_cast<const std::byte *>(d.data) + d.chunk->offset;
+        const auto *samples = reinterpret_cast<const float *>(bytes);
+        const std::size_t count = d.chunk->size / sizeof(float);
+        const std::size_t channels = peaks.size();
+        std::array<float, 64> local{};
+        const std::size_t tracked = std::min(channels, local.size());
+        for (std::size_t i = 0; i < count; ++i) {
+            const std::size_t channel = i % channels;
+            // Bounds are checked by hand: .at() could throw on the realtime thread.
+            if (channel < tracked) {
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
+                local[channel] = std::max(local[channel], std::fabs(samples[i]));
+            }
+        }
+        for (std::size_t c = 0; c < tracked; ++c) {
+            atomicMax(peaks[c],
+                      local[c]); // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
+        }
+    }
+    pw_stream_queue_buffer(meter->stream, buffer);
+}
+
 PipeWireGraph::PipeWireGraph(QObject *parent) : QObject(parent)
 {
     static std::once_flag once;
@@ -410,6 +538,154 @@ void PipeWireGraph::disconnectNow()
         m_connected = false;
         Q_EMIT connectedChanged(false);
     }
+}
+
+bool PipeWireGraph::createObject(const std::string &factory, const std::string &type,
+                                 std::uint32_t version, const Properties &props)
+{
+    if (!m_session) {
+        return false;
+    }
+    auto &session = *m_session;
+    pw_thread_loop_lock(session.loop);
+    pw_properties *properties = toPwProperties(props);
+    auto *proxy = static_cast<pw_proxy *>(pw_core_create_object(
+        session.core, factory.c_str(), type.c_str(), version, &properties->dict, 0));
+    pw_properties_free(properties);
+    if (proxy != nullptr) {
+        auto c = std::make_unique<Session::Created>();
+        c->session = &session;
+        c->proxy = proxy;
+        pw_proxy_add_listener(proxy, &c->listener, &createdEvents, c.get());
+        session.created[proxy] = std::move(c);
+    }
+    pw_thread_loop_unlock(session.loop);
+    return proxy != nullptr;
+}
+
+bool PipeWireGraph::createNode(const Properties &props)
+{
+    return createObject("adapter", PW_TYPE_INTERFACE_Node, PW_VERSION_NODE, props);
+}
+
+bool PipeWireGraph::createLink(std::uint32_t outputNode, std::uint32_t outputPort,
+                               std::uint32_t inputNode, std::uint32_t inputPort, bool linger)
+{
+    return createObject("link-factory", PW_TYPE_INTERFACE_Link, PW_VERSION_LINK,
+                        {{PW_KEY_LINK_OUTPUT_NODE, std::to_string(outputNode)},
+                         {PW_KEY_LINK_OUTPUT_PORT, std::to_string(outputPort)},
+                         {PW_KEY_LINK_INPUT_NODE, std::to_string(inputNode)},
+                         {PW_KEY_LINK_INPUT_PORT, std::to_string(inputPort)},
+                         {PW_KEY_OBJECT_LINGER, linger ? "true" : "false"}});
+}
+
+bool PipeWireGraph::destroyObject(std::uint32_t id)
+{
+    if (!m_session) {
+        return false;
+    }
+    pw_thread_loop_lock(m_session->loop);
+    const int res = pw_registry_destroy(m_session->registry, id);
+    pw_thread_loop_unlock(m_session->loop);
+    return res >= 0;
+}
+
+bool PipeWireGraph::setNodeVolume(std::uint32_t nodeId, const std::vector<float> &channelVolumes,
+                                  bool mute)
+{
+    if (!m_session || channelVolumes.empty()) {
+        return false;
+    }
+    auto &session = *m_session;
+    pw_thread_loop_lock(session.loop);
+    bool ok = false;
+    if (auto it = session.bound.find(nodeId);
+        it != session.bound.end() && it->second->object.type == PW_TYPE_INTERFACE_Node) {
+        std::array<std::uint8_t, 1024> buffer{};
+        spa_pod_builder b{};
+        spa_pod_builder_init(&b, buffer.data(), static_cast<std::uint32_t>(buffer.size()));
+        spa_pod_frame frame{};
+        spa_pod_builder_push_object(&b, &frame, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+        spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
+        spa_pod_builder_array(&b, sizeof(float), SPA_TYPE_Float,
+                              static_cast<std::uint32_t>(channelVolumes.size()),
+                              channelVolumes.data());
+        spa_pod_builder_prop(&b, SPA_PROP_mute, 0);
+        spa_pod_builder_bool(&b, mute);
+        auto *param = static_cast<spa_pod *>(spa_pod_builder_pop(&b, &frame));
+        ok = pw_node_set_param(reinterpret_cast<pw_node *>(it->second->proxy), SPA_PARAM_Props, 0,
+                               param) >= 0;
+    }
+    pw_thread_loop_unlock(session.loop);
+    return ok;
+}
+
+std::shared_ptr<MeterLevels> PipeWireGraph::addMeter(const std::string &targetNodeName,
+                                                     int channels)
+{
+    if (!m_session || channels <= 0) {
+        return nullptr;
+    }
+    auto &session = *m_session;
+    auto meter = std::make_unique<Session::Meter>();
+    meter->levels = std::make_shared<MeterLevels>(static_cast<std::size_t>(channels));
+
+    pw_properties *props = toPwProperties({
+        {PW_KEY_MEDIA_TYPE, "Audio"},
+        {PW_KEY_MEDIA_CATEGORY, "Monitor"},
+        {PW_KEY_NODE_NAME, "patchprime.meter." + targetNodeName},
+        {PW_KEY_TARGET_OBJECT, targetNodeName},
+        {PW_KEY_STREAM_CAPTURE_SINK, "true"},
+        {PW_KEY_NODE_DONT_RECONNECT, "true"},
+        {PW_KEY_NODE_PASSIVE, "true"},
+        {"stream.dont-remix", "true"},
+        {"node.latency", "1024/48000"},
+    });
+
+    pw_thread_loop_lock(session.loop);
+    meter->stream = pw_stream_new(session.core, "Patch Prime meter", props); // takes props
+    bool ok = meter->stream != nullptr;
+    if (ok) {
+        pw_stream_add_listener(meter->stream, &meter->listener, &meterEvents, meter.get());
+        std::array<std::uint8_t, 1024> buffer{};
+        spa_pod_builder b{};
+        spa_pod_builder_init(&b, buffer.data(), static_cast<std::uint32_t>(buffer.size()));
+        spa_audio_info_raw info{};
+        info.format = SPA_AUDIO_FORMAT_F32;
+        info.channels = static_cast<std::uint32_t>(channels);
+        std::array<const spa_pod *, 1> params{
+            spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &info)};
+        const auto flags = static_cast<pw_stream_flags>(
+            PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS);
+        ok = pw_stream_connect(meter->stream, PW_DIRECTION_INPUT, PW_ID_ANY, flags, params.data(),
+                               static_cast<std::uint32_t>(params.size())) >= 0;
+        if (!ok) {
+            spa_hook_remove(&meter->listener);
+            pw_stream_destroy(meter->stream);
+        }
+    }
+    std::shared_ptr<MeterLevels> levels;
+    if (ok) {
+        levels = meter->levels;
+        session.meters[levels.get()] = std::move(meter);
+    }
+    pw_thread_loop_unlock(session.loop);
+    return levels;
+}
+
+void PipeWireGraph::removeMeter(const std::shared_ptr<MeterLevels> &meter)
+{
+    if (!m_session || !meter) {
+        return;
+    }
+    auto &session = *m_session;
+    pw_thread_loop_lock(session.loop);
+    if (auto it = session.meters.find(meter.get()); it != session.meters.end()) {
+        spa_hook_remove(&it->second->listener);
+        pw_stream_destroy(it->second->stream);
+        session.meters.erase(it);
+    }
+    pw_thread_loop_unlock(session.loop);
 }
 
 std::map<std::uint32_t, GraphObject> *PipeWireGraph::mapFor(const std::string &type)

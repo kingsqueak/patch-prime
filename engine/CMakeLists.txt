@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: 2026 KC2RGW Chris
 
 add_library(patchprime-engine STATIC
+    src/busmanager.cpp
+    src/busmanager.h
     src/devicemodel.cpp
     src/devicemodel.h
     src/devicestore.cpp

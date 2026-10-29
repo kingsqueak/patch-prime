@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 KC2RGW Chris
+
+[Unit]
+Description=Patch Prime audio engine
+Documentation=https://github.com/kingsqueak/patch-prime
+After=pipewire.service wireplumber.service
+Wants=pipewire.service wireplumber.service
+
+[Service]
+Type=dbus
+BusName=org.kingsqueak.PatchPrime
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/patchprimed
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

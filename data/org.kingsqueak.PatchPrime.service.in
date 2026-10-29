@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 KC2RGW Chris
+
+[D-BUS Service]
+Name=org.kingsqueak.PatchPrime
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/patchprimed
+SystemdService=patchprimed.service

@@ -7,6 +7,7 @@
 #include "endpoint.h"
 
 #include <QAbstractListModel>
+#include <QTimer>
 
 #include <optional>
 #include <vector>
@@ -46,10 +47,18 @@ public:
         DefaultRole,      // the system default sink or source
         SavedRole,        // has an entry in the store
         SectionStartRole, // first row of its direction; the QML draws the header
+        VolumeRole,       // fader position in dB; minimumVolumeDb() means silent
+        MutedRole,
+        BusIdRole,
     };
     Q_ENUM(Role)
 
     explicit DeviceModel(DeviceStore *store, QObject *parent = nullptr);
+    ~DeviceModel() override;
+    DeviceModel(const DeviceModel &) = delete;
+    DeviceModel &operator=(const DeviceModel &) = delete;
+    DeviceModel(DeviceModel &&) = delete;
+    DeviceModel &operator=(DeviceModel &&) = delete;
 
     // Follows a live graph. Without one, feed the model with the node functions
     // below (that's what the tests do).
@@ -63,6 +72,20 @@ public:
     Q_INVOKABLE void setLabel(int row, const QString &label);
     // Drops the saved settings. An offline endpoint disappears from the list.
     Q_INVOKABLE void forget(int row);
+    Q_INVOKABLE void setVolume(int row, double volumeDb);
+    Q_INVOKABLE void setMuted(int row, bool muted);
+
+    // The fader's bottom: at or below this the bus is silent.
+    static constexpr double minimumVolumeDb() { return -60.0; }
+    static constexpr double maximumVolumeDb() { return 12.0; }
+
+    struct Row
+    {
+        Endpoint endpoint;
+        std::optional<std::uint32_t> nodeId; // set while online
+    };
+    [[nodiscard]] const std::vector<Row> &rows() const { return m_rows; }
+    [[nodiscard]] const DeviceStore &store() const { return *m_store; }
 
     [[nodiscard]] bool isConnected() const { return m_connected; }
 
@@ -75,16 +98,13 @@ public:
 
 Q_SIGNALS:
     void connectedChanged();
+    // Anything the bus manager acts on changed for this endpoint: enabled,
+    // label, volume, mute, forgotten, or its key moved (then both keys).
+    void settingsChanged(const QString &key);
     // A saved endpoint was recognised under a new node.name.
     void reattached(const QString &label, const QString &oldNodeName, const QString &newNodeName);
 
 private:
-    struct Row
-    {
-        Endpoint endpoint;
-        std::optional<std::uint32_t> nodeId; // set while online
-    };
-
     [[nodiscard]] static bool lessThan(const Row &a, const Row &b);
     [[nodiscard]] int rowForNode(std::uint32_t nodeId) const;
     [[nodiscard]] int findReattachCandidate(const Endpoint &live) const;
@@ -95,6 +115,7 @@ private:
     void refreshSectionStarts();
     void remember(const Row &row, bool seenNow);
     void saveStore();
+    void saveLater();
 
     DeviceStore *m_store;
     PipeWireGraph *m_graph = nullptr;
@@ -102,6 +123,7 @@ private:
     std::string m_defaultSink;
     std::string m_defaultSource;
     bool m_connected = false;
+    QTimer m_saveTimer;
 };
 
 } // namespace pp

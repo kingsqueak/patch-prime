@@ -11,7 +11,10 @@ A virtual audio mixer and router for KDE Plasma, built on PipeWire.
 
 Planned: built-in EQ and dynamics processing, then LV2, CLAP and VST3 plugin hosting.
 
-Status: early development. Phase 1: the app lists every audio input and output live (hotplug included), and lets you enable each one and give it a label. Settings are kept in `~/.config/patchprime/devices.json` and follow a device when it moves to another USB port or changes profile.
+Status: early development (Phase 2).
+
+- `patchprimed`, the engine, runs as a systemd user service. Each enabled device gets a *bus* in PipeWire, with a fader, mute and meters. Buses keep working when the window is closed.
+- The window (`patchprime`) has a Mixer page and a Devices page, where you choose devices and label them. Settings are kept in `~/.config/patchprime/devices.json` and follow a device when it moves to another USB port or changes profile.
 
 ## Building
 
@@ -36,6 +39,18 @@ Connects to PipeWire once and prints the graph: nodes, devices, ports, links and
 build/gcc-debug/probe/patchprime-probe            # JSON
 build/gcc-debug/probe/patchprime-probe --summary  # short device list
 ```
+
+## Running
+
+```sh
+cmake --preset gcc-release && cmake --build --preset gcc-release
+cmake --install build/gcc-release --prefix ~/.local
+systemctl --user daemon-reload
+systemctl --user enable --now patchprimed
+~/.local/bin/patchprime
+```
+
+To take everything out of PipeWire again: `patchprimed --remove-buses`.
 
 A card whose profile is `off` (nothing plugged into its jacks, or no monitor on HDMI) has no nodes; `--summary` still lists it under *Cards*.
 

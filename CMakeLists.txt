@@ -24,13 +24,20 @@ if(CCACHE_PROGRAM)
     set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
 endif()
 
+include(GNUInstallDirs)
 include(cmake/Warnings.cmake)
+
+# systemd also searches $XDG_DATA_DIRS/systemd/user, so this works for both a
+# /usr and a ~/.local install.
+set(PATCHPRIME_SYSTEMD_USER_UNIT_DIR "${CMAKE_INSTALL_DATADIR}/systemd/user"
+    CACHE STRING "Where to install the patchprimed systemd user unit")
 
 find_package(Qt6 6.10 REQUIRED COMPONENTS Core)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PipeWire REQUIRED IMPORTED_TARGET libpipewire-0.3>=1.6)
 
 add_subdirectory(engine)
+add_subdirectory(daemon)
 add_subdirectory(probe)
 
 if(PATCHPRIME_BUILD_APP)

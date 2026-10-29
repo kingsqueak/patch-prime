@@ -11,6 +11,7 @@
 #include <QJsonObject>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QUuid>
 
 namespace pp {
 
@@ -30,9 +31,17 @@ std::string str(const QJsonObject &o, const char *key)
 
 QJsonObject toJson(const DeviceSettings &d)
 {
+    QJsonArray positions;
+    for (const auto &p : d.positions) {
+        positions.append(qs(p));
+    }
     return QJsonObject{
+        {QStringLiteral("busId"), qs(d.busId)},
         {QStringLiteral("enabled"), d.enabled},
         {QStringLiteral("label"), qs(d.label)},
+        {QStringLiteral("volumeDb"), d.volumeDb},
+        {QStringLiteral("muted"), d.muted},
+        {QStringLiteral("positions"), positions},
         {QStringLiteral("nodeName"), qs(d.nodeName)},
         {QStringLiteral("mediaClass"), qs(d.mediaClass)},
         {QStringLiteral("direction"),
@@ -55,8 +64,14 @@ QJsonObject toJson(const DeviceSettings &d)
 DeviceSettings fromJson(const QJsonObject &o)
 {
     DeviceSettings d;
+    d.busId = str(o, "busId");
     d.enabled = o.value(QLatin1String("enabled")).toBool();
     d.label = str(o, "label");
+    d.volumeDb = o.value(QLatin1String("volumeDb")).toDouble(0.0);
+    d.muted = o.value(QLatin1String("muted")).toBool();
+    for (const auto &p : o.value(QLatin1String("positions")).toArray()) {
+        d.positions.push_back(p.toString().toStdString());
+    }
     d.nodeName = str(o, "nodeName");
     d.mediaClass = str(o, "mediaClass");
     d.direction = str(o, "direction") == "input" ? Direction::Input : Direction::Output;
@@ -103,7 +118,11 @@ bool DeviceStore::load()
     }
     const auto devices = document.object().value(QLatin1String("devices")).toObject();
     for (auto it = devices.begin(); it != devices.end(); ++it) {
-        m_entries[it.key().toStdString()] = fromJson(it.value().toObject());
+        auto settings = fromJson(it.value().toObject());
+        if (settings.busId.empty()) {
+            settings.busId = newBusId(); // files written before Phase 2
+        }
+        m_entries[it.key().toStdString()] = std::move(settings);
     }
     return true;
 }
@@ -145,7 +164,18 @@ const DeviceSettings *DeviceStore::find(const std::string &key) const
 
 DeviceSettings &DeviceStore::upsert(const std::string &key)
 {
-    return m_entries[key];
+    auto &entry = m_entries[key];
+    if (entry.busId.empty()) {
+        entry.busId = newBusId();
+    }
+    return entry;
+}
+
+std::string DeviceStore::newBusId()
+{
+    // 8 hex digits: short enough for node names, and collisions among a few
+    // dozen devices are not a concern.
+    return QUuid::createUuid().toString(QUuid::Id128).left(8).toStdString();
 }
 
 bool DeviceStore::remove(const std::string &key)
