@@ -41,6 +41,21 @@ enum class Stage : std::uint8_t
 };
 
 Stage stageOf(Direction direction, EndpointKind kind);
+
+// What clocks the audio graph (the PipeWire "driver").
+enum class ClockMode : std::uint8_t
+{
+    // Patch Prime's own buses: unplugging any interface doesn't stall the
+    // rest. Hardware follows with PipeWire's rate matching.
+    Internal,
+    // A hardware device, as PipeWire picks it: the lowest latency, but
+    // unplugging that device stalls everything linked to it for a moment.
+    Hardware,
+};
+
+// "internal" / "hardware"; anything unknown is Internal.
+std::string clockModeName(ClockMode mode);
+ClockMode clockModeFromName(std::string_view name);
 // "input", "bus", "output" (in the D-Bus state).
 std::string stageName(Stage stage);
 
@@ -95,6 +110,9 @@ public:
     bool load();
     bool save();
 
+    [[nodiscard]] ClockMode clock() const { return m_clock; }
+    void setClock(ClockMode clock) { m_clock = clock; }
+
     [[nodiscard]] const std::map<std::string, DeviceSettings> &entries() const { return m_entries; }
     [[nodiscard]] const DeviceSettings *find(const std::string &key) const;
     // Creates the entry (with a new busId) when it doesn't exist.
@@ -113,6 +131,7 @@ public:
 private:
     QString m_path;
     QString m_lastError;
+    ClockMode m_clock = ClockMode::Internal;
     std::map<std::string, DeviceSettings> m_entries;
 };
 

@@ -87,6 +87,10 @@ private Q_SLOTS:
         QCOMPARE(props["monitor.channel-volumes"], "true");
         QCOMPARE(props["patchprime.key"], "Audio/Source|mic");
         QCOMPARE(busProperties(e, s, "cafe1234")["patchprime.owner"], "cafe1234");
+        // The internal clock: buses outrank any hardware as the graph driver.
+        QCOMPARE(props["priority.driver"], "0");
+        QCOMPARE(busProperties(e, s, {}, ClockMode::Internal)["priority.driver"], "20000");
+        QCOMPARE(busProperties(e, s, {}, ClockMode::Internal)["priority.session"], "0");
         QCOMPARE(busOwnerFor(QStringLiteral("/a/devices.json")).size(), std::size_t{8});
         QVERIFY(busOwnerFor(QStringLiteral("/a/devices.json")) !=
                 busOwnerFor(QStringLiteral("/b/devices.json")));

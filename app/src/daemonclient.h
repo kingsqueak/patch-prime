@@ -24,6 +24,8 @@ class DaemonClient : public QAbstractListModel
     Q_PROPERTY(double maximumVolumeDb READ maximumVolumeDb CONSTANT)
     // Applications: [{key, name, icon, direction, target, streams}], see the daemon's state.
     Q_PROPERTY(QVariantList apps READ apps NOTIFY appsChanged)
+    // What clocks the audio graph: "internal" or "hardware".
+    Q_PROPERTY(QString clock READ clock NOTIFY clockChanged)
     // Where apps can play to / record from: [{name (a node.name), label, kind}].
     Q_PROPERTY(QVariantList playbackTargets READ playbackTargets NOTIFY appsChanged)
     Q_PROPERTY(QVariantList recordTargets READ recordTargets NOTIFY appsChanged)
@@ -44,6 +46,7 @@ public:
     [[nodiscard]] bool isConnected() const { return m_connected; }
     [[nodiscard]] QString lastError() const { return m_lastError; }
     [[nodiscard]] QVariantList apps() const { return m_apps; }
+    [[nodiscard]] QString clock() const { return m_clock; }
     [[nodiscard]] QVariantList playbackTargets() const { return m_playbackTargets; }
     [[nodiscard]] QVariantList recordTargets() const { return m_recordTargets; }
     static constexpr double minimumVolumeDb() { return -60.0; }
@@ -67,6 +70,7 @@ public:
     // nodeName: a target's name; empty for the system default.
     Q_INVOKABLE void setAppTarget(const QString &appKey, const QString &nodeName);
     Q_INVOKABLE void forgetApp(const QString &appKey);
+    Q_INVOKABLE void setClock(const QString &mode);
     // D-Bus activation first; failing that, a patchprimed next to this program
     // (installed side by side, or in the build tree).
     Q_INVOKABLE void startDaemon();
@@ -79,6 +83,7 @@ Q_SIGNALS:
     void connectedChanged();
     void lastErrorChanged();
     void appsChanged();
+    void clockChanged();
 
 private Q_SLOTS:
     void onStateChanged(const QString &state);
@@ -102,6 +107,7 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     bool m_connected = false;
     QString m_lastError;
     QVariantList m_apps;
+    QString m_clock;
     QVariantList m_playbackTargets;
     QVariantList m_recordTargets;
 };

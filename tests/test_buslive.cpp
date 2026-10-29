@@ -273,6 +273,41 @@ private Q_SLOTS:
         m_busName.clear();
     }
 
+    void clockModes()
+    {
+        QTemporaryDir dir;
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel devices(&store);
+        devices.attach(&m_graph);
+        BusManager buses(&m_graph, &devices);
+        m_owners.insert(busOwnerFor(store.path()));
+
+        const auto key = makeEndpointKey("Audio/Sink", m_sinkName);
+        QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(key) >= 0; }, 5000));
+        devices.setEnabled(devices.rowForKey(key), true);
+        const auto bus = busNodeName(Direction::Output, store.find(key)->busId);
+        auto driverPriority = [&] {
+            const auto *node = nodeNamed(m_graph, bus);
+            return node != nullptr ? prop(*node, "priority.driver") : std::string{};
+        };
+
+        // The internal clock is the default: the bus outranks any hardware as
+        // the graph driver. The hardware clock rebuilds it without that, and
+        // it's linked to its device again.
+        QVERIFY(QTest::qWaitFor([&] { return driverPriority() == "20000"; }, 5000));
+        devices.setClock(ClockMode::Hardware);
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return driverPriority() == "0" &&
+                       linkCount(m_graph, bus, m_sinkName) == 2;
+            },
+            5000));
+        QCOMPARE(store.clock(), ClockMode::Hardware);
+
+        devices.setEnabled(devices.rowForKey(key), false);
+        QVERIFY(QTest::qWaitFor([&] { return nodeNamed(m_graph, bus) == nullptr; }, 5000));
+    }
+
     void routesVirtualInput()
     {
         QTemporaryDir dir;

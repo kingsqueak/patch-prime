@@ -274,6 +274,11 @@ void DaemonClient::forgetApp(const QString &appKey)
     call(QStringLiteral("ForgetApp"), {appKey});
 }
 
+void DaemonClient::setClock(const QString &mode)
+{
+    call(QStringLiteral("SetClock"), {mode});
+}
+
 void DaemonClient::onStateChanged(const QString &state)
 {
     const auto root = QJsonDocument::fromJson(state.toUtf8()).object();
@@ -281,6 +286,11 @@ void DaemonClient::onStateChanged(const QString &state)
         connected != m_connected) {
         m_connected = connected;
         Q_EMIT connectedChanged();
+    }
+
+    if (const auto clock = root.value(QLatin1String("clock")).toString(); clock != m_clock) {
+        m_clock = clock;
+        Q_EMIT clockChanged();
     }
 
     QList<QVariantMap> rows;

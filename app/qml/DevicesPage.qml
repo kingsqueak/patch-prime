@@ -69,6 +69,48 @@ Kirigami.ScrollablePage {
 
         model: Devices
 
+        // Settings for the whole mixer, above the device list.
+        header: ColumnLayout {
+            width: ListView.view.width
+            spacing: 0
+
+            Kirigami.ListSectionHeader {
+                Layout.fillWidth: true
+                text: qsTr("Audio clock")
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.margins: Kirigami.Units.largeSpacing
+                spacing: Kirigami.Units.largeSpacing
+
+                QQC2.ComboBox {
+                    id: clockChoice
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                    enabled: Devices.daemonRunning
+                    textRole: "text"
+                    valueRole: "value"
+                    model: [
+                        { value: "internal", text: qsTr("Patch Prime") },
+                        { value: "hardware", text: qsTr("Hardware device") },
+                    ]
+                    currentIndex: Devices.clock === "hardware" ? 1 : 0
+                    onActivated: Devices.setClock(currentValue)
+                    Accessible.name: qsTr("Audio clock")
+                }
+
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.Wrap
+                    font: Kirigami.Theme.smallFont
+                    color: Kirigami.Theme.disabledTextColor
+                    text: clockChoice.currentIndex === 1
+                        ? qsTr("PipeWire uses an interface's own clock: the lowest latency, but unplugging that interface briefly stops all audio, and some apps pause.")
+                        : qsTr("Patch Prime keeps time itself, so unplugging any interface doesn't interrupt the others. Interfaces follow it with PipeWire's rate matching.")
+                }
+            }
+        }
+
         Kirigami.PlaceholderMessage {
             anchors.centerIn: parent
             width: parent.width - Kirigami.Units.gridUnit * 4

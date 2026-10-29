@@ -361,6 +361,17 @@ void DeviceModel::setMono(int row, bool mono)
     Q_EMIT settingsChanged(qs(r.endpoint.key));
 }
 
+void DeviceModel::setClock(ClockMode clock)
+{
+    if (clock == m_store->clock()) {
+        return;
+    }
+    m_store->setClock(clock);
+    saveStore();
+    Q_EMIT clockChanged();
+    Q_EMIT settingsChanged({});
+}
+
 void DeviceModel::setSendLevel(int row, const QString &destinationKey, double db)
 {
     if (row < 0 || row >= rowCount()) {

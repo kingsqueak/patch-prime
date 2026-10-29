@@ -154,8 +154,13 @@ std::string busDescription(const Endpoint &endpoint, const DeviceSettings &setti
            name;
 }
 
+int busDriverPriority(ClockMode clock)
+{
+    return clock == ClockMode::Internal ? 20000 : 0;
+}
+
 Properties busProperties(const Endpoint &endpoint, const DeviceSettings &settings,
-                         const std::string &owner)
+                         const std::string &owner, ClockMode clock)
 {
     const auto positions = busPositions(endpoint);
     return {
@@ -172,7 +177,7 @@ Properties busProperties(const Endpoint &endpoint, const DeviceSettings &setting
         {"object.linger", "true"},
         // Low priority so WirePlumber never picks a bus as the default device.
         {"priority.session", "0"},
-        {"priority.driver", "0"},
+        {"priority.driver", std::to_string(busDriverPriority(clock))},
         {"patchprime.key", endpoint.key},
         {"patchprime.owner", owner},
     };
@@ -416,7 +421,8 @@ void BusManager::reconcile()
         if (it == existing.end()) {
             if (!m_pendingBuses.contains(name)) {
                 qCInfo(lcBus, "creating bus %s for %s", name.c_str(), w.key.c_str());
-                if (m_graph->createNode(busProperties(w.endpoint, *w.settings, m_owner))) {
+                if (m_graph->createNode(
+                        busProperties(w.endpoint, *w.settings, m_owner, m_devices->store().clock()))) {
                     m_pendingBuses[name] = now;
                 }
             }
@@ -427,11 +433,14 @@ void BusManager::reconcile()
         const auto &node = m_graph->nodes().at(busId);
 
         // A bus made with different settings (an older version, a changed
-        // channel count, a renamed virtual device) is replaced. WirePlumber
-        // keeps it as the default if it was, since the name stays the same.
+        // channel count, a renamed virtual device, another clock mode) is
+        // replaced. WirePlumber keeps it as the default if it was, since the
+        // name stays the same.
         const auto channels = busPositions(w.endpoint).size();
         const bool stale =
             prop(node, "media.class") != busMediaClass(w.endpoint, *w.settings) ||
+            prop(node, "priority.driver") !=
+                std::to_string(busDriverPriority(m_devices->store().clock())) ||
             parseId(prop(node, "audio.channels")) != channels ||
             (w.settings->kind != EndpointKind::Hardware &&
              prop(node, "node.description") != busDescription(w.endpoint, *w.settings));

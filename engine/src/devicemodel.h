@@ -91,6 +91,8 @@ public:
     Q_INVOKABLE void setSend(int row, const QString &destinationKey, bool enabled);
     // The level of an existing send, clamped like the fader.
     Q_INVOKABLE void setSendLevel(int row, const QString &destinationKey, double db);
+    // What clocks the graph; buses are rebuilt with the new driver priority.
+    void setClock(ClockMode clock);
     // Makes a new virtual device, enabled, and returns its key.
     QString createVirtual(const QString &name, EndpointKind kind);
 
@@ -122,6 +124,7 @@ Q_SIGNALS:
     void settingsChanged(const QString &key);
     // A saved endpoint was recognised under a new node.name.
     void reattached(const QString &label, const QString &oldNodeName, const QString &newNodeName);
+    void clockChanged();
 
 private:
     [[nodiscard]] static bool lessThan(const Row &a, const Row &b);

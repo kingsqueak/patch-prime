@@ -56,6 +56,10 @@ public Q_SLOTS:
     void SetChannelPair(const QString &key, int pair);
     // Sends an input to an output or virtual device, or stops sending it.
     void SetSend(const QString &inputKey, const QString &destinationKey, bool enabled);
+    // What clocks the audio graph: "internal" (Patch Prime's buses; unplugging
+    // an interface doesn't interrupt the rest) or "hardware" (PipeWire picks a
+    // device; lowest latency). In the state as "clock".
+    void SetClock(const QString &mode);
     // The level of an existing send in dB (-60 = silent .. +12).
     void SetSendLevel(const QString &inputKey, const QString &destinationKey, double db);
     // kind: "sink" (apps play into it; record its monitor, e.g. "Stream Mix"),

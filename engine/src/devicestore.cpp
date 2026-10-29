@@ -165,6 +165,16 @@ std::string stageName(Stage stage)
     return "output";
 }
 
+std::string clockModeName(ClockMode mode)
+{
+    return mode == ClockMode::Hardware ? "hardware" : "internal";
+}
+
+ClockMode clockModeFromName(std::string_view name)
+{
+    return name == "hardware" ? ClockMode::Hardware : ClockMode::Internal;
+}
+
 DeviceStore::DeviceStore(QString path) : m_path(path.isEmpty() ? defaultPath() : std::move(path)) {}
 
 QString DeviceStore::defaultPath()
@@ -176,6 +186,7 @@ QString DeviceStore::defaultPath()
 bool DeviceStore::load()
 {
     m_entries.clear();
+    m_clock = ClockMode::Internal;
     m_lastError.clear();
     QFile file(m_path);
     if (!file.exists()) {
@@ -191,6 +202,8 @@ bool DeviceStore::load()
         m_lastError = parseError.errorString();
         return false;
     }
+    m_clock = clockModeFromName(
+        document.object().value(QLatin1String("clock")).toString().toStdString());
     const auto devices = document.object().value(QLatin1String("devices")).toObject();
     for (auto it = devices.begin(); it != devices.end(); ++it) {
         auto settings = fromJson(it.value().toObject());
@@ -215,6 +228,7 @@ bool DeviceStore::save()
     }
     const QJsonObject root{
         {QStringLiteral("version"), formatVersion},
+        {QStringLiteral("clock"), qs(clockModeName(m_clock))},
         {QStringLiteral("devices"), devices},
     };
 

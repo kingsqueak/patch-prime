@@ -29,6 +29,7 @@ PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *
     connect(devices, &QAbstractItemModel::modelReset, this, &PatchPrimeService::scheduleState);
     connect(devices, &pp::DeviceModel::connectedChanged, this, &PatchPrimeService::scheduleState);
     connect(apps, &pp::AppRouter::changed, this, &PatchPrimeService::scheduleState);
+    connect(devices, &pp::DeviceModel::clockChanged, this, &PatchPrimeService::scheduleState);
 
     m_levelsTimer.setInterval(33);
     connect(&m_levelsTimer, &QTimer::timeout, this, &PatchPrimeService::emitLevels);
@@ -73,6 +74,8 @@ QString PatchPrimeService::GetState() const
         {QStringLiteral("connected"), m_devices->isConnected()},
         {QStringLiteral("devices"), devices},
         {QStringLiteral("apps"), apps},
+        {QStringLiteral("clock"),
+         QString::fromStdString(pp::clockModeName(m_devices->store().clock()))},
     };
     return QString::fromUtf8(QJsonDocument(state).toJson(QJsonDocument::Compact));
 }
@@ -180,6 +183,18 @@ void PatchPrimeService::SetSend(const QString &inputKey, const QString &destinat
         }
         m_devices->setSend(row, destinationKey, enabled);
     }
+}
+
+void PatchPrimeService::SetClock(const QString &mode)
+{
+    if (mode != QLatin1String("internal") && mode != QLatin1String("hardware")) {
+        if (calledFromDBus()) {
+            sendErrorReply(QDBusError::InvalidArgs,
+                           QStringLiteral("clock must be \"internal\" or \"hardware\""));
+        }
+        return;
+    }
+    m_devices->setClock(pp::clockModeFromName(mode.toStdString()));
 }
 
 void PatchPrimeService::SetSendLevel(const QString &inputKey, const QString &destinationKey,
