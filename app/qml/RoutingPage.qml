@@ -153,7 +153,7 @@ Kirigami.Page {
                             }
 
                             // The send's level, once it's on.
-                            QQC2.Slider {
+                            VolumeFader {
                                 id: level
 
                                 anchors.top: tick.bottom
@@ -161,24 +161,12 @@ Kirigami.Page {
                                 anchors.right: parent.right
                                 anchors.leftMargin: Kirigami.Units.smallSpacing
                                 anchors.rightMargin: Kirigami.Units.smallSpacing
+                                orientation: Qt.Horizontal
                                 visible: cell.allowed && cell.sent
-                                from: Devices.minimumVolumeDb
-                                to: Devices.maximumVolumeDb
                                 enabled: Devices.daemonRunning
-                                onMoved: Devices.setSendLevel(inputRow.key, cell.model.key,
-                                                              Math.round(value * 2) / 2)
-                                Accessible.name: qsTr("Level of %1 into %2").arg(inputRow.model.label).arg(cell.model.label)
-                                Binding on value {
-                                    when: !level.pressed
-                                    value: cell.levelDb
-                                    restoreMode: Binding.RestoreNone
-                                }
-                                TapHandler {
-                                    onDoubleTapped: Devices.setSendLevel(inputRow.key, cell.model.key, 0)
-                                }
-                                QQC2.ToolTip.text: qsTr("Double-click for 0 dB")
-                                QQC2.ToolTip.visible: hovered && !pressed
-                                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                                volumeDb: cell.levelDb
+                                accessibleName: qsTr("Level of %1 into %2").arg(inputRow.model.label).arg(cell.model.label)
+                                onRequested: db => Devices.setSendLevel(inputRow.key, cell.model.key, db)
                             }
 
                             // Click to type the send level.

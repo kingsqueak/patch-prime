@@ -137,7 +137,7 @@ QQC2.Control {
 
             VolumeFader {
                 Layout.fillHeight: true
-                label: strip.label
+                accessibleName: qsTr("Level for %1").arg(strip.label)
                 volumeDb: strip.volumeDb
                 enabled: Devices.daemonRunning
                 onRequested: db => Devices.setVolume(strip.key, db)
