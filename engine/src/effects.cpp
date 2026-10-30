@@ -10,6 +10,7 @@
 #include "eq.h"
 #include "loudness.h"
 #include "multiband.h"
+#include "reverb.h"
 
 #include <algorithm>
 #include <array>
@@ -75,6 +76,9 @@ std::unique_ptr<Effect> makeEffect(const std::string &type)
     if (type == "leveler") {
         return std::make_unique<LevelerEffect>();
     }
+    if (type == "reverb") {
+        return std::make_unique<ReverbEffect>();
+    }
     if (type == "limiter") {
         return std::make_unique<LimiterEffect>();
     }
@@ -124,6 +128,7 @@ std::vector<std::string> effectTypes()
 #endif
     types.emplace_back("leveler");
     types.emplace_back("limiter");
+    types.emplace_back("reverb");
     types.emplace_back("gain");
     return types;
 }
@@ -150,6 +155,9 @@ std::string effectLabel(const std::string &type)
     }
     if (type == "leveler") {
         return "Broadcast leveler";
+    }
+    if (type == "reverb") {
+        return "Reverb";
     }
     if (type == "limiter") {
         return "Safety limiter";
@@ -212,6 +220,14 @@ std::vector<ParamInfo> effectParams(const std::string &type)
                 param("maxCut", "Max cut", "dB", 0.0, 24.0, 12.0),
                 param("speed", "Speed", "s", 0.5, 30.0, 5.0, ParamKind::Log),
                 param("freeze", "Freeze below", "LUFS", -70.0, -20.0, -50.0)};
+    }
+    if (type == "reverb") {
+        return {param("size", "Size", "%", 0.0, 100.0, 50.0),
+                param("decay", "Decay", "s", 0.2, 10.0, 2.0, ParamKind::Log),
+                param("predelay", "Pre-delay", "ms", 0.0, ReverbEffect::maxPredelayMs, 20.0),
+                param("damping", "Damping", "%", 0.0, 100.0, 50.0),
+                param("width", "Width", "%", 0.0, 100.0, 100.0),
+                param("mix", "Mix (wet)", "%", 0.0, 100.0, 25.0)};
     }
     if (type == "limiter") {
         return {param("ceiling", "Ceiling", "dB", -24.0, 0.0, -1.0),

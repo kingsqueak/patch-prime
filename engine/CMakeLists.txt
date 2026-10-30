@@ -13,7 +13,9 @@ add_library(patchprime-dsp STATIC
     src/loudness.cpp
     src/loudness.h
     src/multiband.cpp
-    src/multiband.h)
+    src/multiband.h
+    src/reverb.cpp
+    src/reverb.h)
 target_include_directories(patchprime-dsp PUBLIC src)
 if(PATCHPRIME_RNNOISE)
     target_sources(patchprime-dsp PRIVATE src/denoise.cpp src/denoise.h)

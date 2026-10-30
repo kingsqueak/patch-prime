@@ -12,6 +12,7 @@
 #include "eq.h"
 #include "loudness.h"
 #include "multiband.h"
+#include "reverb.h"
 
 #include <QJsonArray>
 #include <QTemporaryDir>
@@ -530,6 +531,90 @@ private Q_SLOTS:
         QCOMPARE(spike.left[1000], 0.1F);
         QCOMPARE(spike.left[static_cast<std::size_t>(delay - 1)], 0.0F);
         QCOMPARE(spike.left[static_cast<std::size_t>(delay)], 0.1F);
+    }
+
+    void reverbDecaysAtItsTime()
+    {
+        // Mix 0: untouched.
+        ReverbEffect dry;
+        dry.setParam("mix", 0.0);
+        dry.prepare(rate, 2);
+        Buffers same(4800, 0.3F);
+        dry.process(same.planes.data(), 2, 4800);
+        QVERIFY(std::ranges::all_of(same.left, [](float v) { return v == 0.3F; }));
+
+        // An impulse into a 2 s reverb, fully wet: the tail falls about
+        // 30 dB in a second, and is gone after several.
+        ReverbEffect reverb;
+        reverb.setParam("mix", 100.0);
+        reverb.setParam("decay", 2.0);
+        reverb.setParam("predelay", 0.0);
+        reverb.prepare(rate, 2);
+        constexpr std::size_t seconds = 8;
+        Buffers tail(static_cast<int>(48000 * seconds), 0.0F);
+        tail.left[0] = tail.right[0] = 1.0F;
+        for (std::size_t start = 0; start < tail.left.size(); start += 480) {
+            std::array<float *, 2> block{tail.left.data() + start, tail.right.data() + start}; // NOLINT
+            reverb.process(block.data(), 2, 480);
+        }
+        const auto rmsDb = [&](double from, double to) {
+            double sum = 0.0;
+            const auto a = static_cast<std::size_t>(from * rate);
+            const auto b = static_cast<std::size_t>(to * rate);
+            for (std::size_t i = a; i < b; ++i) {
+                sum += static_cast<double>(tail.left[i]) * tail.left[i];
+            }
+            return 10.0 * std::log10((sum / static_cast<double>(b - a)) + 1e-30);
+        };
+        const double drop = rmsDb(0.3, 0.4) - rmsDb(1.3, 1.4);
+        QVERIFY2(std::abs(drop - 30.0) < 6.0, qPrintable(QString::number(drop)));
+        QVERIFY(rmsDb(7.0, 8.0) < rmsDb(0.3, 0.4) - 90.0);
+        QVERIFY(std::ranges::all_of(tail.left, [](float v) { return std::isfinite(v) && std::abs(v) < 2.0F; }));
+        // Left and right differ (a stereo tail)...
+        double difference = 0.0;
+        for (std::size_t i = 4800; i < 48000; ++i) {
+            difference += std::abs(tail.left[i] - tail.right[i]);
+        }
+        QVERIFY(difference > 1.0);
+        // ...and width 0 makes it mono.
+        ReverbEffect narrow;
+        narrow.setParam("mix", 100.0);
+        narrow.setParam("width", 0.0);
+        narrow.prepare(rate, 2);
+        Buffers mono(9600, 0.0F);
+        mono.left[0] = mono.right[0] = 1.0F;
+        narrow.process(mono.planes.data(), 2, 9600);
+        QCOMPARE(mono.left, mono.right);
+    }
+
+    void reverbStaysBounded()
+    {
+        // The longest decay, the biggest room, loud noise for 10 s.
+        ReverbEffect reverb;
+        reverb.setParam("mix", 100.0);
+        reverb.setParam("decay", 10.0);
+        reverb.setParam("size", 100.0);
+        reverb.setParam("damping", 0.0);
+        reverb.prepare(rate, 2);
+        std::mt19937 random(2);
+        std::uniform_real_distribution<float> noise(-0.5F, 0.5F);
+        float peak = 0.0F;
+        for (int block = 0; block < 1000; ++block) {
+            Buffers b(480, 0.0F);
+            for (std::size_t i = 0; i < b.left.size(); ++i) {
+                b.left[i] = noise(random);
+                b.right[i] = noise(random);
+            }
+            if (block == 500) {
+                reverb.setParam("size", 0.0); // a size change mid-stream
+            }
+            reverb.process(b.planes.data(), 2, 480);
+            for (const float v : b.left) {
+                QVERIFY(std::isfinite(v));
+                peak = std::max(peak, std::abs(v));
+            }
+        }
+        QVERIFY2(peak < 8.0F, qPrintable(QString::number(peak)));
     }
 
     void keyLoopsAreFound()

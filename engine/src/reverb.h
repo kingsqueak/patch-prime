@@ -1,0 +1,86 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 KC2RGW Chris
+
+#pragma once
+
+#include "effects.h"
+
+#include <array>
+#include <atomic>
+#include <string>
+#include <vector>
+
+namespace pp {
+
+// An algorithmic reverb: the input (all channels summed) goes through a
+// pre-delay and four diffusing allpasses into an 8-line feedback delay
+// network with a Householder matrix. Each line is damped (high frequencies
+// die first, like a real room) and turned down per pass so the tail falls by
+// 60 dB over the decay time. Two lines' lengths move slowly, which keeps the
+// tail from ringing. Left and right take the lines with different signs.
+//
+// Parameters: "size" (%, the room: scales every line), "decay" (s, RT60),
+// "predelay" (ms), "damping" (%), "width" (%), "mix" (% wet). As an insert,
+// a little mix; on a reverb bus that strips send to, mix 100 %.
+//
+// Size and pre-delay glide when changed, so moving them doesn't click.
+class ReverbEffect : public Effect
+{
+public:
+    static constexpr int lineCount = 8;
+    static constexpr double maxPredelayMs = 200.0;
+
+    ReverbEffect() = default;
+    [[nodiscard]] std::string_view type() const override { return "reverb"; }
+    void prepare(double sampleRate, int channels) override;
+    void process(float *const *channels, int channelCount, int frames) noexcept override;
+    void setParam(const std::string &name, double value) override;
+    void resume() noexcept override;
+
+private:
+    static constexpr int blockFrames = 32;
+
+    // A delay line read at a fractional position (linear interpolation).
+    struct Line
+    {
+        std::vector<float> buffer;
+        std::size_t write = 0;
+        void push(float x) noexcept;
+        [[nodiscard]] float read(double delay) const noexcept; // samples back, >= 1
+    };
+    // A Schroeder allpass for diffusion.
+    struct Allpass
+    {
+        std::vector<float> buffer;
+        std::size_t at = 0;
+        float step(float x) noexcept;
+    };
+
+    void updateBlock() noexcept;
+
+    std::atomic<float> m_size{50.0F};
+    std::atomic<float> m_decay{2.0F};
+    std::atomic<float> m_predelay{20.0F};
+    std::atomic<float> m_damping{50.0F};
+    std::atomic<float> m_width{100.0F};
+    std::atomic<float> m_mix{25.0F};
+
+    // Realtime only (sized in prepare()).
+    double m_rate = 48000.0;
+    Line m_pre;
+    std::array<Allpass, 4> m_diffusers;
+    std::array<Line, lineCount> m_lines;
+    std::array<double, lineCount> m_base{};     // line lengths at size 1, in samples
+    std::array<float, lineCount> m_lowpass{};   // damping filter state
+    std::array<double, lineCount> m_gain{};     // per-pass gain for the decay
+    double m_scale = 1.0;                       // size factor, gliding
+    double m_preSamples = 0.0;                  // gliding
+    float m_damp = 0.5F;                        // one-pole coefficient
+    double m_glide = 1.0;
+    double m_phase = 0.0;                       // modulation
+    double m_phaseStep = 0.0;
+    double m_modDepth = 0.0;                    // samples
+    float m_denormal = 1e-18F;
+};
+
+} // namespace pp
