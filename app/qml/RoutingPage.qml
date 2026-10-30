@@ -28,11 +28,6 @@ Kirigami.Page {
         return stage === "input" ? 0 : stage === "bus" ? 1 : 2;
     }
 
-    function formatDb(db) {
-        return db <= Devices.minimumVolumeDb ? "−∞"
-             : (db > 0.05 ? "+" : db < -0.05 ? "−" : "") + Math.abs(db).toFixed(1) + " dB";
-    }
-
     StripFilter {
         id: inputs // the senders
         sourceModel: Devices
@@ -186,13 +181,19 @@ Kirigami.Page {
                                 QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
                             }
 
-                            QQC2.Label {
+                            // Click to type the send level.
+                            DbField {
                                 anchors.top: level.bottom
-                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.leftMargin: Kirigami.Units.smallSpacing
+                                anchors.rightMargin: Kirigami.Units.smallSpacing
                                 visible: level.visible
                                 font: Kirigami.Theme.smallFont
                                 color: Kirigami.Theme.disabledTextColor
-                                text: page.formatDb(level.pressed ? level.value : cell.levelDb)
+                                value: level.pressed ? level.value : cell.levelDb
+                                accessibleName: qsTr("Level of %1 into %2 in dB").arg(inputRow.model.label).arg(cell.model.label)
+                                onRequested: db => Devices.setSendLevel(inputRow.key, cell.model.key, db)
                             }
                         }
                     }

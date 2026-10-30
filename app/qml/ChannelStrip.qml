@@ -12,7 +12,7 @@ import org.kingsqueak.patchprime.engine
 //
 //   header   name, and a status line (offline, virtual, ...)
 //   body     meters + fader (fills the height)
-//   readout  fader level in dB
+//   readout  fader level in dB (click to type one)
 //   toggles  mute, mono, default
 //   sends    where it goes (inputs and mix buses; blank on outputs)
 //   options  the channel pair choice (blank when there's none)
@@ -46,13 +46,6 @@ QQC2.Control {
     readonly property bool canBeDefault: (!isInput && kind !== "virtual-source")
                                          || kind === "virtual-input"
     readonly property bool hasPairs: kind === "hardware" && channels > 2
-
-    function formatDb(db) {
-        if (db <= Devices.minimumVolumeDb)
-            return "−∞";
-        const text = Math.abs(db).toFixed(1) + " dB";
-        return db > 0.05 ? "+" + text : db < -0.05 ? "−" + text : "0.0 dB";
-    }
 
     implicitWidth: Style.stripWidth
     padding: Style.stripPadding
@@ -155,17 +148,18 @@ QQC2.Control {
             Item { Layout.fillWidth: true }
         }
 
-        // --- readout
-        QQC2.Label {
+        // --- readout (click to type a level)
+        DbField {
             id: readout
 
             property bool dragging: false
             property real draggedDb: 0
 
             Layout.fillWidth: true
-            horizontalAlignment: Text.AlignHCenter
             font.family: "monospace"
-            text: strip.formatDb(dragging ? draggedDb : strip.volumeDb)
+            value: dragging ? draggedDb : strip.volumeDb
+            accessibleName: qsTr("Level for %1 in dB").arg(strip.label)
+            onRequested: db => Devices.setVolume(strip.key, db)
         }
 
         // --- toggles
