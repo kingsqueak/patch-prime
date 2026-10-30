@@ -143,6 +143,7 @@ private:
                         const std::string &value);
     void handleSetting(int generation, const std::string &key, const std::string &value);
     void handleConnectionLost(int generation, const std::string &reason);
+    void handleReady(int generation);
 
     std::map<std::uint32_t, GraphObject> *mapFor(const std::string &type);
     bool setMetadata(std::uint32_t subject, const char *key, const char *type, const char *value,

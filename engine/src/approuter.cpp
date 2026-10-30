@@ -182,6 +182,21 @@ void AppRouter::reconcile()
     bool settling = false;
     for (const auto &[id, live] : m_streams) {
         const auto *settings = m_store->find(live.app.key);
+
+        // The app picked its own device (Audacity's device setting, pw-play
+        // --target): that choice wins, and WirePlumber follows it before any
+        // metadata anyway. Writing a route over it made WirePlumber link the
+        // stream to both. Remember it as the app's route instead.
+        if (const auto own = ownTarget(id); !own.empty()) {
+            if (const auto name = nodeNameFor(own);
+                name && (settings == nullptr || settings->target != *name)) {
+                remember(live.app, *name);
+                save();
+                listChanged = true;
+            }
+            continue;
+        }
+
         if (settings == nullptr) {
             if (now - live.seen < settleTime) {
                 settling = true; // let WirePlumber restore its own target first
@@ -244,6 +259,16 @@ void AppRouter::onStreamTargetChanged(std::uint32_t nodeId)
         Q_EMIT changed();
     }
     scheduleReconcile(); // the app's other streams follow
+}
+
+std::string AppRouter::ownTarget(std::uint32_t nodeId) const
+{
+    const auto node = m_graph->nodes().find(nodeId);
+    if (node == m_graph->nodes().end()) {
+        return {};
+    }
+    const auto &object = prop(node->second, "target.object");
+    return object.empty() ? prop(node->second, "node.target") : object;
 }
 
 std::optional<std::string> AppRouter::nodeNameFor(const std::string &targetValue) const

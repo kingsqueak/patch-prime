@@ -98,6 +98,9 @@ private:
     // "-1" and nothing mean the system default (""); a serial or a name means
     // that node; nullopt when the serial names no node.
     [[nodiscard]] std::optional<std::string> nodeNameFor(const std::string &targetValue) const;
+    // The target the stream itself asks for (target.object, else node.target
+    // in its props), or empty.
+    [[nodiscard]] std::string ownTarget(std::uint32_t nodeId) const;
     [[nodiscard]] std::optional<std::string> targetValueFor(const std::string &nodeName) const;
     void remember(const AppStream &app, const std::string &target);
     void save();

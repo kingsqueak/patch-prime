@@ -216,6 +216,22 @@ private Q_SLOTS:
         };
         QVERIFY(QTest::qWaitFor([&] { return linksToSink() == 2; }, 5000));
 
+        // A duplicate of the bus (as a reconnect racing the listing once
+        // made): the engine removes the extra and keeps the original, links
+        // and all.
+        const auto &row = devices.rows()[static_cast<std::size_t>(devices.rowForKey(key))];
+        QVERIFY(m_graph.createNode(
+            busProperties(row.endpoint, *store.find(key), busOwnerFor(store.path()))));
+        auto copies = [&] {
+            return std::ranges::count_if(m_graph.nodes(), [&](const auto &entry) {
+                return prop(entry.second, "node.name") == m_busName;
+            });
+        };
+        QVERIFY(QTest::qWaitFor([&] { return copies() == 2; }, 5000));
+        QVERIFY(QTest::qWaitFor([&] { return copies() == 1; }, 5000));
+        QCOMPARE(nodeNamed(m_graph, m_busName)->id, busId);
+        QCOMPARE(linksToSink(), 2);
+
         // Fader and mute land on the bus's Props.
         devices.setVolume(devices.rowForKey(key), -6.0);
         devices.setMuted(devices.rowForKey(key), true);
@@ -251,7 +267,9 @@ private Q_SLOTS:
         QVERIFY(writeTone(tone));
         QProcess player;
         player.start(QStringLiteral("pw-play"),
-                     {QStringLiteral("--target"), QString::fromStdString(m_busName), tone});
+                     {QStringLiteral("-P"),
+                      QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                      QStringLiteral("--target"), QString::fromStdString(m_busName), tone});
         float peak = 0.0F;
         QVERIFY(QTest::qWaitFor(
             [&] {
@@ -365,7 +383,9 @@ private Q_SLOTS:
         QVERIFY(writeTone(tone));
         QProcess player;
         player.start(QStringLiteral("pw-play"),
-                     {QStringLiteral("--target"), QString::fromStdString(desktopNode), tone});
+                     {QStringLiteral("-P"),
+                      QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                      QStringLiteral("--target"), QString::fromStdString(desktopNode), tone});
         float mixPeak = 0.0F;
         QVERIFY(QTest::qWaitFor(
             [&] {
@@ -455,7 +475,9 @@ private Q_SLOTS:
         QVERIFY(writeTone(tone));
         QProcess player;
         player.start(QStringLiteral("pw-play"),
-                     {QStringLiteral("--target"), QString::fromStdString(feed), tone});
+                     {QStringLiteral("-P"),
+                      QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                      QStringLiteral("--target"), QString::fromStdString(feed), tone});
         float mixPeak = 0.0F;
         QVERIFY(QTest::qWaitFor(
             [&] {
@@ -476,7 +498,9 @@ private Q_SLOTS:
         QTest::qWait(300);
         buses.takeLevels();
         player.start(QStringLiteral("pw-play"),
-                     {QStringLiteral("--target"), QString::fromStdString(feed), tone});
+                     {QStringLiteral("-P"),
+                      QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                      QStringLiteral("--target"), QString::fromStdString(feed), tone});
         mixPeak = 0.0F;
         // Collects for the whole time: the peak is checked afterwards.
         [[maybe_unused]] const bool never = QTest::qWaitFor(
@@ -690,6 +714,38 @@ private Q_SLOTS:
         // Leave WirePlumber's saved target for the test app at the default.
         QVERIFY(router.setTarget(key, {}));
         QVERIFY(QTest::qWaitFor([&] { return !linkedTo(m_sinkName); }, 5000));
+
+        // An app that picks its own device (--target, like Audacity's device
+        // setting) keeps it: no route is written over it, so it isn't linked
+        // to the default as well, and its choice is remembered as its route.
+        player->kill();
+        player->waitForFinished();
+        QVERIFY(QTest::qWaitFor([&] { return !streamId(); }, 5000));
+        player->start(QStringLiteral("pw-play"),
+                      {QStringLiteral("--volume=0"), QStringLiteral("--target"),
+                       QString::fromStdString(m_sinkName), QStringLiteral("-P"),
+                       QStringLiteral("{ application.name = \"Patch Prime Test\" "
+                                      "application.process.binary = \"patchprime-test\" "
+                                      "patchprime.scope = \"%1\" }")
+                           .arg(QString::fromStdString(scope)),
+                       tone});
+        QVERIFY(QTest::qWaitFor([&] { return store.find(key)->target == m_sinkName; }, 5000));
+        QTest::qWait(static_cast<int>(2 * AppRouter::settleTime.count())); // past the settling
+        QVERIFY(m_graph.streamTarget(*streamId()).empty()); // nothing written over it
+        const auto destinations = [&] {
+            std::set<std::string> out;
+            for (const auto &[id, link] : m_graph.links()) {
+                if (prop(link, "link.output.node") == std::to_string(*streamId())) {
+                    const auto in = m_graph.nodes().find(
+                        static_cast<std::uint32_t>(std::stoul(prop(link, "link.input.node"))));
+                    if (in != m_graph.nodes().end()) {
+                        out.insert(prop(in->second, "node.name"));
+                    }
+                }
+            }
+            return out;
+        };
+        QCOMPARE(destinations(), std::set<std::string>{m_sinkName});
     }
 
 private:

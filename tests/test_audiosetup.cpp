@@ -24,12 +24,17 @@ private Q_SLOTS:
         QCOMPARE(wanted["clock.rate"], "48000");
         QCOMPARE(wanted["clock.allowed-rates"], "[ 48000 ]");
         QCOMPARE(wanted["clock.force-quantum"], "0");
+        QVERIFY(!wanted.contains("clock.max-quantum")); // left to PipeWire
+        QCOMPARE(followerPeriods(store), 8);              // two of its largest (2048) blocks
         store.setSampleRate(96000);
         store.setBlockSize(256);
         wanted = wantedSettings(store);
         QCOMPARE(wanted["clock.rate"], "96000");
         QCOMPARE(wanted["clock.allowed-rates"], "[ 96000 ]");
         QCOMPARE(wanted["clock.force-quantum"], "256");
+        QCOMPARE(followerPeriods(store), 4); // a small fixed block: the minimum
+        store.setBlockSize(2048);            // a big fixed block needs a bigger buffer
+        QCOMPARE(followerPeriods(store), 8);
     }
 
     void deviceRules()
@@ -51,7 +56,7 @@ private Q_SLOTS:
         QVERIFY(rules.starts_with("# Written by Patch Prime"));
         QVERIFY(rules.contains("monitor.alsa.rules = ["));
         QVERIFY(rules.contains("node.name = \"alsa_input.usb-Scarlett.pro-input-0\" } ]\n"
-                               "    actions = { update-props = { api.alsa.disable-tsched = false } }"));
+                               "    actions = { update-props = { api.alsa.disable-tsched = false, api.alsa.period-num = 8 } }"));
         QVERIFY(rules.contains("node.name = \"alsa_output.pci.pro-output-0\" } ]\n"
                                "    actions = { update-props = { api.alsa.disable-tsched = true, "
                                "audio.rate = 44100 } }"));
@@ -63,7 +68,7 @@ private Q_SLOTS:
         store.setClock(ClockMode::Hardware);
         rules = wirePlumberRules(store);
         QVERIFY(rules.contains("node.name = \"alsa_input.usb-Scarlett.pro-input-0\" } ]\n"
-                               "    actions = { update-props = { api.alsa.disable-tsched = false } }"));
+                               "    actions = { update-props = { api.alsa.disable-tsched = false, api.alsa.period-num = 8 } }"));
     }
 
     void clockDevice()
@@ -90,9 +95,9 @@ private Q_SLOTS:
         QVERIFY(rules.contains("\"alsa_input.usb-Scarlett-00.pro-input-0\" } ]\n"
                                "    actions = { update-props = { priority.driver = 30000 } }"));
         QVERIFY(rules.contains("\"alsa_output.usb-Scarlett-00.pro-output-0\" } ]\n"
-                               "    actions = { update-props = { api.alsa.disable-tsched = false } }"));
+                               "    actions = { update-props = { api.alsa.disable-tsched = false, api.alsa.period-num = 8 } }"));
         QVERIFY(rules.contains("\"alsa_input.usb-FastTrack-00.pro-input-0\" } ]\n"
-                               "    actions = { update-props = { api.alsa.disable-tsched = false } }"));
+                               "    actions = { update-props = { api.alsa.disable-tsched = false, api.alsa.period-num = 8 } }"));
 
         // The choice follows the device when it's recognised under a new name.
         QVERIFY(store.rekey(scarlettIn, "Audio/Source|alsa_input.usb-Scarlett-00.multichannel-input"));

@@ -129,6 +129,7 @@ struct PipeWireGraph::Session
     void bind(const GraphObject &object, std::uint32_t version);
 
     static void onCoreError(void *data, std::uint32_t id, int seq, int res, const char *message);
+    static void onCoreDone(void *data, std::uint32_t id, int seq);
     static void onGlobal(void *data, std::uint32_t id, std::uint32_t permissions, const char *type,
                          std::uint32_t version, const spa_dict *props);
     static void onGlobalRemove(void *data, std::uint32_t id);
@@ -152,6 +153,10 @@ struct PipeWireGraph::Session
     spa_hook coreListener{};
     spa_hook registryListener{};
     bool lost = false;
+    // The initial listing is complete after two round trips: the first
+    // brings every global (and so our binds), the second the binds' info.
+    int syncSeq = 0;
+    int syncRound = 0;
 
     std::map<std::uint32_t, std::unique_ptr<Bound>> bound; // nodes, devices, metadata
     std::map<std::uint32_t, bool> plain;                   // ports and links, announced at once
@@ -166,6 +171,7 @@ const pw_core_events coreEvents = [] {
     pw_core_events e{};
     e.version = PW_VERSION_CORE_EVENTS;
     e.error = &PipeWireGraph::Session::onCoreError;
+    e.done = &PipeWireGraph::Session::onCoreDone;
     return e;
 }();
 
@@ -239,6 +245,7 @@ std::string PipeWireGraph::Session::open()
     pw_core_add_listener(core, &coreListener, &coreEvents, this);
     registry = pw_core_get_registry(core, PW_VERSION_REGISTRY, 0);
     pw_registry_add_listener(registry, &registryListener, &registryEvents, this);
+    syncSeq = pw_core_sync(core, PW_ID_CORE, 0);
     pw_thread_loop_unlock(loop);
     return {};
 }
@@ -281,6 +288,21 @@ PipeWireGraph::Session::~Session()
     pw_thread_loop_destroy(loop);
 }
 
+void PipeWireGraph::Session::onCoreDone(void *data, std::uint32_t id, int seq)
+{
+    auto *self = static_cast<Session *>(data);
+    if (id != PW_ID_CORE || seq != self->syncSeq || self->syncRound >= 2) {
+        return;
+    }
+    if (++self->syncRound == 1) {
+        self->syncSeq = pw_core_sync(self->core, PW_ID_CORE, 0); // now the binds' info
+        return;
+    }
+    self->post([owner = self->owner, generation = self->generation] {
+        owner->handleReady(generation);
+    });
+}
+
 void PipeWireGraph::Session::onCoreError(void *data, std::uint32_t id, int /*seq*/, int res,
                                          const char *message)
 {
@@ -288,6 +310,16 @@ void PipeWireGraph::Session::onCoreError(void *data, std::uint32_t id, int /*seq
         return; // an error on one of our bound proxies, e.g. it was removed mid-bind
     }
     auto *self = static_cast<Session *>(data);
+    // Only a broken connection is lost. PipeWire also reports errors against
+    // the core for a call on an object that has just gone ("unknown resource
+    // … (No such file or directory)", say after WirePlumber restarted and
+    // recreated its metadata): harmless, and treating it as a disconnect
+    // made the engine reconnect and rebuild everything mid-restart.
+    if (res != -EPIPE && res != -ECONNRESET) {
+        qCWarning(lcGraph, "PipeWire: %s (%s)", message != nullptr ? message : "",
+                  spa_strerror(res));
+        return;
+    }
     if (self->lost) {
         return;
     }
@@ -520,6 +552,16 @@ void PipeWireGraph::connectNow()
         return;
     }
     m_session = std::move(session);
+    // Connected once the initial listing is complete (handleReady): acting
+    // on a partial graph made the bus manager create buses that already
+    // existed.
+}
+
+void PipeWireGraph::handleReady(int generation)
+{
+    if (generation != m_generation || m_connected) {
+        return;
+    }
     m_connected = true;
     Q_EMIT connectedChanged(true);
 }

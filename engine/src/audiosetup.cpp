@@ -33,6 +33,20 @@ std::string compact(std::string value)
 
 } // namespace
 
+int largestBlock(const DeviceStore &store)
+{
+    // Automatic: PipeWire may go up to its clock.max-quantum, 2048 by default.
+    return store.blockSize() > 0 ? store.blockSize() : 2048;
+}
+
+int followerPeriods(const DeviceStore &store)
+{
+    // Two blocks at the smallest period size seen (512 frames); devices with
+    // bigger periods just get a bigger, equally safe buffer.
+    constexpr int smallestPeriod = 512;
+    return std::max(4, (2 * largestBlock(store) + smallestPeriod - 1) / smallestPeriod);
+}
+
 std::map<std::string, std::string> wantedSettings(const DeviceStore &store)
 {
     const auto rate = std::to_string(store.sampleRate());
@@ -79,6 +93,14 @@ std::string wirePlumberRules(const DeviceStore &store)
         }
         if (clockDevice != nullptr && key == store.clockDevice()) {
             props.push_back("priority.driver = " + std::to_string(clockDevicePriority()));
+        }
+        // A follower on a timer gets a small hardware buffer. When another
+        // interface vanishes, the graph stalls for a moment and the device
+        // replays whatever is left in its buffer: with PipeWire's default
+        // (as many periods as possible, ~0.7 s) that was a loud noise burst;
+        // with a few periods it's a few milliseconds.
+        if (timer && !isMaster) {
+            props.push_back("api.alsa.period-num = " + std::to_string(followerPeriods(store)));
         }
         if (props.empty()) {
             continue;

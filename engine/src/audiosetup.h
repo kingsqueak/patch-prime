@@ -24,6 +24,15 @@ class PipeWireGraph;
 // quantum, or PipeWire's choice for block size 0 (clock.force-quantum).
 std::map<std::string, std::string> wantedSettings(const DeviceStore &store);
 
+// The largest block PipeWire may use: the fixed block size, or PipeWire's
+// default clock.max-quantum (2048 frames) when it's automatic. (Capping
+// clock.max-quantum instead didn't stick and was a suspect in an outage.)
+int largestBlock(const DeviceStore &store);
+
+// Hardware buffer periods for a device that follows another clock: enough
+// for two of the largest blocks, and at least 4.
+int followerPeriods(const DeviceStore &store);
+
 // The WirePlumber rules for the per-device settings (scheduling, a device's
 // own sample rate), as a wireplumber.conf.d fragment. Auto scheduling means
 // timer scheduling while Patch Prime is the clock: an interface that

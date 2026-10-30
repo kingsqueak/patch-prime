@@ -23,6 +23,13 @@ namespace {
 constexpr auto pendingTimeout = std::chrono::seconds(3);
 const std::string nodeType = "PipeWire:Interface:Node";
 
+std::uint64_t parseSerial(const std::string &value)
+{
+    std::uint64_t serial = 0;
+    std::from_chars(value.data(), value.data() + value.size(), serial);
+    return serial;
+}
+
 std::uint32_t parseId(const std::string &value)
 {
     std::uint32_t id = 0;
@@ -386,6 +393,21 @@ void BusManager::reconcile()
         if ((name.starts_with(busNamePrefix) || name.starts_with(virtualNamePrefix) ||
              name.starts_with(sendNamePrefix)) &&
             (owner.empty() || owner == m_owner)) {
+            // Two of ours with one name (a reconnect that raced the graph's
+            // listing used to cause this): keep the older one and remove the
+            // extra, or the link cleanup would tear down one copy's routing.
+            // Older by object.serial, which only grows; ids are reused.
+            if (const auto other = existing.find(name); other != existing.end()) {
+                const auto serialOf = [this](std::uint32_t nodeId) {
+                    return parseSerial(prop(m_graph->nodes().at(nodeId), "object.serial"));
+                };
+                const bool keepOther = serialOf(other->second) <= serialOf(id);
+                const auto extra = keepOther ? id : other->second;
+                qCWarning(lcBus, "removing a duplicate %s (node %u)", name.c_str(), extra);
+                m_graph->destroyObject(extra);
+                other->second = keepOther ? other->second : id;
+                continue;
+            }
             existing[name] = id;
         }
     }
