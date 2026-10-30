@@ -53,6 +53,18 @@ VolumeFader {
             }
         }
 
+        // The panel's lit edge around the slot (1 px, outside its rim).
+        Rectangle {
+            x: slot.x - 1
+            y: slot.y - 1
+            width: slot.width + 2
+            height: slot.height + 2
+            radius: slot.radius + 1
+            color: "transparent"
+            border.color: Style.slotEdgeLight
+            border.width: 1
+        }
+
         // The slot, inset into the panel.
         Rectangle {
             id: slot

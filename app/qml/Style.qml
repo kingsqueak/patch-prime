@@ -53,7 +53,7 @@ QtObject {
 
     // Faders: a cap on a slim groove, with a dB scale beside it.
     readonly property real faderCapWidth: Math.round(Kirigami.Units.gridUnit * 1.3)
-    readonly property real faderCapHeight: Math.round(Kirigami.Units.gridUnit * 0.75)
+    readonly property real faderCapHeight: Math.round(Kirigami.Units.gridUnit * 1.125)
     readonly property real faderGrooveWidth: 4
     readonly property real faderScaleWidth: Math.round(Kirigami.Units.gridUnit * 1.7)
     readonly property color faderGroove: Qt.alpha(Kirigami.Theme.textColor, 0.22)
@@ -64,6 +64,9 @@ QtObject {
     readonly property color slotShadow: Qt.rgba(0, 0, 0, 0.28)
     readonly property color slotHighlight: Qt.rgba(1, 1, 1, 0.22)
     readonly property color slotRim: Qt.rgba(0, 0, 0, 0.18)
+    // A lighter line just outside the slot's dark rim: the panel's edge
+    // catching the light, so the recess reads on dark schemes too.
+    readonly property color slotEdgeLight: Qt.rgba(1, 1, 1, 0.16)
     readonly property color faderCapBorder: Qt.alpha(Kirigami.Theme.textColor, 0.45)
     readonly property color faderCapLine: Kirigami.Theme.highlightColor
     readonly property color scaleText: Kirigami.Theme.disabledTextColor
