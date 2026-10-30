@@ -178,6 +178,13 @@ void EqEffect::prepare(double sampleRate, int /*channels*/)
     }
 }
 
+void EqEffect::resume() noexcept
+{
+    for (auto &s : m_state) {
+        s.z = {};
+    }
+}
+
 void EqEffect::setParam(const std::string &name, double value)
 {
     int index = 0;
@@ -209,19 +216,19 @@ void EqEffect::updateBand(int index) noexcept
     const double q = t.q.load(std::memory_order_relaxed);
     bool moved = false;
     if (!near(s.now.freq, freq, s.now.freq * 1e-4)) {
-        s.now.freq = std::exp(std::log(s.now.freq) + ((std::log(freq) - std::log(s.now.freq)) * m_glide));
+        s.now.freq = std::exp(std::log(s.now.freq) + ((std::log(freq) - std::log(s.now.freq)) * m_blockGlide));
         moved = true;
     } else {
         s.now.freq = freq;
     }
     if (!near(s.now.gainDb, gain, 1e-3)) {
-        s.now.gainDb += (gain - s.now.gainDb) * m_glide;
+        s.now.gainDb += (gain - s.now.gainDb) * m_blockGlide;
         moved = true;
     } else {
         s.now.gainDb = gain;
     }
     if (!near(s.now.q, q, 1e-4)) {
-        s.now.q = std::exp(std::log(s.now.q) + ((std::log(q) - std::log(s.now.q)) * m_glide));
+        s.now.q = std::exp(std::log(s.now.q) + ((std::log(q) - std::log(s.now.q)) * m_blockGlide));
         moved = true;
     } else {
         s.now.q = q;
@@ -245,6 +252,10 @@ void EqEffect::process(float *const *channels, int channelCount, int frames) noe
     const std::span<float *const> planes(channels, count);
     for (int start = 0; start < frames; start += blockFrames) {
         const int n = std::min(blockFrames, frames - start);
+        // Glides keep their 20 ms however short the block (or the quantum) is.
+        m_blockGlide = n == blockFrames
+                           ? m_glide
+                           : 1.0 - std::exp(-static_cast<double>(n) / (0.020 * m_rate));
         for (int b = 0; b < bandCount; ++b) {
             updateBand(b);
             const auto &t = m_target.at(static_cast<std::size_t>(b));
@@ -273,6 +284,9 @@ void EqEffect::process(float *const *channels, int channelCount, int frames) noe
                 }
             }
             s.mix = mix;
+            if (mix == 0.0F) {
+                s.z = {}; // faded out: start clean when it comes back
+            }
             // No denormals in the filter state once the input goes quiet.
             for (std::size_t ch = 0; ch < count; ++ch) {
                 for (double &v : s.z.at(ch)) {

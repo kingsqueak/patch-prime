@@ -729,7 +729,7 @@ void BusManager::reconcile()
 
     linkSends(ready, stripOuts, wanted, sends, readySends, existingLinks);
     linkKeys(fx, wanted, stripOuts, existingLinks);
-    linkCue(wanted, stripOuts, existingLinks);
+    linkCue(ready, wanted, stripOuts, existingLinks);
 
     // Meters whose bus is gone or no longer wanted.
     for (auto it = m_meters.begin(); it != m_meters.end();) {
@@ -860,7 +860,9 @@ BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
             m_effects.erase(fx);
             fx = m_effects.end();
         }
+        bool created = false;
         if (fx == m_effects.end()) {
+            created = true;
             auto processor = std::make_shared<Processor>();
             processor->setChain(buildChain(w.settings->effects, rate, channels));
             const Properties props{
@@ -894,8 +896,10 @@ BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
         fx->second.processor->collect();
 
         // Until the filter shows up with all its ports, the strip runs dry.
+        // Not in the pass that made it, either: a node of that name in the
+        // graph now is the one just replaced, on its way out.
         const auto node = filterNodes.find(fxName);
-        if (node == filterNodes.end()) {
+        if (created || node == filterNodes.end()) {
             continue;
         }
         FxPorts ports{.in = {}, .out = portsOf(node->second, "out", false), .key = {}};
@@ -926,7 +930,8 @@ BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
     return up;
 }
 
-void BusManager::linkCue(const std::map<std::string, Wanted> &wanted,
+void BusManager::linkCue(const std::map<std::string, std::uint32_t> &ready,
+                         const std::map<std::string, Wanted> &wanted,
                          const std::map<std::string, std::vector<PortRef>> &stripOuts,
                          const LinkMap &existingLinks)
 {
@@ -938,29 +943,39 @@ void BusManager::linkCue(const std::map<std::string, Wanted> &wanted,
     const std::optional<std::uint32_t> hardwareNode =
         usable ? cue->second.hardwareNodeId : std::nullopt;
 
-    // Every strip's output port except the cue output's own (its path to its
-    // hardware is linkHardware()'s), and the ones that should be heard.
-    std::set<std::uint32_t> stripPorts;
-    std::set<std::uint32_t> desired;
+    // The ports a cue link can come from: every strip's output now, and every
+    // bus's own outputs (a strip's output moves to its effects node when it
+    // gets effects, and an old cue link from the bus must go then too).
+    std::map<std::uint32_t, std::string> sourceOf; // port -> strip name
     for (const auto &[name, ports] : stripOuts) {
-        if (usable && name == cue->first) {
-            continue;
-        }
-        const bool cued = usable && m_devices->cued().contains(wanted.at(name).key);
         for (const auto &p : ports) {
-            stripPorts.insert(p.portId);
-            if (cued) {
-                desired.insert(p.portId);
-            }
+            sourceOf[p.portId] = name;
         }
-        if (cued && hardwareNode) {
-            link(ports,
-                 selectPair(portsOf(*hardwareNode, "in", false), cue->second.settings->channelPair),
-                 existingLinks);
+    }
+    for (const auto &[name, busId] : ready) {
+        for (const auto &p : portsOf(busId, "out", true)) {
+            sourceOf[p.portId] = name;
         }
     }
 
-    // Links from strips into the cue hardware (now or before) that nobody cues.
+    // The links cue wants: each cued strip's output to the cue device.
+    std::set<std::pair<std::uint32_t, std::uint32_t>> desired;
+    if (hardwareNode) {
+        const auto inputs =
+            selectPair(portsOf(*hardwareNode, "in", false), cue->second.settings->channelPair);
+        for (const auto &[name, ports] : stripOuts) {
+            if (name == cue->first || !m_devices->cued().contains(wanted.at(name).key)) {
+                continue;
+            }
+            for (const auto &[out, in] : pairPorts(ports, inputs)) {
+                desired.insert({out.portId, in.portId});
+            }
+            link(ports, inputs, existingLinks);
+        }
+    }
+
+    // Links from strips into the cue device (now or before) that cue doesn't
+    // want go, except each device's own strip's path to it.
     std::set<std::uint32_t> cleanNodes;
     if (hardwareNode) {
         cleanNodes.insert(*hardwareNode);
@@ -973,19 +988,16 @@ void BusManager::linkCue(const std::map<std::string, Wanted> &wanted,
         for (const auto &p : portsOf(node, "in", false)) {
             inputs.insert(p.portId);
         }
-        // The strip that owns this device keeps its own path to it.
-        std::set<std::uint32_t> own;
+        std::set<std::string> owners;
         for (const auto &[name, w] : wanted) {
-            if (w.hardwareNodeId == node && stripOuts.contains(name)) {
-                for (const auto &p : stripOuts.at(name)) {
-                    own.insert(p.portId);
-                }
+            if (w.hardwareNodeId == node) {
+                owners.insert(name);
             }
         }
         for (const auto &[pair, linkId] : existingLinks) {
-            if (inputs.contains(pair.second) && stripPorts.contains(pair.first) &&
-                !own.contains(pair.first) &&
-                (node != hardwareNode || !desired.contains(pair.first))) {
+            const auto source = sourceOf.find(pair.first);
+            if (inputs.contains(pair.second) && source != sourceOf.end() &&
+                !owners.contains(source->second) && !desired.contains(pair)) {
                 m_graph->destroyObject(linkId);
             }
         }
@@ -999,6 +1011,8 @@ void BusManager::linkKeys(const std::map<std::string, FxPorts> &fx,
                           const LinkMap &existingLinks)
 {
     std::map<std::string, std::string> nameOf; // endpoint key -> bus name
+    // Where each strip's sound goes: its sends, and (as they're accepted
+    // below) the strips it keys. A key that closes a circle is refused.
     std::map<std::string, std::vector<std::string>> sendsOf;
     for (const auto &[name, w] : wanted) {
         nameOf[w.key] = name;
@@ -1016,7 +1030,7 @@ void BusManager::linkKeys(const std::map<std::string, FxPorts> &fx,
             }
             if (reaches(sendsOf, w.key, e.key)) {
                 qCWarning(lcBus, "%s can't be keyed by %s: it feeds it (a loop)", w.key.c_str(),
-                          e.key.c_str());
+                          e.key.c_str()); // through sends or other keys
                 continue;
             }
             const auto source = nameOf.find(e.key);
@@ -1027,6 +1041,7 @@ void BusManager::linkKeys(const std::map<std::string, FxPorts> &fx,
             if (out == stripOuts.end()) {
                 continue;
             }
+            sendsOf[e.key].push_back(w.key); // the key strip now feeds this one
             for (const auto &port : out->second) {
                 desired.insert(port.portId);
             }

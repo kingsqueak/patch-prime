@@ -22,6 +22,7 @@
 
 #include <array>
 #include <cmath>
+#include <limits>
 #include <random>
 #include <vector>
 
@@ -248,6 +249,63 @@ private Q_SLOTS:
         }
         // A 1 kHz sine at 4x (+12 dB) moves at most ~0.13 per sample at 48 kHz.
         QVERIFY2(worstStep < 0.2F, qPrintable(QString::number(worstStep)));
+    }
+
+    void reviewFixes()
+    {
+        // An EQ band switched off and on again doesn't bring back old sound.
+        EqEffect eq;
+        eq.setParam("b3Gain", 24.0);
+        eq.setParam("b3Q", 10.0);
+        eq.prepare(rate, 2);
+        sinePeak(eq, 1000.0, rate, 1.0);
+        eq.setParam("b3On", 0.0);
+        Buffers quiet(4800, 0.0F);
+        eq.process(quiet.planes.data(), 2, 4800); // fades out
+        eq.setParam("b3On", 1.0);
+        Buffers after(4800, 0.0F);
+        eq.process(after.planes.data(), 2, 4800);
+        QVERIFY(std::ranges::all_of(after.left, [](float v) { return v == 0.0F; }));
+
+        // A multiband band turned off is uncompressed within milliseconds,
+        // whatever its release time.
+        MultibandEffect mb;
+        for (int b = 1; b <= 4; ++b) {
+            mb.setParam("b" + std::to_string(b) + "Threshold", -40.0);
+            mb.setParam("b" + std::to_string(b) + "Ratio", 20.0);
+            mb.setParam("b" + std::to_string(b) + "Release", 3000.0);
+        }
+        mb.prepare(rate, 2);
+        QVERIFY(gainDb(sinePeak(mb, 30.0, rate, 0.5)) < -20.0);
+        mb.setParam("b1On", 0.0);
+        Buffers settle(2400, 0.0F); // 50 ms
+        mb.process(settle.planes.data(), 2, 2400);
+        std::array<float, 4> meters{};
+        mb.takeMeters(meters);
+        mb.takeMeters(meters); // only what's new
+        Buffers probe(480, 0.0F);
+        mb.process(probe.planes.data(), 2, 480);
+        mb.takeMeters(meters);
+        QVERIFY2(meters[0] < 0.1F, qPrintable(QString::number(meters[0])));
+
+        // A NaN from an app doesn't stick in a chain.
+        Processor processor;
+        std::vector<std::unique_ptr<Effect>> effects;
+        effects.push_back(makeEffect("eq"));
+        effects.push_back(makeEffect("reverb"));
+        processor.setChain(std::make_unique<EffectChain>(std::move(effects), rate, 2));
+        Buffers bad(256, 0.1F);
+        bad.left[10] = std::numeric_limits<float>::quiet_NaN();
+        bad.right[20] = std::numeric_limits<float>::infinity();
+        const std::array<const float *, 2> in{bad.left.data(), bad.right.data()};
+        Buffers out(256, 0.0F);
+        processor.process(in.data(), out.planes.data(), 2, 256);
+        Buffers fine(4800, 0.1F);
+        const std::array<const float *, 2> in2{fine.left.data(), fine.right.data()};
+        Buffers out2(4800, 0.0F);
+        processor.process(in2.data(), out2.planes.data(), 2, 4800);
+        QVERIFY(std::ranges::all_of(out.left, [](float v) { return std::isfinite(v); }));
+        QVERIFY(std::ranges::all_of(out2.right, [](float v) { return std::isfinite(v); }));
     }
 
     void eqExtremesStayStable()

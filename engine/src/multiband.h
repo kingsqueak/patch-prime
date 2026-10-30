@@ -51,6 +51,8 @@ public:
     void setParam(const std::string &name, double value) override;
     // Each band's largest gain reduction (dB, positive) since the last call.
     std::size_t takeMeters(std::span<float> out) override;
+    // Back from bypass: filter memory and gain reduction are from before.
+    void resume() noexcept override;
 
 private:
     static constexpr int blockFrames = 32;
@@ -81,7 +83,7 @@ private:
         double level = 1.0;       // smoothed makeup x on x solo, linear
     };
 
-    void updateCrossovers() noexcept;
+    void updateCrossovers(double glide) noexcept;
 
     std::array<std::atomic<float>, 3> m_crossTarget{};
     std::array<BandTarget, bandCount> m_target;
@@ -104,6 +106,7 @@ private:
     double m_glide = 1.0;
     double m_levelStep = 1.0; // one-pole coefficient per sample, ~5 ms
     double m_rmsStep = 1.0;   // the level detector's, ~10 ms
+    double m_offRelease = 0.0; // a band turned off lets go of its reduction in ~5 ms
 };
 
 } // namespace pp

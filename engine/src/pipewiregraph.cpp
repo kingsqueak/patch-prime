@@ -605,22 +605,26 @@ void PipeWireGraph::Session::onMeterProcess(void *data)
             meter->shortTermStep = 1.0 - std::exp(-1.0 / (3.0 * rate));
         }
         if (meter->rate > 0) {
+            // Indexes stay below measured <= maxChannels (no .at(): it could
+            // throw on the realtime thread).
             const auto measured = std::min(tracked, Meter::maxChannels);
+            // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
             for (std::size_t i = 0; i + channels <= count; i += channels) {
                 double sum = 0.0;
                 for (std::size_t c = 0; c < measured; ++c) {
                     const double x = samples[i + c];
-                    meter->meanSquare.at(c) += ((x * x) - meter->meanSquare.at(c)) * meter->rmsStep;
-                    const double y = kStep(meter->weighting.highPass, meter->highPass.at(c),
-                                           kStep(meter->weighting.shelf, meter->shelf.at(c), x));
+                    meter->meanSquare[c] += ((x * x) - meter->meanSquare[c]) * meter->rmsStep;
+                    const double y = kStep(meter->weighting.highPass, meter->highPass[c],
+                                           kStep(meter->weighting.shelf, meter->shelf[c], x));
                     sum += y * y;
                 }
                 meter->shortTerm += (sum - meter->shortTerm) * meter->shortTermStep;
             }
             for (std::size_t c = 0; c < measured && c < meter->levels->rms.size(); ++c) {
-                meter->levels->rms[c].store(static_cast<float>(std::sqrt(meter->meanSquare.at(c))),
+                meter->levels->rms[c].store(static_cast<float>(std::sqrt(meter->meanSquare[c])),
                                             std::memory_order_relaxed);
             }
+            // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
             meter->levels->loudness.store(static_cast<float>(lufsFromMeanSquare(meter->shortTerm)),
                                           std::memory_order_relaxed);
         }

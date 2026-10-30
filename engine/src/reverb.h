@@ -73,11 +73,17 @@ private:
     std::array<double, lineCount> m_base{};     // line lengths at size 1, in samples
     std::array<float, lineCount> m_lowpass{};   // damping filter state
     std::array<double, lineCount> m_gain{};     // per-pass gain for the decay
-    double m_scale = 1.0;                       // size factor, gliding
-    double m_preSamples = 0.0;                  // gliding
+    double m_scale = 1.0;                       // size factor, gliding per sample
+    double m_preSamples = 0.0;                  // gliding per sample
+    double m_scaleTarget = 1.0;
+    double m_preTarget = 0.0;
+    double m_sampleGlide = 1.0;                 // per sample, ~100 ms
+    float m_mixNow = 0.25F;                     // smoothed, so changes don't step
+    float m_widthNow = 1.0F;
+    float m_smooth = 1.0F;                      // per sample, ~10 ms
     float m_damp = 0.5F;                        // one-pole coefficient
-    double m_glide = 1.0;
-    double m_phase = 0.0;                       // modulation
+    double m_phase = 0.0;                       // modulation of line 0
+    double m_phase2 = 0.0;                      // of line 4, a bit slower
     double m_phaseStep = 0.0;
     double m_modDepth = 0.0;                    // samples
     float m_denormal = 1e-18F;

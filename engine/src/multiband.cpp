@@ -98,6 +98,7 @@ void MultibandEffect::prepare(double sampleRate, int /*channels*/)
     m_glide = 1.0 - std::exp(-static_cast<double>(blockFrames) / (0.020 * sampleRate));
     m_levelStep = 1.0 - std::exp(-1.0 / (0.005 * sampleRate));
     m_rmsStep = 1.0 - std::exp(-1.0 / (0.010 * sampleRate));
+    m_offRelease = std::exp(-1.0 / (0.005 * sampleRate));
     for (std::size_t i = 0; i < m_crossNow.size(); ++i) {
         m_crossNow.at(i) = m_crossTarget.at(i).load();
     }
@@ -150,14 +151,29 @@ std::size_t MultibandEffect::takeMeters(std::span<float> out)
     return n;
 }
 
-void MultibandEffect::updateCrossovers() noexcept
+void MultibandEffect::resume() noexcept
+{
+    for (auto *pair : {&m_midLow, &m_midHigh, &m_band1, &m_band2, &m_band3, &m_band4}) {
+        for (auto &state : *pair) {
+            state = {};
+        }
+    }
+    m_allpassLow = {};
+    m_allpassHigh = {};
+    for (auto &s : m_state) {
+        s.meanSquare = 0.0;
+        s.reductionDb = 0.0;
+    }
+}
+
+void MultibandEffect::updateCrossovers(double glide) noexcept
 {
     bool moved = m_fresh;
     for (std::size_t i = 0; i < m_crossNow.size(); ++i) {
         const double target = m_crossTarget.at(i).load(std::memory_order_relaxed);
         double &now = m_crossNow.at(i);
         if (std::abs(now - target) > now * 1e-4) {
-            now = std::exp(std::log(now) + ((std::log(target) - std::log(now)) * m_glide));
+            now = std::exp(std::log(now) + ((std::log(target) - std::log(now)) * glide));
             moved = true;
         } else if (now != target) {
             now = target;
@@ -203,14 +219,16 @@ void MultibandEffect::process(float *const *channels, int channelCount, int fram
         double level; // target: makeup x solo
     };
     std::array<Band, bandCount> bands{};
-    bool anySolo = false;
-    for (const auto &t : m_target) {
-        anySolo = anySolo || t.solo.load(std::memory_order_relaxed);
+    // Each solo read once, so a change mid-call can't leave every band unheard.
+    std::array<bool, bandCount> solo{};
+    for (std::size_t b = 0; b < solo.size(); ++b) {
+        solo.at(b) = m_target.at(b).solo.load(std::memory_order_relaxed);
     }
+    const bool anySolo = std::ranges::any_of(solo, [](bool s) { return s; });
     for (std::size_t b = 0; b < bands.size(); ++b) {
         const auto &t = m_target.at(b);
         const bool on = t.on.load(std::memory_order_relaxed);
-        const bool heard = !anySolo || t.solo.load(std::memory_order_relaxed);
+        const bool heard = !anySolo || solo.at(b);
         double level = 0.0; // a band not heard (another is soloed)
         if (heard) {
             level = on ? std::pow(10.0, t.makeupDb.load(std::memory_order_relaxed) / 20.0) : 1.0;
@@ -229,8 +247,11 @@ void MultibandEffect::process(float *const *channels, int channelCount, int fram
     std::array<float, bandCount> peakReduction{};
     std::array<std::array<double, maxEffectChannels>, bandCount> split{};
     for (int start = 0; start < frames; start += blockFrames) {
-        updateCrossovers();
         const int end = std::min(frames, start + blockFrames);
+        // Glides keep their 20 ms however short the block (or the quantum) is.
+        updateCrossovers(end - start == blockFrames
+                             ? m_glide
+                             : 1.0 - std::exp(-static_cast<double>(end - start) / (0.020 * m_rate)));
         for (int i = start; i < end; ++i) {
             // Split every channel into the four bands.
             std::array<double, bandCount> loudest{};
@@ -266,7 +287,10 @@ void MultibandEffect::process(float *const *channels, int channelCount, int fram
                     const double level = 10.0 * std::log10(std::max(s.meanSquare, 1e-18));
                     wanted = level - staticCurve(level, band.threshold, band.ratio);
                 }
-                const double k = wanted > s.reductionDb ? band.attack : band.release;
+                double k = wanted > s.reductionDb ? band.attack : band.release;
+                if (!band.on) {
+                    k = m_offRelease; // off means uncompressed, now
+                }
                 s.reductionDb = wanted + ((s.reductionDb - wanted) * k);
                 s.level += (band.level - s.level) * m_levelStep;
                 peakReduction.at(b) = std::max(peakReduction.at(b), static_cast<float>(s.reductionDb));
@@ -290,6 +314,18 @@ void MultibandEffect::process(float *const *channels, int channelCount, int fram
     }
     flushDenormals(std::span(&m_allpassLow, 1), count);
     flushDenormals(std::span(&m_allpassHigh, 1), count);
+    // Envelopes out of denormals in silence (and a soloed-away band's level).
+    for (auto &s : m_state) {
+        if (s.meanSquare < 1e-30) {
+            s.meanSquare = 0.0;
+        }
+        if (std::abs(s.reductionDb) < 1e-9) {
+            s.reductionDb = 0.0;
+        }
+        if (s.level < 1e-9) {
+            s.level = 0.0;
+        }
+    }
     for (std::size_t b = 0; b < bandCount; ++b) {
         auto &meter = m_target.at(b).meter;
         if (peakReduction.at(b) > meter.load(std::memory_order_relaxed)) {

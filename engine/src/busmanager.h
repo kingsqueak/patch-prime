@@ -296,7 +296,8 @@ private:
     // Cue: links each cued strip's output straight to the cue output's
     // hardware (its bus is muted meanwhile, see reconcile()), and removes
     // cue links that no longer apply.
-    void linkCue(const std::map<std::string, Wanted> &wanted,
+    void linkCue(const std::map<std::string, std::uint32_t> &ready,
+                 const std::map<std::string, Wanted> &wanted,
                  const std::map<std::string, std::vector<PortRef>> &stripOuts,
                  const LinkMap &existingLinks);
     // Feeds each effects node's key input from the strips its duckers

@@ -45,6 +45,10 @@ void DenoiseEffect::prepare(double rate, int channels)
     for (auto &c : m_channels) {
         c.state = rnnoise_create(nullptr); // the built-in model
     }
+    if (std::ranges::any_of(m_channels, [](const Channel &c) { return c.state == nullptr; })) {
+        release(); // out of memory: pass through rather than crash
+        m_active = false;
+    }
 }
 
 void DenoiseEffect::resume() noexcept

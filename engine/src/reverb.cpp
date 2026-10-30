@@ -71,7 +71,9 @@ void ReverbEffect::prepare(double sampleRate, int /*channels*/)
     for (std::size_t i = 0; i < m_lines.size(); ++i) {
         m_base.at(i) = lineMs.at(i) * 0.001 * sampleRate;
         m_lines.at(i).buffer.assign(
-            static_cast<std::size_t>(std::ceil((m_base.at(i) * maxScale) + m_modDepth + 4.0)), 0.0F);
+            // The modulation adds up to twice its depth.
+            static_cast<std::size_t>(std::ceil((m_base.at(i) * maxScale) + (2.0 * m_modDepth) + 4.0)),
+            0.0F);
     }
     for (std::size_t i = 0; i < m_diffusers.size(); ++i) {
         m_diffusers.at(i).buffer.assign(
@@ -80,9 +82,12 @@ void ReverbEffect::prepare(double sampleRate, int /*channels*/)
     }
     m_pre.buffer.assign(static_cast<std::size_t>(std::ceil(maxPredelayMs * 0.001 * sampleRate)) + 4,
                         0.0F);
-    m_glide = 1.0 - std::exp(-static_cast<double>(blockFrames) / (0.1 * sampleRate));
-    m_scale = scaleFor(m_size.load());
-    m_preSamples = m_predelay.load() * 0.001 * sampleRate;
+    m_scale = m_scaleTarget = scaleFor(m_size.load());
+    m_preSamples = m_preTarget = m_predelay.load() * 0.001 * sampleRate;
+    m_sampleGlide = 1.0 - std::exp(-1.0 / (0.1 * sampleRate));
+    m_smooth = static_cast<float>(1.0 - std::exp(-1.0 / (0.01 * sampleRate)));
+    m_mixNow = m_mix.load() / 100.0F;
+    m_widthNow = m_width.load() / 100.0F;
     resume();
     updateBlock();
 }
@@ -121,10 +126,10 @@ void ReverbEffect::setParam(const std::string &name, double value)
 
 void ReverbEffect::updateBlock() noexcept
 {
-    const double scale = scaleFor(m_size.load(std::memory_order_relaxed));
-    m_scale += (scale - m_scale) * m_glide;
-    const double pre = m_predelay.load(std::memory_order_relaxed) * 0.001 * m_rate;
-    m_preSamples += (pre - m_preSamples) * m_glide;
+    // Size and pre-delay glide sample by sample (in process()), so the read
+    // positions never jump.
+    m_scaleTarget = scaleFor(m_size.load(std::memory_order_relaxed));
+    m_preTarget = m_predelay.load(std::memory_order_relaxed) * 0.001 * m_rate;
     // Each pass through a line loses its share of 60 dB per decay time.
     const double decay = m_decay.load(std::memory_order_relaxed);
     for (std::size_t i = 0; i < m_lines.size(); ++i) {
@@ -144,8 +149,8 @@ void ReverbEffect::process(float *const *channels, int channelCount, int frames)
         return;
     }
     const std::span<float *const> planes(channels, count);
-    const auto mix = m_mix.load(std::memory_order_relaxed) / 100.0F;
-    const auto width = m_width.load(std::memory_order_relaxed) / 100.0F;
+    const auto mixTarget = m_mix.load(std::memory_order_relaxed) / 100.0F;
+    const auto widthTarget = m_width.load(std::memory_order_relaxed) / 100.0F;
     const float inScale = 1.0F / static_cast<float>(count);
     for (int start = 0; start < frames; start += blockFrames) {
         updateBlock();
@@ -156,7 +161,12 @@ void ReverbEffect::process(float *const *channels, int channelCount, int frames)
                 in += plane[i]; // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
             }
             m_pre.push(in * inScale);
-            float x = m_pre.read(std::max(1.0, m_preSamples));
+            m_scale += (m_scaleTarget - m_scale) * m_sampleGlide;
+            m_preSamples += (m_preTarget - m_preSamples) * m_sampleGlide;
+            m_mixNow += (mixTarget - m_mixNow) * m_smooth;
+            m_widthNow += (widthTarget - m_widthNow) * m_smooth;
+            // (The tiny alternating offset keeps the diffusers out of denormals.)
+            float x = m_pre.read(std::max(1.0, m_preSamples)) + m_denormal;
             for (auto &allpass : m_diffusers) {
                 x = allpass.step(x);
             }
@@ -166,6 +176,10 @@ void ReverbEffect::process(float *const *channels, int channelCount, int frames)
             if (m_phase > 2.0 * std::numbers::pi) {
                 m_phase -= 2.0 * std::numbers::pi;
             }
+            m_phase2 += m_phaseStep * 0.7;
+            if (m_phase2 > 2.0 * std::numbers::pi) {
+                m_phase2 -= 2.0 * std::numbers::pi;
+            }
             std::array<float, lineCount> out{};
             std::array<float, lineCount> fed{};
             float sum = 0.0F;
@@ -174,7 +188,7 @@ void ReverbEffect::process(float *const *channels, int channelCount, int frames)
                 if (l == 0) {
                     length += m_modDepth * (1.0 + std::sin(m_phase));
                 } else if (l == 4) {
-                    length += m_modDepth * (1.0 + std::cos(m_phase * 0.7));
+                    length += m_modDepth * (1.0 + std::cos(m_phase2));
                 }
                 out.at(l) = m_lines.at(l).read(length);
                 m_lowpass.at(l) += m_damp * (out.at(l) - m_lowpass.at(l));
@@ -195,7 +209,7 @@ void ReverbEffect::process(float *const *channels, int channelCount, int frames)
             right *= outputGain;
             // Width: from mono (0 %) to the full spread.
             const float mid = (left + right) * 0.5F;
-            const float side = (left - right) * 0.5F * width;
+            const float side = (left - right) * 0.5F * m_widthNow;
             left = mid + side;
             right = mid - side;
 
@@ -206,7 +220,7 @@ void ReverbEffect::process(float *const *channels, int channelCount, int frames)
                 }
                 // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
                 float &sample = planes[c][i];
-                sample += (wet - sample) * mix;
+                sample += (wet - sample) * m_mixNow;
             }
         }
     }

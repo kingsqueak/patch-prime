@@ -76,6 +76,8 @@ public:
     void prepare(double sampleRate, int channels) override;
     void process(float *const *channels, int channelCount, int frames) noexcept override;
     void setParam(const std::string &name, double value) override;
+    // Back from bypass: the bands' filter memory is from before; drop it.
+    void resume() noexcept override;
 
 private:
     static constexpr int blockFrames = 32; // coefficient update interval while moving
@@ -103,7 +105,8 @@ private:
     std::array<Target, bandCount> m_target;
     std::array<State, bandCount> m_state;
     double m_rate = 48000.0;
-    double m_glide = 1.0;     // per block, one-pole
+    double m_glide = 1.0;     // per full block, one-pole
+    double m_blockGlide = 1.0; // for the block being processed (shorter at the end)
     float m_fadeStep = 1.0F;  // per sample, for on/off and type changes
 };
 

@@ -392,6 +392,13 @@ void Processor::process(const float *const *in, float *const *out, int channelCo
         } else if (inputs[c] != outputs[c]) {
             std::memcpy(outputs[c], inputs[c], static_cast<std::size_t>(frames) * sizeof(float));
         }
+        // A broken sample (NaN or infinity) from an app would stick in the
+        // effects' filters and envelopes for good: it comes in as silence.
+        for (float &sample : std::span(outputs[c], static_cast<std::size_t>(frames))) {
+            if (!std::isfinite(sample)) {
+                sample = 0.0F;
+            }
+        }
     }
     EffectChain *chain = m_chain.load();
     const bool complete = std::ranges::all_of(outputs, [](const float *p) { return p != nullptr; });

@@ -173,6 +173,7 @@ public:
     void collect();
 
     // Realtime: in and out are planar, channel by channel; in may equal out.
+    // Non-finite input samples are replaced with silence before the chain.
     // Any length: blocks longer than maxEffectFrames are processed in parts.
     // key: the key input (mono), or null.
     void process(const float *const *in, float *const *out, int channelCount, int frames,
