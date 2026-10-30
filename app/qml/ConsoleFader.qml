@@ -6,9 +6,11 @@ import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
 import org.kingsqueak.patchprime.engine
 
-// A strip's fader, drawn like a console's: a dB scale on the left, a slim
-// groove, and a cap with a line across it. Behaves as VolumeFader (follows
-// the daemon, double-click for 0 dB).
+// A strip's fader, drawn like a console's: a dB scale on the left, a slot
+// the width of the cap that looks cut into the panel (shaded darker at its
+// edges, a shadow under its top edge, a highlight on its bottom edge), a
+// slim groove in it, and a cap with a line across it. Behaves as
+// VolumeFader (follows the daemon, double-click for 0 dB).
 VolumeFader {
     id: fader
 
@@ -48,6 +50,49 @@ VolumeFader {
                     height: 1
                     color: Style.scaleTick
                 }
+            }
+        }
+
+        // The slot, inset into the panel.
+        Rectangle {
+            id: slot
+            x: Style.faderScaleWidth - Style.faderSlotMargin
+            y: fader.topPadding
+            width: Style.faderCapWidth + 2 * Style.faderSlotMargin
+            height: fader.availableHeight
+            radius: 3
+            // Darker at the sides, as if the light falls into a channel.
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: Style.slotShadeEdge }
+                GradientStop { position: 0.2; color: Style.slotShadeMid }
+                GradientStop { position: 0.8; color: Style.slotShadeMid }
+                GradientStop { position: 1.0; color: Style.slotShadeEdge }
+            }
+            border.color: Style.slotRim
+            border.width: 1
+
+            // The upper edge casts a shadow into the slot...
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 1
+                height: Math.round(Kirigami.Units.smallSpacing * 1.5)
+                radius: 2
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Style.slotShadow }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+            // ...and the lower edge catches the light.
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 1
+                height: 1
+                color: Style.slotHighlight
             }
         }
 

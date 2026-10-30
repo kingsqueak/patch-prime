@@ -77,11 +77,15 @@ Kirigami.Page {
     }
 
     // Inputs, mix buses and outputs side by side, like a console; scrolls
-    // sideways when there are more strips than fit.
+    // sideways when there are more strips than fit. The scroll bar has its
+    // own row under the strips, so it never covers them.
     Flickable {
+        id: console_
+
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.bottom: scroller.visible ? scroller.top : parent.bottom
+        anchors.bottomMargin: scroller.visible ? Style.gap : 0
         anchors.top: sceneBar.visible ? sceneBar.bottom : parent.top
         anchors.topMargin: sceneBar.visible ? Style.gap * 2 : 0
         visible: inputs.count > 0 || buses.count > 0 || outputs.count > 0
@@ -90,7 +94,7 @@ Kirigami.Page {
         flickableDirection: Flickable.HorizontalFlick
         boundsBehavior: Flickable.StopAtBounds
         clip: true
-        QQC2.ScrollBar.horizontal: QQC2.ScrollBar {}
+        QQC2.ScrollBar.horizontal: scroller
 
         RowLayout {
             id: consoleRow
@@ -132,5 +136,16 @@ Kirigami.Page {
                 strips: outputs
             }
         }
+    }
+
+    QQC2.ScrollBar {
+        id: scroller
+
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        orientation: Qt.Horizontal
+        policy: QQC2.ScrollBar.AlwaysOn
+        visible: console_.visible && console_.contentWidth > console_.width
     }
 }

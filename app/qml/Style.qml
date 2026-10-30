@@ -56,7 +56,14 @@ QtObject {
     readonly property real faderCapHeight: Math.round(Kirigami.Units.gridUnit * 0.75)
     readonly property real faderGrooveWidth: 4
     readonly property real faderScaleWidth: Math.round(Kirigami.Units.gridUnit * 1.7)
-    readonly property color faderGroove: Qt.alpha(Kirigami.Theme.textColor, 0.18)
+    readonly property color faderGroove: Qt.alpha(Kirigami.Theme.textColor, 0.22)
+    // The fader's slot, shaded to look inset (works on light and dark).
+    readonly property real faderSlotMargin: 2
+    readonly property color slotShadeEdge: Qt.rgba(0, 0, 0, 0.16)
+    readonly property color slotShadeMid: Qt.rgba(0, 0, 0, 0.07)
+    readonly property color slotShadow: Qt.rgba(0, 0, 0, 0.28)
+    readonly property color slotHighlight: Qt.rgba(1, 1, 1, 0.22)
+    readonly property color slotRim: Qt.rgba(0, 0, 0, 0.18)
     readonly property color faderCapBorder: Qt.alpha(Kirigami.Theme.textColor, 0.45)
     readonly property color faderCapLine: Kirigami.Theme.highlightColor
     readonly property color scaleText: Kirigami.Theme.disabledTextColor
