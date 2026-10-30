@@ -38,6 +38,8 @@ void DenoiseEffect::prepare(double rate, int channels)
     release();
     m_active = std::abs(rate - sampleRate) < 1.0;
     m_position = 0;
+    m_amountNow = m_amount.load();
+    m_smooth = static_cast<float>(1.0 - std::exp(-1.0 / (0.01 * rate)));
     if (!m_active) {
         return;
     }
@@ -86,10 +88,12 @@ void DenoiseEffect::process(float *const *channels, int channelCount, int frames
     const std::size_t count =
         std::min(static_cast<std::size_t>(std::max(channelCount, 0)), m_channels.size());
     const std::span<float *const> planes(channels, count);
-    const float amount = m_amount.load(std::memory_order_relaxed);
+    const float amountTarget = m_amount.load(std::memory_order_relaxed);
     float voice = 0.0F;
     for (int i = 0; i < frames; ++i) {
         const auto at = static_cast<std::size_t>(m_position);
+        m_amountNow += (amountTarget - m_amountNow) * m_smooth;
+        const float amount = m_amountNow;
         for (std::size_t c = 0; c < count; ++c) {
             auto &ch = m_channels[c];
             // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
@@ -106,8 +110,9 @@ void DenoiseEffect::process(float *const *channels, int channelCount, int frames
             }
         }
     }
-    if (voice * 100.0F > m_meter.load(std::memory_order_relaxed)) {
-        m_meter.store(voice * 100.0F, std::memory_order_relaxed);
+    float current = m_meter.load(std::memory_order_relaxed);
+    while (voice * 100.0F > current &&
+           !m_meter.compare_exchange_weak(current, voice * 100.0F, std::memory_order_relaxed)) {
     }
 }
 

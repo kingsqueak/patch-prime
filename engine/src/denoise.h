@@ -60,6 +60,8 @@ private:
     // Realtime only (made in prepare()).
     std::vector<Channel> m_channels;
     int m_position = 0; // within the current frame
+    float m_amountNow = 1.0F; // smoothed (~10 ms)
+    float m_smooth = 1.0F;
     bool m_active = false; // false: not at 48 kHz, pass through
 };
 

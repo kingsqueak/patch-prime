@@ -19,10 +19,13 @@ inline double step(const EqEffect::Coefficients &c, std::array<double, 2> &z, do
     return y;
 }
 
+// Raises a meter to value; a compare-exchange, so a takeMeters() on the
+// main thread in between can't lose it.
 void raise(std::atomic<float> &meter, float value)
 {
-    if (value > meter.load(std::memory_order_relaxed)) {
-        meter.store(value, std::memory_order_relaxed);
+    float current = meter.load(std::memory_order_relaxed);
+    while (value > current &&
+           !meter.compare_exchange_weak(current, value, std::memory_order_relaxed)) {
     }
 }
 
@@ -77,7 +80,7 @@ void LevelerEffect::prepare(double sampleRate, int /*channels*/)
     m_meanSquare = 0.0;
     m_window = 1.0 - std::exp(-1.0 / (1.0 * sampleRate)); // ~1 s
     m_fastSquare = 0.0;
-    m_fastWindow = 1.0 - std::exp(-1.0 / (0.1 * sampleRate));
+    m_fastWindow = 1.0 - std::exp(-1.0 / (0.025 * sampleRate));
     m_gainDb = 0.0;
 }
 
@@ -125,11 +128,16 @@ void LevelerEffect::process(float *const *channels, int channelCount, int frames
                                   step(m_weighting.shelf, m_shelfState.at(c), x));
             sum += y * y;
         }
-        m_meanSquare += (sum - m_meanSquare) * m_window;
         m_fastSquare += (sum - m_fastSquare) * m_fastWindow;
+        // On silence (by the fast reading) everything holds still: the gain,
+        // and the slow reading too, so sound coming back isn't measured
+        // against the silence and boosted.
+        const bool active = lufsFromMeanSquare(m_fastSquare) > freeze;
+        if (active) {
+            m_meanSquare += (sum - m_meanSquare) * m_window;
+        }
         loudness = lufsFromMeanSquare(m_meanSquare);
-        // Ride towards the target; hold still on silence.
-        if (lufsFromMeanSquare(m_fastSquare) > freeze) {
+        if (active) {
             const double wanted = std::clamp(target - loudness, -maxCut, maxBoost);
             m_gainDb += (wanted - m_gainDb) * ride;
         }
@@ -137,6 +145,9 @@ void LevelerEffect::process(float *const *channels, int channelCount, int frames
         for (float *plane : planes) {
             plane[i] *= gain; // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         }
+    }
+    if (m_fastSquare < 1e-30) {
+        m_fastSquare = 0.0;
     }
     for (std::size_t c = 0; c < count; ++c) {
         for (auto *state : {&m_shelfState.at(c), &m_passState.at(c)}) {

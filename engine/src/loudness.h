@@ -33,8 +33,9 @@ double lufsFromMeanSquare(double meanSquare);
 // Parameters: "target" (LUFS), "maxBoost" and "maxCut" (dB), "speed" (s: how
 // long a change takes), "freeze" (LUFS: below this the gain holds still, so
 // silence, breaths and room noise aren't turned up). The freeze listens to a
-// fast (100 ms) reading, so the gain stops the moment a source goes quiet,
-// not once the slow reading has caught up.
+// fast (25 ms) reading, so the gain stops the moment a source goes quiet,
+// not once the slow reading has caught up; the slow reading holds too, so
+// sound coming back isn't measured against the silence.
 class LevelerEffect : public Effect
 {
 public:
@@ -61,7 +62,7 @@ private:
     double m_meanSquare = 0.0;
     double m_window = 1.0; // one-pole step for the ~1 s loudness window
     double m_fastSquare = 0.0;
-    double m_fastWindow = 1.0; // ~100 ms, for the freeze
+    double m_fastWindow = 1.0; // ~25 ms, for the freeze
     double m_gainDb = 0.0;
     double m_rate = 48000.0;
 };

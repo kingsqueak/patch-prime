@@ -546,6 +546,17 @@ private Q_SLOTS:
         // Silence: the gain holds where it was (no pumping up the noise).
         values = run(leveler, 0.0, 6);
         QVERIFY2(std::abs(values[0] - 12.0F) < 1.0F, qPrintable(QString::number(values[0])));
+        // Coming back from silence: measured afresh, not against the silence
+        // (a tone already at the target needs no boost when it returns).
+        LevelerEffect steady;
+        steady.setParam("speed", 0.5);
+        steady.setParam("maxBoost", 24.0);
+        steady.prepare(rate, 2);
+        const double atTarget = std::pow(10.0, -18.0 / 20.0);
+        run(steady, atTarget, 5);
+        run(steady, 0.0, 5);
+        values = run(steady, atTarget, 1);
+        QVERIFY2(std::abs(values[0]) < 1.0F, qPrintable(QString::number(values[0])));
         // Max boost limits it.
         LevelerEffect capped;
         capped.setParam("speed", 1.0);

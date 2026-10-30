@@ -16,10 +16,13 @@ double coefficient(double ms, double sampleRate)
     return std::exp(-1.0 / (std::max(ms, 0.01) * 0.001 * sampleRate));
 }
 
+// Raises a meter to value; a compare-exchange, so a takeMeters() on the
+// main thread in between can't lose it.
 void raise(std::atomic<float> &meter, float value)
 {
-    if (value > meter.load(std::memory_order_relaxed)) {
-        meter.store(value, std::memory_order_relaxed);
+    float current = meter.load(std::memory_order_relaxed);
+    while (value > current &&
+           !meter.compare_exchange_weak(current, value, std::memory_order_relaxed)) {
     }
 }
 
@@ -116,6 +119,9 @@ void GateEffect::process(float *const *channels, int channelCount, int frames) n
         }
         cut = std::max(cut, -m_rider.gainDb());
     }
+    if (m_envelope < 1e-20) {
+        m_envelope = 0.0; // out of denormals in silence
+    }
     raise(m_meter, static_cast<float>(cut));
 }
 
@@ -175,6 +181,9 @@ void DuckerEffect::process(float *const *channels, int channelCount, int frames)
             plane[i] *= gain; // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         }
         dip = std::max(dip, -m_rider.gainDb());
+    }
+    if (m_meanSquare < 1e-30) {
+        m_meanSquare = 0.0; // out of denormals while the key is quiet
     }
     raise(m_meter, static_cast<float>(dip));
 }

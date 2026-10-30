@@ -327,9 +327,12 @@ void MultibandEffect::process(float *const *channels, int channelCount, int fram
         }
     }
     for (std::size_t b = 0; b < bandCount; ++b) {
+        // A compare-exchange, so a takeMeters() in between can't lose it.
         auto &meter = m_target.at(b).meter;
-        if (peakReduction.at(b) > meter.load(std::memory_order_relaxed)) {
-            meter.store(peakReduction.at(b), std::memory_order_relaxed);
+        float current = meter.load(std::memory_order_relaxed);
+        while (peakReduction.at(b) > current &&
+               !meter.compare_exchange_weak(current, peakReduction.at(b),
+                                            std::memory_order_relaxed)) {
         }
     }
 }
