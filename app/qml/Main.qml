@@ -9,6 +9,8 @@ Kirigami.ApplicationWindow {
 
     // "devices", "routing" or "apps" opens that page first (set from PATCHPRIME_PAGE).
     property string startPage
+    // A strip label whose effects panel opens at start (set from PATCHPRIME_EFFECTS).
+    property string openEffects
 
     title: "Patch Prime"
     width: Kirigami.Units.gridUnit * 52

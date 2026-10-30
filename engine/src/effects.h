@@ -39,7 +39,9 @@ public:
     virtual void prepare(double sampleRate, int channels) = 0;
     // Realtime: processes planar audio in place.
     virtual void process(float *const *channels, int channelCount, int frames) noexcept = 0;
-    // Main thread: sets a parameter by name; unknown names are ignored.
+    // Main thread: sets a parameter by name; unknown names are ignored. Runs
+    // while process() may be running on the realtime thread (chains are
+    // updated in place), so it must only store into atomics.
     virtual void setParam(const std::string &name, double value) = 0;
 
     // On or bypassed. A change crossfades (see EffectChain).
@@ -70,7 +72,16 @@ std::unique_ptr<Effect> makeEffect(const std::string &type);
 // Every built-in type, in the order a menu lists them, and its display name.
 std::vector<std::string> effectTypes();
 std::string effectLabel(const std::string &type);
-// Names and parameter ranges, for the UI and validation.
+// Names and parameter ranges, for the UI and validation. Every parameter is
+// a number; the kind says how to show and edit it.
+enum class ParamKind : std::uint8_t
+{
+    Linear,
+    Log,    // a frequency, say: shown on a log scale
+    Choice, // a whole number indexing options
+    Toggle, // 0 or 1
+};
+std::string paramKindName(ParamKind kind); // "linear", "log", "choice", "toggle"
 struct ParamInfo
 {
     std::string name;
@@ -79,7 +90,11 @@ struct ParamInfo
     double minimum = 0.0;
     double maximum = 0.0;
     double initial = 0.0;
+    ParamKind kind = ParamKind::Linear;
+    std::vector<std::string> options; // Choice: a label per value
 };
+// A value made valid for a parameter: clamped, and whole for a choice or toggle.
+double validParam(const ParamInfo &info, double value);
 std::vector<ParamInfo> effectParams(const std::string &type);
 // Effects one strip may have.
 constexpr std::size_t maxEffectsPerStrip = 8;
@@ -136,6 +151,7 @@ public:
     void collect();
 
     // Realtime: in and out are planar, channel by channel; in may equal out.
+    // Any length: blocks longer than maxEffectFrames are processed in parts.
     void process(const float *const *in, float *const *out, int channelCount, int frames) noexcept;
 
 private:

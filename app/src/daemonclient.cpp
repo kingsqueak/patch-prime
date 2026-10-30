@@ -3,6 +3,8 @@
 
 #include "daemonclient.h"
 
+#include "eq.h"
+
 #include <QCoreApplication>
 #include <QDBusArgument>
 #include <QDBusConnection>
@@ -272,6 +274,42 @@ void DaemonClient::setEffectParam(const QString &key, int index, const QString &
                                   double value)
 {
     call(QStringLiteral("SetEffectParam"), {key, index, name, value});
+}
+
+QVariantList DaemonClient::eqCurve(const QVariantMap &params, const QVariantList &freqs,
+                                  int band) const
+{
+    const auto value = [&params](const QString &name, double fallback) {
+        const auto it = params.find(name);
+        return it != params.end() ? it->toDouble() : fallback;
+    };
+    std::vector<pp::EqEffect::Band> bands;
+    for (int b = 1; b <= pp::EqEffect::bandCount; ++b) {
+        if (band != 0 && b != band) {
+            continue;
+        }
+        auto d = pp::EqEffect::defaultBand(b - 1);
+        const auto prefix = QStringLiteral("b%1").arg(b);
+        d.on = value(prefix + QLatin1String("On"), d.on ? 1.0 : 0.0) >= 0.5;
+        d.type = static_cast<pp::EqEffect::BandType>(std::clamp(
+            static_cast<int>(std::lround(value(prefix + QLatin1String("Type"),
+                                               static_cast<double>(d.type)))),
+            0, pp::EqEffect::bandTypeCount - 1));
+        d.freq = value(prefix + QLatin1String("Freq"), d.freq);
+        d.gainDb = value(prefix + QLatin1String("Gain"), d.gainDb);
+        d.q = value(prefix + QLatin1String("Q"), d.q);
+        if (band != 0) {
+            d.on = true; // a single band's own curve, even while it's off
+        }
+        bands.push_back(d);
+    }
+    const double rate = m_sampleRate > 0 ? m_sampleRate : 48000.0;
+    QVariantList out;
+    out.reserve(freqs.size());
+    for (const auto &f : freqs) {
+        out.append(pp::EqEffect::responseDb(bands, f.toDouble(), rate));
+    }
+    return out;
 }
 
 void DaemonClient::setChannelPair(const QString &key, int pair)

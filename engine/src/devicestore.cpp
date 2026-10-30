@@ -439,7 +439,7 @@ std::vector<EffectSettings> effectsFromJson(const QJsonArray &json)
         const auto params = o.value(QLatin1String("params")).toObject();
         for (const auto &p : info) {
             const double value = params.value(QString::fromStdString(p.name)).toDouble(p.initial);
-            e.params[p.name] = std::clamp(value, p.minimum, p.maximum);
+            e.params[p.name] = validParam(p, value);
         }
         effects.push_back(std::move(e));
     }

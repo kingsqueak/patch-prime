@@ -110,6 +110,11 @@ public:
     Q_INVOKABLE void setEffectEnabled(const QString &key, int index, bool enabled);
     Q_INVOKABLE void setEffectParam(const QString &key, int index, const QString &name,
                                     double value);
+    // An EQ's response in dB at each frequency in freqs (Hz), from its
+    // parameters (an "effects" entry's params; missing ones take their
+    // defaults); only band (1-6) when given, else all bands together.
+    [[nodiscard]] Q_INVOKABLE QVariantList eqCurve(const QVariantMap &params,
+                                                   const QVariantList &freqs, int band = 0) const;
     // D-Bus activation first; failing that, a patchprimed next to this program
     // (installed side by side, or in the build tree).
     Q_INVOKABLE void startDaemon();

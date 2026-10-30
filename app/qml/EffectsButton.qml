@@ -28,6 +28,13 @@ StripToggle {
         : qsTr("%1 effects, %2 on").arg(effects.length).arg(activeCount)
     onClicked: panel.open()
 
+    // Developer aid (PATCHPRIME_EFFECTS): open this strip's panel at start.
+    onLabelChanged: {
+        if (label.length > 0 && QQC2.ApplicationWindow.window
+                && QQC2.ApplicationWindow.window.openEffects === label)
+            panel.open();
+    }
+
     // The parameter list for a type, from the daemon's effectTypes.
     function typeInfo(type) {
         const types = Devices.effectTypes;
@@ -48,7 +55,7 @@ StripToggle {
 
         title: qsTr("Effects: %1").arg(button.label)
         standardButtons: Kirigami.Dialog.Close
-        preferredWidth: Kirigami.Units.gridUnit * 24
+        preferredWidth: Kirigami.Units.gridUnit * (button.effects.some(e => e.type === "eq") ? 54 : 24)
         padding: Kirigami.Units.largeSpacing
 
         ColumnLayout {
@@ -116,8 +123,20 @@ StripToggle {
                             }
                         }
 
+                        // The EQ has its own editor; other effects get a row per parameter.
+                        Loader {
+                            Layout.fillWidth: true
+                            active: slot.modelData.type === "eq"
+                            visible: active
+                            sourceComponent: EqEditor {
+                                key: button.key
+                                index: slot.index
+                                params: slot.modelData.params
+                            }
+                        }
+
                         Repeater {
-                            model: slot.info.params
+                            model: slot.modelData.type === "eq" ? [] : slot.info.params
 
                             delegate: RowLayout {
                                 id: param

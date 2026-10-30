@@ -1,6 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileCopyrightText: 2026 KC2RGW Chris
 
+# The built-in effects: plain C++ (no Qt, no PipeWire), shared by the engine
+# (which runs them) and the GUI (which draws their curves).
+add_library(patchprime-dsp STATIC
+    src/effects.cpp
+    src/effects.h
+    src/eq.cpp
+    src/eq.h)
+target_include_directories(patchprime-dsp PUBLIC src)
+patchprime_set_warnings(patchprime-dsp)
+
 add_library(patchprime-engine STATIC
     src/approuter.cpp
     src/approuter.h
@@ -14,8 +24,6 @@ add_library(patchprime-engine STATIC
     src/devicemodel.h
     src/devicestore.cpp
     src/devicestore.h
-    src/effects.cpp
-    src/effects.h
     src/endpoint.cpp
     src/endpoint.h
     src/graphsnapshot.cpp
@@ -31,7 +39,7 @@ add_library(PatchPrime::Engine ALIAS patchprime-engine)
 
 target_include_directories(patchprime-engine PUBLIC src)
 target_link_libraries(patchprime-engine
-    PUBLIC Qt6::Core
+    PUBLIC Qt6::Core patchprime-dsp
     PRIVATE PkgConfig::PipeWire)
 target_compile_definitions(patchprime-engine PRIVATE QT_NO_CAST_FROM_ASCII)
 patchprime_set_warnings(patchprime-engine)

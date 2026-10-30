@@ -3,7 +3,10 @@
 
 #include "effects.h"
 
+#include "eq.h"
+
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <span>
@@ -54,12 +57,42 @@ std::unique_ptr<Effect> makeEffect(const std::string &type)
     if (type == "gain") {
         return std::make_unique<GainEffect>();
     }
+    if (type == "eq") {
+        return std::make_unique<EqEffect>();
+    }
     return nullptr;
+}
+
+std::string paramKindName(ParamKind kind)
+{
+    switch (kind) {
+    case ParamKind::Linear:
+        return "linear";
+    case ParamKind::Log:
+        return "log";
+    case ParamKind::Choice:
+        return "choice";
+    case ParamKind::Toggle:
+        return "toggle";
+    }
+    return "linear";
+}
+
+double validParam(const ParamInfo &info, double value)
+{
+    if (!std::isfinite(value)) {
+        value = info.initial;
+    }
+    value = std::clamp(value, info.minimum, info.maximum);
+    if (info.kind == ParamKind::Choice || info.kind == ParamKind::Toggle) {
+        value = std::round(value);
+    }
+    return value;
 }
 
 std::vector<std::string> effectTypes()
 {
-    return {"gain"};
+    return {"eq", "gain"};
 }
 
 std::string effectLabel(const std::string &type)
@@ -67,18 +100,53 @@ std::string effectLabel(const std::string &type)
     if (type == "gain") {
         return "Gain";
     }
+    if (type == "eq") {
+        return "Parametric EQ";
+    }
     return type;
 }
 
 std::vector<ParamInfo> effectParams(const std::string &type)
 {
+    const auto param = [](std::string name, std::string label, std::string unit, double minimum,
+                          double maximum, double initial, ParamKind kind = ParamKind::Linear,
+                          std::vector<std::string> options = {}) {
+        return ParamInfo{.name = std::move(name),
+                         .label = std::move(label),
+                         .unit = std::move(unit),
+                         .minimum = minimum,
+                         .maximum = maximum,
+                         .initial = initial,
+                         .kind = kind,
+                         .options = std::move(options)};
+    };
     if (type == "gain") {
-        return {{.name = "gainDb",
-                 .label = "Gain",
-                 .unit = "dB",
-                 .minimum = GainEffect::minDb,
-                 .maximum = GainEffect::maxDb,
-                 .initial = 0.0}};
+        return {param("gainDb", "Gain", "dB", GainEffect::minDb, GainEffect::maxDb, 0.0)};
+    }
+    if (type == "eq") {
+        std::vector<std::string> types;
+        types.reserve(EqEffect::bandTypeCount);
+        for (int t = 0; t < EqEffect::bandTypeCount; ++t) {
+            types.push_back(EqEffect::typeName(static_cast<EqEffect::BandType>(t)));
+        }
+        std::vector<ParamInfo> params;
+        for (int b = 0; b < EqEffect::bandCount; ++b) {
+            const auto band = EqEffect::defaultBand(b);
+            const auto prefix = "b" + std::to_string(b + 1);
+            const auto label = "Band " + std::to_string(b + 1) + " ";
+            params.push_back(param(prefix + "On", label + "on", "", 0.0, 1.0, band.on ? 1.0 : 0.0,
+                                   ParamKind::Toggle));
+            params.push_back(param(prefix + "Type", label + "type", "", 0.0,
+                                   EqEffect::bandTypeCount - 1.0, static_cast<double>(band.type),
+                                   ParamKind::Choice, types));
+            params.push_back(param(prefix + "Freq", label + "frequency", "Hz", EqEffect::minFreq,
+                                   EqEffect::maxFreq, band.freq, ParamKind::Log));
+            params.push_back(param(prefix + "Gain", label + "gain", "dB", EqEffect::minGain,
+                                   EqEffect::maxGain, band.gainDb));
+            params.push_back(param(prefix + "Q", label + "Q", "", EqEffect::minQ, EqEffect::maxQ,
+                                   band.q, ParamKind::Log));
+        }
+        return params;
     }
     return {};
 }
@@ -168,7 +236,7 @@ void Processor::process(const float *const *in, float *const *out, int channelCo
                         int frames) noexcept
 {
     m_inProcess.store(true);
-    frames = std::min(frames, maxEffectFrames);
+    frames = std::max(frames, 0);
     const auto count = static_cast<std::size_t>(std::max(channelCount, 0));
     const std::span<const float *const> inputs(in, count);
     const std::span<float *const> outputs(out, count);
@@ -185,7 +253,13 @@ void Processor::process(const float *const *in, float *const *out, int channelCo
     EffectChain *chain = m_chain.load();
     const bool complete = std::ranges::all_of(outputs, [](const float *p) { return p != nullptr; });
     if (chain != nullptr && complete && chain->channels() == channelCount) {
-        chain->process(out, frames);
+        std::array<float *, maxEffectChannels> part{};
+        for (int start = 0; start < frames; start += maxEffectFrames) {
+            for (std::size_t c = 0; c < count && c < part.size(); ++c) {
+                part.at(c) = outputs[c] + start; // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+            }
+            chain->process(part.data(), std::min(maxEffectFrames, frames - start));
+        }
     }
     m_cycle.fetch_add(1);
     m_inProcess.store(false);

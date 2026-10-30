@@ -91,6 +91,14 @@ QString PatchPrimeService::GetState() const
                 {QStringLiteral("minimum"), p.minimum},
                 {QStringLiteral("maximum"), p.maximum},
                 {QStringLiteral("initial"), p.initial},
+                {QStringLiteral("kind"), QString::fromStdString(pp::paramKindName(p.kind))},
+                {QStringLiteral("options"), [&p] {
+                     QJsonArray options;
+                     for (const auto &o : p.options) {
+                         options.append(QString::fromStdString(o));
+                     }
+                     return options;
+                 }()},
             });
         }
         effectTypes.append(QJsonObject{

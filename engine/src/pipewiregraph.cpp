@@ -504,8 +504,8 @@ void PipeWireGraph::Session::onFilterProcess(void *data, spa_io_position *positi
     if (position == nullptr) {
         return;
     }
-    const auto frames = static_cast<std::uint32_t>(
-        std::min<std::uint64_t>(position->clock.duration, maxEffectFrames));
+    // The whole cycle; Processor works through it in parts if it's long.
+    const auto frames = static_cast<std::uint32_t>(position->clock.duration);
     std::array<const float *, maxEffectChannels> in{};
     std::array<float *, maxEffectChannels> out{};
     const std::size_t channels = std::min(f->inPorts.size(), in.size());

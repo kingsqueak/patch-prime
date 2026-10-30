@@ -579,7 +579,7 @@ void DeviceModel::setEffectParam(int row, int index, const QString &name, double
         const auto key = name.toStdString();
         for (const auto &p : effectParams(e.type)) {
             if (p.name == key) {
-                const double clamped = std::clamp(value, p.minimum, p.maximum);
+                const double clamped = validParam(p, value);
                 if (e.params[key] == clamped) {
                     return false;
                 }

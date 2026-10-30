@@ -5,6 +5,7 @@
 #include "devicemodel.h"
 #include "devicestore.h"
 #include "effects.h"
+#include "eq.h"
 
 #include <QJsonArray>
 #include <QTemporaryDir>
@@ -42,6 +43,35 @@ std::unique_ptr<EffectChain> gainChain(double db, bool enabled = true)
     std::vector<std::unique_ptr<Effect>> effects;
     effects.push_back(std::move(gain));
     return std::make_unique<EffectChain>(std::move(effects), rate, 2);
+}
+
+// The steady-state amplitude of a sine at freq through effect (after 0.5 s).
+float sinePeak(Effect &effect, double freq, double sampleRate = rate)
+{
+    const int frames = static_cast<int>(sampleRate); // 1 s
+    std::vector<float> left(static_cast<std::size_t>(frames));
+    for (std::size_t i = 0; i < left.size(); ++i) {
+        left[i] = static_cast<float>(
+            0.25 * std::sin(2.0 * M_PI * freq * static_cast<double>(i) / sampleRate));
+    }
+    std::vector<float> right = left;
+    std::array<float *, 2> planes{left.data(), right.data()};
+    for (int start = 0; start < frames; start += 1024) {
+        std::array<float *, 2> block{planes[0] + start, planes[1] + start}; // NOLINT
+        effect.process(block.data(), 2, std::min(1024, frames - start));
+    }
+    // From the RMS: at high frequencies the sample peaks miss the true peak.
+    const std::size_t from = left.size() / 2;
+    double sum = 0.0;
+    for (std::size_t i = from; i < left.size(); ++i) {
+        sum += static_cast<double>(left[i]) * left[i];
+    }
+    return static_cast<float>(std::sqrt(2.0 * sum / static_cast<double>(left.size() - from)));
+}
+
+double gainDb(float peak)
+{
+    return 20.0 * std::log10(peak / 0.25);
 }
 
 } // namespace
@@ -120,10 +150,123 @@ private Q_SLOTS:
         processor.setChain(std::make_unique<EffectChain>(std::move(mono), rate, 1));
         processor.process(inputs.data(), out.planes.data(), 2, 256);
         QCOMPARE(out.left[100], 0.5F);
+        // A block longer than one chain pass is processed all the way.
+        processor.setChain(gainChain(-6.0));
+        const int longFrames = (maxEffectFrames * 2) + 100;
+        Buffers longIn(longFrames, 0.5F);
+        Buffers longOut(longFrames, 0.0F);
+        const std::array<const float *, 2> longInputs{longIn.left.data(), longIn.right.data()};
+        processor.process(longInputs.data(), longOut.planes.data(), 2, longFrames);
+        QVERIFY(std::abs(longOut.right.back() - 0.25F) < 0.002F);
         // Swapping while idle frees the old chain at once; collect() is harmless.
         processor.setChain(nullptr);
         processor.collect();
         QVERIFY(processor.chain() == nullptr);
+    }
+
+    void eqFlatIsTransparent()
+    {
+        EqEffect eq;
+        eq.prepare(rate, 2);
+        for (const double freq : {40.0, 1000.0, 15000.0}) {
+            QVERIFY2(std::abs(gainDb(sinePeak(eq, freq))) < 0.05, qPrintable(QString::number(freq)));
+        }
+    }
+
+    void eqBellAndCut()
+    {
+        EqEffect eq;
+        eq.setParam("b3Gain", 6.0); // the 1 kHz bell
+        eq.setParam("b1Type", static_cast<double>(EqEffect::BandType::LowCut));
+        eq.setParam("b1Freq", 200.0);
+        eq.prepare(rate, 2);
+        QVERIFY(std::abs(gainDb(sinePeak(eq, 1000.0)) - 6.0) < 0.2);
+        QVERIFY2(std::abs(gainDb(sinePeak(eq, 8000.0))) < 0.5, qPrintable(QString::number(gainDb(sinePeak(eq, 8000.0)))));
+        QVERIFY(gainDb(sinePeak(eq, 30.0)) < -25.0); // 12 dB/octave, ~2.7 octaves down
+        // The drawn curve agrees with what the filter does.
+        std::vector<EqEffect::Band> bands;
+        bands.reserve(EqEffect::bandCount);
+        for (int b = 0; b < EqEffect::bandCount; ++b) {
+            bands.push_back(EqEffect::defaultBand(b));
+        }
+        bands[2].gainDb = 6.0;
+        bands[0].type = EqEffect::BandType::LowCut;
+        bands[0].freq = 200.0;
+        for (const double freq : {30.0, 200.0, 1000.0, 3000.0}) {
+            EqEffect again;
+            again.setParam("b3Gain", 6.0);
+            again.setParam("b1Type", static_cast<double>(EqEffect::BandType::LowCut));
+            again.setParam("b1Freq", 200.0);
+            again.prepare(rate, 2);
+            QVERIFY2(std::abs(gainDb(sinePeak(again, freq)) -
+                              EqEffect::responseDb(bands, freq, rate)) < 0.3,
+                     qPrintable(QString::number(freq)));
+        }
+    }
+
+    void eqGlidesAndSwitchesQuietly()
+    {
+        EqEffect eq;
+        eq.prepare(rate, 2);
+        // A steady sine; change gain, type and on/off mid-stream: the output
+        // never jumps far beyond the boosted level, and stays finite.
+        constexpr int frames = 512 * 96; // about 1 s, in whole blocks
+        std::vector<float> left(frames);
+        for (std::size_t i = 0; i < left.size(); ++i) {
+            left[i] = static_cast<float>(0.25 * std::sin(2.0 * M_PI * 1000.0 * static_cast<double>(i) / rate));
+        }
+        std::vector<float> right = left;
+        float previous = 0.0F;
+        float worstStep = 0.0F;
+        for (int start = 0; start < frames; start += 512) {
+            if (start == 4096) {
+                eq.setParam("b3Gain", 12.0);
+            }
+            if (start == 16384) {
+                eq.setParam("b3Type", static_cast<double>(EqEffect::BandType::HighShelf));
+            }
+            if (start == 32768) {
+                eq.setParam("b3On", 0.0);
+            }
+            std::array<float *, 2> block{left.data() + start, right.data() + start}; // NOLINT
+            eq.process(block.data(), 2, 512);
+            for (int i = start; i < start + 512; ++i) {
+                const float v = left[static_cast<std::size_t>(i)];
+                QVERIFY(std::isfinite(v));
+                worstStep = std::max(worstStep, std::abs(v - previous));
+                previous = v;
+            }
+        }
+        // A 1 kHz sine at 4x (+12 dB) moves at most ~0.13 per sample at 48 kHz.
+        QVERIFY2(worstStep < 0.2F, qPrintable(QString::number(worstStep)));
+    }
+
+    void eqExtremesStayStable()
+    {
+        EqEffect eq;
+        for (int b = 1; b <= EqEffect::bandCount; ++b) {
+            const auto p = "b" + std::to_string(b);
+            eq.setParam(p + "Freq", 20000.0);
+            eq.setParam(p + "Gain", 24.0);
+            eq.setParam(p + "Q", 10.0);
+        }
+        eq.prepare(44100.0, 2); // 20 kHz is above 0.45 x 44.1 kHz: clamped
+        const float peak = sinePeak(eq, 15000.0, 44100.0);
+        QVERIFY(std::isfinite(peak));
+        QVERIFY(EqEffect::coefficients({.on = true,
+                                        .type = EqEffect::BandType::HighCut,
+                                        .freq = 5.0, // below range: clamped
+                                        .gainDb = 0.0,
+                                        .q = 0.0},
+                                       rate)
+                    .b0 > 0.0);
+        // Parameters by kind.
+        const auto params = effectParams("eq");
+        QCOMPARE(params.size(), 30U);
+        QCOMPARE(params[1].kind, ParamKind::Choice);
+        QCOMPARE(params[1].options.size(), 5U);
+        QCOMPARE(validParam(params[1], 2.6), 3.0);
+        QCOMPARE(validParam(params[2], 1e9), EqEffect::maxFreq);
     }
 
     void settingsRoundTrip()

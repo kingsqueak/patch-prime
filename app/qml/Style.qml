@@ -50,4 +50,14 @@ QtObject {
     readonly property color signalOn: Kirigami.Theme.positiveTextColor
     readonly property color signalOff: Qt.alpha(Kirigami.Theme.textColor, 0.15)
     readonly property color offlineText: Kirigami.Theme.neutralTextColor
+
+    // Effect editors (the EQ graph)
+    readonly property real graphHeight: Kirigami.Units.gridUnit * 12
+    readonly property color graphBackground: Qt.alpha(Kirigami.Theme.textColor, 0.04)
+    readonly property color graphGrid: Qt.alpha(Kirigami.Theme.textColor, 0.12)
+    readonly property color graphLabel: Kirigami.Theme.disabledTextColor
+    readonly property color graphCurve: Kirigami.Theme.highlightColor
+    readonly property real handleSize: Kirigami.Units.gridUnit * 1.1
+    // One color per EQ band, so a handle matches its column in the table.
+    readonly property var bandColors: ["#e5534b", "#e0823d", "#c9b52c", "#3fae5c", "#3d8fd6", "#9a6ad6"]
 }

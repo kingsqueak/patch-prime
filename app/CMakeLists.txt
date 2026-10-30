@@ -16,12 +16,14 @@ qt_add_qml_module(patchprime
     VERSION 1.0
     QML_FILES qml/Main.qml qml/MixerPage.qml qml/ChannelStrip.qml qml/DevicesPage.qml qml/EngineMessage.qml qml/RoutingPage.qml qml/AppsPage.qml
         qml/Style.qml qml/LevelMeter.qml qml/StripToggle.qml qml/VolumeFader.qml qml/StripGroup.qml qml/SendButton.qml qml/DbField.qml qml/SceneBar.qml qml/EffectsButton.qml
+        qml/EqEditor.qml qml/ParamField.qml
     NO_IMPORT_SCAN) # the import scan only matters for static Qt builds
 
 target_include_directories(patchprime PRIVATE src)
-# The GUI talks to patchprimed over D-Bus and doesn't link the engine.
+# The GUI talks to patchprimed over D-Bus and doesn't link the engine; only
+# the plain DSP code, to draw effect curves.
 target_link_libraries(patchprime PRIVATE
-    Qt6::DBus Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+    Qt6::DBus Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 patchprime-dsp)
 target_compile_definitions(patchprime PRIVATE QT_NO_CAST_FROM_ASCII)
 patchprime_set_warnings(patchprime)
 install(TARGETS patchprime)

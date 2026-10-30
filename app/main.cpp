@@ -31,7 +31,8 @@ int main(int argc, char *argv[])
 
     QQmlApplicationEngine engine;
     engine.setInitialProperties(
-        {{QStringLiteral("startPage"), qEnvironmentVariable("PATCHPRIME_PAGE")}});
+        {{QStringLiteral("startPage"), qEnvironmentVariable("PATCHPRIME_PAGE")},
+         {QStringLiteral("openEffects"), qEnvironmentVariable("PATCHPRIME_EFFECTS")}});
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
         [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
@@ -39,7 +40,8 @@ int main(int argc, char *argv[])
 
     // Developer aid: PATCHPRIME_SCREENSHOT=<file.png> saves the window once the
     // state has arrived, then quits. Works with QT_QPA_PLATFORM=offscreen.
-    // PATCHPRIME_PAGE=devices opens the Devices page first.
+    // PATCHPRIME_PAGE=devices opens the Devices page first;
+    // PATCHPRIME_EFFECTS=<strip label> opens that strip's effects.
     if (const auto shot = qEnvironmentVariable("PATCHPRIME_SCREENSHOT"); !shot.isEmpty()) {
         QTimer::singleShot(2000, &app, [&engine, shot] {
             const auto roots = engine.rootObjects();
