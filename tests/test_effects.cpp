@@ -181,6 +181,9 @@ private Q_SLOTS:
         QCOMPARE(again[0].inPeak[0], 0.0F);
         QCOMPARE(again[0].inRms[0], first.inRms[0]);
 
+        // No key, no key level.
+        QVERIFY(!first.hasKey);
+
         // Mono is one group.
         std::vector<std::unique_ptr<Effect>> one;
         one.push_back(makeEffect("gain"));
@@ -191,6 +194,14 @@ private Q_SLOTS:
         const auto monoLevels = mono.takeLevels();
         QCOMPARE(monoLevels[0].groups, 1U);
         QCOMPARE(monoLevels[0].outPeak[0], 0.5F);
+
+        // A keyed chain measures its key too (a ducker's threshold is drawn on it).
+        const std::vector<float> key(256, 0.25F);
+        mono.process(plane.data(), 256, key.data(), true);
+        const auto keyed = mono.takeLevels();
+        QVERIFY(keyed[0].hasKey);
+        QCOMPARE(keyed[0].keyPeak, 0.25F);
+        QVERIFY(keyed[0].keyRms > 0.0F && keyed[0].keyRms < 0.25F); // still rising
 
         // Nothing is measured unless asked.
         mono.process(plane.data(), 256);

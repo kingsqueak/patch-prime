@@ -566,6 +566,15 @@ double DaemonClient::meterFraction(double peak)
     return std::clamp((db - minimumVolumeDb()) / -minimumVolumeDb(), 0.0, 1.0);
 }
 
+double DaemonClient::effectMeterFraction(double peak)
+{
+    if (peak <= 0.0) {
+        return 0.0;
+    }
+    const double db = 20.0 * std::log10(peak);
+    return std::clamp((db - effectMeterFloorDb()) / -effectMeterFloorDb(), 0.0, 1.0);
+}
+
 void DaemonClient::onLevels(const QVariantMap &levels)
 {
     bool metersChanged = false;
@@ -600,17 +609,26 @@ void DaemonClient::onLevels(const QVariantMap &levels)
             const auto groups = peaks.size() / 4;
             const auto old = m_effectLevels.value(at).toMap();
             QVariantMap shown;
-            const std::array<QString, 4> names{QStringLiteral("in"), QStringLiteral("inRms"),
-                                               QStringLiteral("out"), QStringLiteral("outRms")};
-            for (qsizetype part = 0; part < 4; ++part) {
+            const std::array<QString, 6> names{QStringLiteral("in"),     QStringLiteral("inRms"),
+                                               QStringLiteral("out"),    QStringLiteral("outRms"),
+                                               QStringLiteral("key"),    QStringLiteral("keyRms")};
+            // Falling as fast in dB as the strip meters.
+            const double fall = meterFallPerUpdate * minimumVolumeDb() / effectMeterFloorDb();
+            for (qsizetype part = 0; part < 6; ++part) {
+                // The key's two values follow the four groups' parts.
+                const qsizetype count = part < 4 ? groups : 1;
+                const qsizetype first = part < 4 ? part * groups : (4 * groups) + (part - 4);
+                if (first + count > peaks.size()) {
+                    break;
+                }
                 const auto &name = names.at(static_cast<std::size_t>(part));
                 const auto before = old.value(name).toList();
                 const bool isPeak = part % 2 == 0;
                 QVariantList values;
-                for (qsizetype g = 0; g < groups; ++g) {
-                    const double now = meterFraction(peaks[(part * groups) + g]);
+                for (qsizetype g = 0; g < count; ++g) {
+                    const double now = effectMeterFraction(peaks[first + g]);
                     const double last = g < before.size() ? before[g].toDouble() : 0.0;
-                    values.append(isPeak ? std::max(now, last - meterFallPerUpdate) : now);
+                    values.append(isPeak ? std::max(now, last - fall) : now);
                 }
                 shown.insert(name, values);
             }

@@ -343,6 +343,8 @@ QQC2.ApplicationWindow {
                             index: slot.index
                             type: slot.modelData.type
                             on: slot.modelData.enabled
+                            params: slot.modelData.params
+                            paramInfo: slot.info.params
                         }
                     }
                 }

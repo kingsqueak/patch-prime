@@ -49,8 +49,10 @@ class DaemonClient : public QAbstractListModel
     // and let fall slowly so it can be read.
     Q_PROPERTY(QVariantMap effectMeters READ effectMeters NOTIFY effectMetersChanged)
     // "<strip key>|<effect index>" -> {in, inRms, out, outRms}: meter
-    // fractions (as levels), one per channel group (mono, or left and right).
+    // fractions on the effectMeterFloorDb scale, one per channel group (mono,
+    // or left and right); and key, keyRms (one each) on a keyed strip.
     Q_PROPERTY(QVariantMap effectLevels READ effectLevels NOTIFY effectMetersChanged)
+    Q_PROPERTY(double effectMeterFloorDb READ effectMeterFloorDb CONSTANT)
     // Where apps can play to / record from: [{name (a node.name), label, kind}].
     Q_PROPERTY(QVariantList playbackTargets READ playbackTargets NOTIFY appsChanged)
     Q_PROPERTY(QVariantList recordTargets READ recordTargets NOTIFY appsChanged)
@@ -86,6 +88,9 @@ public:
     [[nodiscard]] QVariantList playbackTargets() const { return m_playbackTargets; }
     [[nodiscard]] QVariantList recordTargets() const { return m_recordTargets; }
     static constexpr double minimumVolumeDb() { return -60.0; }
+    // Effect meters reach lower than the strips', down to a mic's noise floor,
+    // so a gate's threshold can be set between the floor and the voice.
+    static constexpr double effectMeterFloorDb() { return -80.0; }
     static constexpr double maximumVolumeDb() { return 12.0; }
 
     Q_INVOKABLE void setEnabled(const QString &key, bool enabled);
@@ -139,6 +144,8 @@ public:
 
     // Meter fraction 0..1 for a linear peak, on a dB scale from minimumVolumeDb to 0.
     static double meterFraction(double peak);
+    // The same on the effect meters' scale (effectMeterFloorDb to 0).
+    static double effectMeterFraction(double peak);
 
 Q_SIGNALS:
     void daemonRunningChanged();

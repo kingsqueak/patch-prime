@@ -130,7 +130,7 @@ Click a strip's insert slots to open its effects window. The window is separate 
 - The **power button** on each effect turns it on or bypasses it, crossfading so it doesn't click.
 - Every value can be dragged or typed: click a value box, type (for example `2.5k`, `-6`, `40 ms`), and press Enter. Double-click a slider to reset it.
 - A strip without effects has no processing at all. Effects are saved with the strip and in scenes.
-- Each effect has a **meter bridge** on its right: **IN** and **OUT** levels (one bar per channel, left and right on stereo), with the peak in dBFS underneath, and between them **GR**, the gain reduction, for the effects that turn the sound down (gate, ducker, multiband compressor, limiter). The leveler shows **GAIN** instead, centred on 0 dB: up when it boosts, down when it cuts. Comparing IN and OUT shows what an effect does to the level, an EQ or reverb included. See [Meters](#meters).
+- Each effect has a **meter bridge** on its right: **IN** and **OUT** levels (one bar per channel, left and right on stereo), with the peak in dBFS underneath, and between them **GR**, the gain reduction, for the effects that turn the sound down (gate, ducker, multiband compressor, limiter). The leveler shows **GAIN** instead, centred on 0 dB: up when it boosts, down when it cuts. Comparing IN and OUT shows what an effect does to the level, an EQ or reverb included. The scale reaches down to −80 dB, low enough to see a microphone's noise floor. Where an effect compares the level with a setting, the setting is a white line across the meter (hover it for the value): the gate's **Threshold** on IN, the limiter's **Ceiling** on IN and OUT, and the ducker's **Threshold** on its **KEY** meter, the level of the strip it listens to. See [Meters](#meters).
 
 ### Parametric EQ
 
@@ -153,7 +153,7 @@ With nothing compressing, the four bands add back up to the original sound exact
 
 ### Noise gate
 
-Turns the strip down by **Range** when it falls below **Threshold**, so breaths, keyboard and room noise between words don't come through. **Attack**, **Hold** and **Release** set how fast it opens, how long it stays open after you stop, and how fast it closes. The GR meter shows how much it's cutting.
+Turns the strip down by **Range** when it falls below **Threshold**, so breaths, keyboard and room noise between words don't come through. **Attack**, **Hold** and **Release** set how fast it opens, how long it stays open after you stop, and how fast it closes. The GR meter shows how much it's cutting. To set it, watch IN while you're quiet and while you talk: put the threshold line between the two.
 
 ### Noise suppression
 
@@ -216,7 +216,7 @@ The light by each strip's name glows whenever sound passes, even sound far too q
 
 ### Effect meters
 
-In a strip's effects window every effect shows its input and output levels (the same solid RMS and lighter peak bars) and, for dynamics, its gain reduction as an amber bar hanging from the top; see [Effects](#effects). The input and output levels are only measured while the effects window is open, so they cost nothing otherwise.
+In a strip's effects window every effect shows its input and output levels (the same solid RMS and lighter peak bars, on a scale down to −80 dB) and, for dynamics, its gain reduction as an amber bar hanging from the top; thresholds and the limiter's ceiling are lines across the meters. See [Effects](#effects). The input and output levels are only measured while the effects window is open, so they cost nothing otherwise.
 
 On the mixer, the insert slot of a gate, ducker, multiband compressor, limiter or leveler shows its gain reduction as a thin amber bar along the slot's bottom edge, so you can see an effect working without opening the window.
 

@@ -36,7 +36,8 @@ class PipeWireGraph;
 // (ad; the multiband compressor's gain reduction per band, in dB). Every
 // effect adds "fxio|<device key>|<effect index>" -> [input peaks, input RMS,
 // output peaks, output RMS] (linear, a quarter of the list each: one value
-// for a mono strip, left and right otherwise; peaks ad, RMS ~300 ms).
+// for a mono strip, left and right otherwise; peaks ad, RMS ~300 ms), then
+// on a strip with a key input (a ducker's) [key peak, key RMS].
 class PatchPrimeService : public QObject, protected QDBusContext
 {
     Q_OBJECT

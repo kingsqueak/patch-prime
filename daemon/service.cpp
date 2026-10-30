@@ -605,6 +605,10 @@ void PatchPrimeService::emitLevels()
                 values.append(static_cast<double>(part->at(static_cast<std::size_t>(g))));
             }
         }
+        if (io.hasKey) {
+            values.append(static_cast<double>(io.keyPeak));
+            values.append(static_cast<double>(io.keyRms));
+        }
         levels.insert(
             QStringLiteral("fxio|%1|%2").arg(QString::fromStdString(at.first)).arg(at.second),
             QVariant::fromValue(values));

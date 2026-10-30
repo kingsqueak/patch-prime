@@ -324,11 +324,17 @@ void EffectChain::process(float *const *channels, int frames, const float *key,
     frames = std::min(frames, maxEffectFrames);
     const auto count = static_cast<std::size_t>(m_channels);
     const std::span<float *const> planes(channels, count);
+    const std::span<const float *const> levels(channels, count);
     const double rmsStep =
         measure ? 1.0 - std::exp(-static_cast<double>(frames) / (rmsSeconds * std::max(m_rate, 1.0)))
                 : 0.0;
     if (measure) {
-        measureAt(m_points.front(), planes, frames, rmsStep);
+        measureAt(m_points.front(), levels, frames, rmsStep, m_groups);
+        if (key != nullptr) {
+            const std::array<const float *, 1> keyPlane{key};
+            measureAt(m_keyPoint, keyPlane, frames, rmsStep, 1);
+        }
+        m_keyed.store(key != nullptr, std::memory_order_relaxed);
     }
     for (std::size_t e = 0; e < m_effects.size(); ++e) {
         Effect &effect = *m_effects[e];
@@ -338,7 +344,7 @@ void EffectChain::process(float *const *channels, int frames, const float *key,
         if (mix == 0.0F && target == 0.0F) {
             // Bypassed: not processed at all, and its output is its input.
             if (measure) {
-                measureAt(m_points[e + 1], planes, frames, rmsStep);
+                measureAt(m_points[e + 1], levels, frames, rmsStep, m_groups);
             }
             continue;
         }
@@ -348,7 +354,7 @@ void EffectChain::process(float *const *channels, int frames, const float *key,
         if (mix == 1.0F && target == 1.0F) {
             effect.process(channels, m_channels, frames);
             if (measure) {
-                measureAt(m_points[e + 1], planes, frames, rmsStep);
+                measureAt(m_points[e + 1], levels, frames, rmsStep, m_groups);
             }
             continue;
         }
@@ -370,23 +376,23 @@ void EffectChain::process(float *const *channels, int frames, const float *key,
         }
         mix = m;
         if (measure) {
-            measureAt(m_points[e + 1], planes, frames, rmsStep);
+            measureAt(m_points[e + 1], levels, frames, rmsStep, m_groups);
         }
     }
 }
 
-void EffectChain::measureAt(Point &point, std::span<float *const> planes, int frames,
-                          double rmsStep) const noexcept
+void EffectChain::measureAt(Point &point, std::span<const float *const> planes, int frames,
+                            double rmsStep, std::size_t groups) noexcept
 {
     if (frames <= 0) {
         return;
     }
-    const std::size_t half = m_groups == 1 ? planes.size() : planes.size() / 2;
-    for (std::size_t g = 0; g < m_groups; ++g) {
+    const std::size_t half = groups == 1 ? planes.size() : planes.size() / 2;
+    for (std::size_t g = 0; g < groups; ++g) {
         const auto group = g == 0 ? planes.first(half) : planes.subspan(half);
         float peak = 0.0F;
         double sum = 0.0;
-        for (float *plane : group) {
+        for (const float *plane : group) {
             for (const float sample : std::span(plane, static_cast<std::size_t>(frames))) {
                 const float level = std::abs(sample);
                 peak = std::max(peak, level);
@@ -422,6 +428,15 @@ std::vector<EffectLevels> EffectChain::takeLevels()
         if (p > 0) {
             out[p - 1].outPeak = peak;
             out[p - 1].outRms = rms;
+        }
+    }
+    if (m_keyed.load(std::memory_order_relaxed)) {
+        const float keyPeak = m_keyPoint.peak[0].exchange(0.0F, std::memory_order_relaxed);
+        const float keyRms = m_keyPoint.rms[0].load(std::memory_order_relaxed);
+        for (auto &levels : out) {
+            levels.hasKey = true;
+            levels.keyPeak = keyPeak;
+            levels.keyRms = keyRms;
         }
     }
     return out;

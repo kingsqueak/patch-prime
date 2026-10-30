@@ -125,7 +125,8 @@ constexpr std::size_t maxEffectsPerStrip = 8;
 // The level going into and coming out of one effect in a chain, for its
 // meters: linear peak since the last take and RMS (~300 ms), per channel
 // group. Mono has one group; otherwise the first and second half of the
-// channels are a group each (left and right).
+// channels are a group each (left and right). A chain with a key input
+// (see Effect::setKey) also has the key's level, the same for every effect.
 struct EffectLevels
 {
     static constexpr std::size_t maxGroups = 2;
@@ -134,6 +135,9 @@ struct EffectLevels
     std::array<float, maxGroups> inRms{};
     std::array<float, maxGroups> outPeak{};
     std::array<float, maxGroups> outRms{};
+    bool hasKey = false;
+    float keyPeak = 0.0F;
+    float keyRms = 0.0F;
 };
 
 // Effects in order. Each one's bypass crossfades between its dry input and
@@ -175,12 +179,14 @@ private:
         std::array<double, EffectLevels::maxGroups> meanSquare{}; // realtime only
     };
 
-    void measureAt(Point &point, std::span<float *const> planes, int frames,
-                   double rmsStep) const noexcept;
+    static void measureAt(Point &point, std::span<const float *const> planes, int frames,
+                          double rmsStep, std::size_t groups) noexcept;
 
     std::vector<std::unique_ptr<Effect>> m_effects;
     std::vector<Slot> m_slots;
     std::vector<Point> m_points; // one more than effects
+    Point m_keyPoint;                 // the key input's level (group 0)
+    std::atomic<bool> m_keyed{false}; // a key came with the last process()
     std::vector<std::vector<float>> m_dry; // per channel, maxEffectFrames
     int m_channels = 0;
     std::size_t m_groups = 1;

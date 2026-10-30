@@ -53,8 +53,13 @@ QtObject {
     // Effect meters (the effects window's meter bridge): gain reduction in
     // amber, a leveler's boost in green.
     readonly property real fxMeterWidth: Math.round(Kirigami.Units.smallSpacing * 2)
-    readonly property real fxReadoutWidth: Math.round(Kirigami.Units.gridUnit * 2.6)
-    readonly property real fxBridgeHeight: Kirigami.Units.gridUnit * 6
+    readonly property real fxReadoutWidth: Math.round(Kirigami.Units.gridUnit * 3.2)
+    readonly property real fxBridgeHeight: Kirigami.Units.gridUnit * 7.5
+    readonly property real fxScaleWidth: Math.round(Kirigami.Units.gridUnit * 1.3)
+    // A setting (threshold, ceiling) as a line across an effect meter.
+    readonly property color meterMark: Kirigami.Theme.textColor
+    readonly property real meterMarkHeight: 2
+    readonly property real meterMarkOverhang: 3
     readonly property color grColor: Kirigami.Theme.neutralTextColor
     readonly property color grBoost: Kirigami.Theme.positiveTextColor
     // An insert slot's gain-reduction bar, along its bottom edge.
