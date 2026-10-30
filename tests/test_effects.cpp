@@ -10,6 +10,7 @@
 #include "denoise.h"
 #endif
 #include "eq.h"
+#include "loudness.h"
 #include "multiband.h"
 
 #include <QJsonArray>
@@ -436,6 +437,100 @@ private Q_SLOTS:
         QCOMPARE(same, ramp);
     }
 #endif
+
+    void loudnessReference()
+    {
+        // BS.1770: a 0 dBFS 997 Hz sine in one channel reads -3.01 LUFS.
+        LevelerEffect meter;
+        meter.setParam("maxBoost", 0.0);
+        meter.setParam("maxCut", 0.0);
+        meter.prepare(rate, 1);
+        std::vector<float> tone(static_cast<std::size_t>(48000) * 5);
+        for (std::size_t i = 0; i < tone.size(); ++i) {
+            tone[i] = static_cast<float>(std::sin(2.0 * M_PI * 997.0 * static_cast<double>(i) / rate));
+        }
+        float *plane = tone.data();
+        meter.process(&plane, 1, static_cast<int>(tone.size()));
+        std::array<float, 2> values{};
+        QCOMPARE(meter.takeMeters(values), 2U);
+        QVERIFY2(std::abs(values[1] + 3.01F) < 0.1F, qPrintable(QString::number(values[1])));
+        QCOMPARE(values[0], 0.0F);
+    }
+
+    void levelerRidesToTarget()
+    {
+        // A quiet stereo tone at about -30 LUFS, target -18: boosted 12 dB.
+        const auto run = [](LevelerEffect &leveler, double amplitude, int seconds) {
+            std::vector<float> left(static_cast<std::size_t>(48000 * seconds));
+            for (std::size_t i = 0; i < left.size(); ++i) {
+                left[i] = static_cast<float>(amplitude * std::sin(2.0 * M_PI * 997.0 * static_cast<double>(i) / rate));
+            }
+            std::vector<float> right = left;
+            for (std::size_t start = 0; start < left.size(); start += 512) {
+                std::array<float *, 2> block{left.data() + start, right.data() + start}; // NOLINT
+                leveler.process(block.data(), 2, static_cast<int>(std::min<std::size_t>(512, left.size() - start)));
+            }
+            std::array<float, 2> values{};
+            leveler.takeMeters(values);
+            return values;
+        };
+        // Stereo 997 Hz at amplitude a: 20 log10(a) + 3.01 - 3.01 = 20 log10(a) LUFS.
+        const double amplitude = std::pow(10.0, -30.0 / 20.0);
+        LevelerEffect leveler;
+        leveler.setParam("speed", 1.0);
+        leveler.setParam("maxBoost", 24.0);
+        leveler.prepare(rate, 2);
+        auto values = run(leveler, amplitude, 12);
+        QVERIFY2(std::abs(values[1] + 30.0F) < 0.3F, qPrintable(QString::number(values[1])));
+        QVERIFY2(std::abs(values[0] - 12.0F) < 0.5F, qPrintable(QString::number(values[0])));
+        // Silence: the gain holds where it was (no pumping up the noise).
+        values = run(leveler, 0.0, 6);
+        QVERIFY2(std::abs(values[0] - 12.0F) < 1.0F, qPrintable(QString::number(values[0])));
+        // Max boost limits it.
+        LevelerEffect capped;
+        capped.setParam("speed", 1.0);
+        capped.setParam("maxBoost", 6.0);
+        capped.prepare(rate, 2);
+        values = run(capped, amplitude, 12);
+        QVERIFY2(std::abs(values[0] - 6.0F) < 0.3F, qPrintable(QString::number(values[0])));
+    }
+
+    void limiterHoldsTheCeiling()
+    {
+        const float ceiling = std::pow(10.0F, -1.0F / 20.0F);
+        // A full-scale tone: nothing over the ceiling, and close to it.
+        LimiterEffect limiter;
+        limiter.prepare(rate, 2);
+        Buffers tone(48000, 0.0F);
+        for (std::size_t i = 0; i < tone.left.size(); ++i) {
+            tone.left[i] = tone.right[i] =
+                static_cast<float>(std::sin(2.0 * M_PI * 440.0 * static_cast<double>(i) / rate));
+        }
+        limiter.process(tone.planes.data(), 2, 48000);
+        float peak = 0.0F;
+        for (const float v : tone.left) {
+            peak = std::max(peak, std::abs(v));
+        }
+        QVERIFY(peak <= ceiling);
+        QVERIFY(peak > ceiling * 0.95F);
+        std::array<float, 1> meter{};
+        limiter.takeMeters(meter);
+        QVERIFY(std::abs(meter[0] - 1.0F) < 0.2F);
+
+        // A lone spike in quiet: caught before it arrives, not clipped flat.
+        LimiterEffect spiky;
+        spiky.prepare(rate, 2);
+        Buffers spike(4800, 0.1F);
+        spike.left[2000] = spike.right[2000] = 1.0F;
+        spiky.process(spike.planes.data(), 2, 4800);
+        const int delay = static_cast<int>(std::lround(LimiterEffect::lookaheadSeconds * rate));
+        QVERIFY(spike.left[static_cast<std::size_t>(2000 + delay)] <= ceiling);
+        QVERIFY(spike.left[static_cast<std::size_t>(2000 + delay)] > ceiling * 0.99F);
+        // Quieter audio passes unchanged, lookahead later.
+        QCOMPARE(spike.left[1000], 0.1F);
+        QCOMPARE(spike.left[static_cast<std::size_t>(delay - 1)], 0.0F);
+        QCOMPARE(spike.left[static_cast<std::size_t>(delay)], 0.1F);
+    }
 
     void keyLoopsAreFound()
     {

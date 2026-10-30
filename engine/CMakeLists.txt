@@ -10,6 +10,8 @@ add_library(patchprime-dsp STATIC
     src/effects.h
     src/eq.cpp
     src/eq.h
+    src/loudness.cpp
+    src/loudness.h
     src/multiband.cpp
     src/multiband.h)
 target_include_directories(patchprime-dsp PUBLIC src)

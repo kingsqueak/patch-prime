@@ -8,6 +8,7 @@
 #include "denoise.h"
 #endif
 #include "eq.h"
+#include "loudness.h"
 #include "multiband.h"
 
 #include <algorithm>
@@ -71,6 +72,12 @@ std::unique_ptr<Effect> makeEffect(const std::string &type)
     if (type == "gate") {
         return std::make_unique<GateEffect>();
     }
+    if (type == "leveler") {
+        return std::make_unique<LevelerEffect>();
+    }
+    if (type == "limiter") {
+        return std::make_unique<LimiterEffect>();
+    }
 #ifdef PATCHPRIME_HAVE_RNNOISE
     if (type == "denoise") {
         return std::make_unique<DenoiseEffect>();
@@ -115,6 +122,8 @@ std::vector<std::string> effectTypes()
 #ifdef PATCHPRIME_HAVE_RNNOISE
     types.emplace_back("denoise");
 #endif
+    types.emplace_back("leveler");
+    types.emplace_back("limiter");
     types.emplace_back("gain");
     return types;
 }
@@ -138,6 +147,12 @@ std::string effectLabel(const std::string &type)
     }
     if (type == "denoise") {
         return "Noise suppression";
+    }
+    if (type == "leveler") {
+        return "Broadcast leveler";
+    }
+    if (type == "limiter") {
+        return "Safety limiter";
     }
     return type;
 }
@@ -190,6 +205,17 @@ std::vector<ParamInfo> effectParams(const std::string &type)
                 param("attack", "Attack", "ms", 0.1, 50.0, 1.0, ParamKind::Log),
                 param("hold", "Hold", "ms", 0.0, 1000.0, 100.0),
                 param("release", "Release", "ms", 5.0, 2000.0, 150.0, ParamKind::Log)};
+    }
+    if (type == "leveler") {
+        return {param("target", "Target", "LUFS", -36.0, -6.0, -18.0),
+                param("maxBoost", "Max boost", "dB", 0.0, 24.0, 12.0),
+                param("maxCut", "Max cut", "dB", 0.0, 24.0, 12.0),
+                param("speed", "Speed", "s", 0.5, 30.0, 5.0, ParamKind::Log),
+                param("freeze", "Freeze below", "LUFS", -70.0, -20.0, -50.0)};
+    }
+    if (type == "limiter") {
+        return {param("ceiling", "Ceiling", "dB", -24.0, 0.0, -1.0),
+                param("release", "Release", "ms", 5.0, 2000.0, 100.0, ParamKind::Log)};
     }
     if (type == "ducker") {
         return {param("threshold", "Threshold", "dB", -60.0, 0.0, -35.0),

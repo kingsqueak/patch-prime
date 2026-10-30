@@ -278,34 +278,47 @@ StripToggle {
                             }
                         }
 
-                        // Effects with a meter: the gate's cut, the ducker's dip, the voice level.
-                        RowLayout {
-                            readonly property var meter: Devices.effectMeters[button.key + "|" + slot.index] || []
-                            readonly property var shown: ({
-                                gate: { label: qsTr("Gate cut"), unit: "dB", range: 40 },
-                                ducker: { label: qsTr("Ducking"), unit: "dB", range: 24 },
-                                denoise: { label: qsTr("Voice"), unit: "%", range: 100 }
-                            })[slot.modelData.type]
+                        // Effects with meters: the gate's cut, the ducker's dip, the voice
+                        // level, the leveler's gain and loudness, the limiting.
+                        Repeater {
+                            id: meters
 
-                            Layout.fillWidth: true
-                            visible: shown !== undefined
+                            readonly property var values: Devices.effectMeters[button.key + "|" + slot.index] || []
 
-                            QQC2.Label {
-                                Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-                                text: parent.shown ? parent.shown.label : ""
-                            }
-                            QQC2.ProgressBar {
+                            model: ({
+                                gate: [{ label: qsTr("Gate cut"), unit: "dB", from: 0, to: 40 }],
+                                ducker: [{ label: qsTr("Ducking"), unit: "dB", from: 0, to: 24 }],
+                                denoise: [{ label: qsTr("Voice"), unit: "%", from: 0, to: 100 }],
+                                leveler: [{ label: qsTr("Gain now"), unit: "dB", from: -24, to: 24 },
+                                          { label: qsTr("Loudness"), unit: "LUFS", from: -60, to: 0 }],
+                                limiter: [{ label: qsTr("Limiting"), unit: "dB", from: 0, to: 12 }]
+                            })[slot.modelData.type] || []
+
+                            delegate: RowLayout {
+                                required property var modelData
+                                required property int index
+                                readonly property real value: index < meters.values.length ? meters.values[index]
+                                                                                           : modelData.from
+
                                 Layout.fillWidth: true
-                                from: 0
-                                to: parent.shown ? parent.shown.range : 1
-                                value: parent.meter.length > 0 ? parent.meter[0] : 0
-                            }
-                            QQC2.Label {
-                                Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-                                horizontalAlignment: Text.AlignHCenter
-                                font.family: "monospace"
-                                text: parent.shown ? (parent.meter.length > 0 ? parent.meter[0] : 0).toFixed(parent.shown.unit === "%" ? 0 : 1)
-                                                     + " " + parent.shown.unit : ""
+
+                                QQC2.Label {
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                    text: parent.modelData.label
+                                }
+                                QQC2.ProgressBar {
+                                    Layout.fillWidth: true
+                                    from: parent.modelData.from
+                                    to: parent.modelData.to
+                                    value: parent.value
+                                }
+                                QQC2.Label {
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                    horizontalAlignment: Text.AlignHCenter
+                                    font.family: "monospace"
+                                    text: parent.value.toFixed(parent.modelData.unit === "%" ? 0 : 1)
+                                          + " " + parent.modelData.unit
+                                }
                             }
                         }
                     }
