@@ -46,7 +46,17 @@ int main(int argc, char *argv[])
         QTimer::singleShot(2000, &app, [&engine, shot] {
             const auto roots = engine.rootObjects();
             auto *window = roots.isEmpty() ? nullptr : qobject_cast<QQuickWindow *>(roots.first());
-            const bool saved = window != nullptr && window->grabWindow().save(shot);
+            bool saved = window != nullptr && window->grabWindow().save(shot);
+            // Other open windows (an effects window) as <file>-2.png, -3, ...
+            int n = 1;
+            for (auto *other : QGuiApplication::topLevelWindows()) {
+                auto *quick = qobject_cast<QQuickWindow *>(other);
+                if (quick != nullptr && quick != window && quick->isVisible()) {
+                    auto name = shot;
+                    name.insert(name.lastIndexOf(QLatin1Char('.')), QStringLiteral("-%1").arg(++n));
+                    saved = quick->grabWindow().save(name) && saved;
+                }
+            }
             QCoreApplication::exit(saved ? 0 : 1);
         });
     }

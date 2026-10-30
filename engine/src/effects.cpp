@@ -3,6 +3,10 @@
 
 #include "effects.h"
 
+#include "dynamics.h"
+#ifdef PATCHPRIME_HAVE_RNNOISE
+#include "denoise.h"
+#endif
 #include "eq.h"
 #include "multiband.h"
 
@@ -64,6 +68,17 @@ std::unique_ptr<Effect> makeEffect(const std::string &type)
     if (type == "multiband") {
         return std::make_unique<MultibandEffect>();
     }
+    if (type == "gate") {
+        return std::make_unique<GateEffect>();
+    }
+#ifdef PATCHPRIME_HAVE_RNNOISE
+    if (type == "denoise") {
+        return std::make_unique<DenoiseEffect>();
+    }
+#endif
+    if (type == "ducker") {
+        return std::make_unique<DuckerEffect>();
+    }
     return nullptr;
 }
 
@@ -96,7 +111,12 @@ double validParam(const ParamInfo &info, double value)
 
 std::vector<std::string> effectTypes()
 {
-    return {"eq", "multiband", "gain"};
+    std::vector<std::string> types{"eq", "multiband", "gate", "ducker"};
+#ifdef PATCHPRIME_HAVE_RNNOISE
+    types.emplace_back("denoise");
+#endif
+    types.emplace_back("gain");
+    return types;
 }
 
 std::string effectLabel(const std::string &type)
@@ -109,6 +129,15 @@ std::string effectLabel(const std::string &type)
     }
     if (type == "multiband") {
         return "Multiband compressor";
+    }
+    if (type == "gate") {
+        return "Noise gate";
+    }
+    if (type == "ducker") {
+        return "Ducker";
+    }
+    if (type == "denoise") {
+        return "Noise suppression";
     }
     return type;
 }
@@ -155,6 +184,25 @@ std::vector<ParamInfo> effectParams(const std::string &type)
         }
         return params;
     }
+    if (type == "gate") {
+        return {param("threshold", "Threshold", "dB", -80.0, 0.0, -50.0),
+                param("range", "Range", "dB", 0.0, 80.0, 40.0),
+                param("attack", "Attack", "ms", 0.1, 50.0, 1.0, ParamKind::Log),
+                param("hold", "Hold", "ms", 0.0, 1000.0, 100.0),
+                param("release", "Release", "ms", 5.0, 2000.0, 150.0, ParamKind::Log)};
+    }
+    if (type == "ducker") {
+        return {param("threshold", "Threshold", "dB", -60.0, 0.0, -35.0),
+                param("depth", "Depth", "dB", 0.0, 40.0, 12.0),
+                param("attack", "Attack", "ms", 1.0, 500.0, 20.0, ParamKind::Log),
+                param("hold", "Hold", "ms", 0.0, 2000.0, 250.0),
+                param("release", "Release", "ms", 50.0, 5000.0, 600.0, ParamKind::Log)};
+    }
+#ifdef PATCHPRIME_HAVE_RNNOISE
+    if (type == "denoise") {
+        return {param("amount", "Amount", "%", 0.0, 100.0, 100.0)};
+    }
+#endif
     if (type == "multiband") {
         std::vector<ParamInfo> params;
         params.reserve(3 + (7 * MultibandEffect::bandCount));
@@ -184,6 +232,11 @@ std::vector<ParamInfo> effectParams(const std::string &type)
     return {};
 }
 
+bool effectTakesKey(const std::string &type)
+{
+    return type == "ducker";
+}
+
 // --- EffectChain --------------------------------------------------------------
 
 EffectChain::EffectChain(std::vector<std::unique_ptr<Effect>> effects, double sampleRate,
@@ -200,17 +253,21 @@ EffectChain::EffectChain(std::vector<std::unique_ptr<Effect>> effects, double sa
     m_step = static_cast<float>(1.0 / std::max(1.0, crossfadeSeconds * sampleRate));
 }
 
-void EffectChain::process(float *const *channels, int frames) noexcept
+void EffectChain::process(float *const *channels, int frames, const float *key) noexcept
 {
     frames = std::min(frames, maxEffectFrames);
     const auto count = static_cast<std::size_t>(m_channels);
     const std::span<float *const> planes(channels, count);
     for (std::size_t e = 0; e < m_effects.size(); ++e) {
         Effect &effect = *m_effects[e];
+        effect.setKey(key);
         float &mix = m_slots[e].mix;
         const float target = effect.enabled.load(std::memory_order_relaxed) ? 1.0F : 0.0F;
         if (mix == 0.0F && target == 0.0F) {
             continue; // bypassed: not processed at all
+        }
+        if (mix == 0.0F) {
+            effect.resume(); // coming back from bypass
         }
         if (mix == 1.0F && target == 1.0F) {
             effect.process(channels, m_channels, frames);
@@ -265,8 +322,8 @@ void Processor::collect()
     std::erase_if(m_retired, [cycle](const Retired &r) { return cycle > r.cycle; });
 }
 
-void Processor::process(const float *const *in, float *const *out, int channelCount,
-                        int frames) noexcept
+void Processor::process(const float *const *in, float *const *out, int channelCount, int frames,
+                        const float *key) noexcept
 {
     m_inProcess.store(true);
     frames = std::max(frames, 0);
@@ -291,7 +348,9 @@ void Processor::process(const float *const *in, float *const *out, int channelCo
             for (std::size_t c = 0; c < count && c < part.size(); ++c) {
                 part.at(c) = outputs[c] + start; // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
             }
-            chain->process(part.data(), std::min(maxEffectFrames, frames - start));
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+            chain->process(part.data(), std::min(maxEffectFrames, frames - start),
+                           key != nullptr ? key + start : nullptr);
         }
     }
     m_cycle.fetch_add(1);

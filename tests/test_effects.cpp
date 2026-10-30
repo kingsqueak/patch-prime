@@ -5,6 +5,10 @@
 #include "devicemodel.h"
 #include "devicestore.h"
 #include "effects.h"
+#include "dynamics.h"
+#ifdef PATCHPRIME_HAVE_RNNOISE
+#include "denoise.h"
+#endif
 #include "eq.h"
 #include "multiband.h"
 
@@ -15,6 +19,7 @@
 
 #include <array>
 #include <cmath>
+#include <random>
 #include <vector>
 
 using namespace pp;
@@ -336,10 +341,124 @@ private Q_SLOTS:
         QCOMPARE(effectParams("multiband").size(), 31U);
     }
 
+    void gateClosesOnQuiet()
+    {
+        GateEffect gate; // threshold -50 dB, range 40 dB
+        gate.prepare(rate, 2);
+        // Quiet noise floor (about -66 dBFS): turned down by the range.
+        const double quiet = 20.0 * std::log10(sinePeak(gate, 1000.0, rate, 0.0005) / 0.0005);
+        QVERIFY2(quiet < -35.0, qPrintable(QString::number(quiet)));
+        std::array<float, 1> meter{};
+        QCOMPARE(gate.takeMeters(meter), 1U);
+        QVERIFY(meter[0] > 35.0F);
+        // Speech level: passes untouched.
+        QVERIFY(std::abs(gainDb(sinePeak(gate, 1000.0))) < 0.1);
+    }
+
+    void duckerFollowsKey()
+    {
+        DuckerEffect ducker; // threshold -35 dB, depth 12 dB
+        ducker.prepare(rate, 2);
+        // No key: nothing happens.
+        QVERIFY(std::abs(gainDb(sinePeak(ducker, 1000.0))) < 0.01);
+        // A loud key (a voice at about -10 dBFS): down by the depth.
+        std::vector<float> key(48000);
+        for (std::size_t i = 0; i < key.size(); ++i) {
+            key[i] = static_cast<float>(0.3 * std::sin(2.0 * M_PI * 200.0 * static_cast<double>(i) / rate));
+        }
+        Buffers music(48000, 0.5F);
+        for (int start = 0; start < 48000; start += 480) {
+            std::array<float *, 2> block{music.left.data() + start, music.right.data() + start}; // NOLINT
+            ducker.setKey(key.data() + start); // NOLINT
+            ducker.process(block.data(), 2, 480);
+        }
+        const double dipped = 20.0 * std::log10(music.left.back() / 0.5);
+        QVERIFY2(std::abs(dipped + 12.0) < 0.3, qPrintable(QString::number(dipped)));
+        std::array<float, 1> meter{};
+        ducker.takeMeters(meter);
+        QVERIFY(std::abs(meter[0] - 12.0F) < 0.3F);
+        // The key stops: back up after hold and release (well within 4 s).
+        ducker.setKey(nullptr);
+        Buffers after(48000 * 4, 0.5F);
+        ducker.process(after.planes.data(), 2, 48000 * 4);
+        QVERIFY(std::abs(20.0 * std::log10(after.left.back() / 0.5)) < 0.1);
+        QVERIFY(after.left[2400] < 0.2F); // still down 50 ms in (held)
+    }
+
+#ifdef PATCHPRIME_HAVE_RNNOISE
+    void denoiseRemovesNoise()
+    {
+        // Steady white noise at about -30 dBFS is not a voice: mostly removed.
+        DenoiseEffect denoise;
+        denoise.prepare(rate, 1);
+        std::mt19937 random(1);
+        std::uniform_real_distribution<float> noise(-0.05F, 0.05F);
+        std::vector<float> samples(static_cast<std::size_t>(48000) * 2);
+        for (float &s : samples) {
+            s = noise(random);
+        }
+        const auto rms = [](std::span<const float> part) {
+            double sum = 0.0;
+            for (const float s : part) {
+                sum += static_cast<double>(s) * s;
+            }
+            return std::sqrt(sum / static_cast<double>(part.size()));
+        };
+        const double before = rms(std::span(samples).subspan(48000));
+        for (std::size_t start = 0; start < samples.size(); start += 256) {
+            float *plane = samples.data() + start; // NOLINT
+            denoise.process(&plane, 1, 256);
+        }
+        const double after = rms(std::span(samples).subspan(48000));
+        QVERIFY2(20.0 * std::log10(after / before) < -10.0,
+                 qPrintable(QString::number(20.0 * std::log10(after / before))));
+
+        // Amount 0: the original, 10 ms (480 samples) late.
+        DenoiseEffect dry;
+        dry.setParam("amount", 0.0);
+        dry.prepare(rate, 1);
+        std::vector<float> ramp(2000);
+        for (std::size_t i = 0; i < ramp.size(); ++i) {
+            ramp[i] = static_cast<float>(i) / 4000.0F;
+        }
+        std::vector<float> out = ramp;
+        float *plane = out.data();
+        dry.process(&plane, 1, static_cast<int>(out.size()));
+        QCOMPARE(out[100], 0.0F);
+        QVERIFY(std::abs(out[1500] - ramp[1500 - DenoiseEffect::frameSize]) < 1e-6F);
+
+        // Not at 48 kHz: passed through.
+        DenoiseEffect other;
+        other.prepare(44100.0, 1);
+        std::vector<float> same = ramp;
+        plane = same.data();
+        other.process(&plane, 1, static_cast<int>(same.size()));
+        QCOMPARE(same, ramp);
+    }
+#endif
+
+    void keyLoopsAreFound()
+    {
+        const std::map<std::string, std::vector<std::string>> sends{
+            {"mic", {"mix"}}, {"mix", {"out"}}, {"music", {"mix"}}};
+        QVERIFY(reaches(sends, "mic", "out"));   // via the mix
+        QVERIFY(!reaches(sends, "music", "mic"));
+        QVERIFY(!reaches(sends, "out", "mic"));
+        // Music ducked by the mic: fine. The mix ducked by the mic: fine
+        // (the key reads the mic). The mic ducked by the mix: a loop.
+        QVERIFY(reaches(sends, "mic", "mix"));
+        QVERIFY(effectTakesKey("ducker") && !effectTakesKey("gate"));
+    }
+
     void settingsRoundTrip()
     {
         const std::vector<EffectSettings> effects{
-            {.type = "gain", .enabled = false, .params = {{"gainDb", -3.0}}},
+            {.type = "gain", .enabled = false, .params = {{"gainDb", -3.0}}, .key = {}},
+            {.type = "ducker",
+             .enabled = true,
+             .params = {{"threshold", -30.0}, {"depth", 10.0}, {"attack", 20.0}, {"hold", 250.0},
+                        {"release", 600.0}},
+             .key = "Audio/Source|mic"},
         };
         QCOMPARE(effectsFromJson(effectsToJson(effects)), effects);
         // Unknown types go; parameters are clamped, and missing ones filled in.
@@ -364,7 +483,7 @@ private Q_SLOTS:
 
     void chainUpdatesInPlace()
     {
-        std::vector<EffectSettings> effects{{.type = "gain", .enabled = true, .params = {}}};
+        std::vector<EffectSettings> effects{{.type = "gain", .enabled = true, .params = {}, .key = {}}};
         auto chain = buildChain(effects, rate, 2);
         QCOMPARE(chain->size(), 1U);
         Effect *first = &chain->at(0);
@@ -375,7 +494,7 @@ private Q_SLOTS:
         QCOMPARE(&chain->at(0), first);
         QVERIFY(!chain->at(0).enabled);
         // Another shape: rebuilt.
-        effects.push_back({.type = "gain", .enabled = true, .params = {}});
+        effects.push_back({.type = "gain", .enabled = true, .params = {}, .key = {}});
         QVERIFY(!updateChain(*chain, effects));
         QCOMPARE(effectsNodeName("patchprime.out.maudio-1"), "patchprime.fx.out.maudio-1");
         QCOMPARE(effectsNodeName("patchprime.desktop"), "patchprime.fx.desktop");

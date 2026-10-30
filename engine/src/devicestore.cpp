@@ -415,11 +415,15 @@ QJsonArray effectsToJson(const std::vector<EffectSettings> &effects)
         for (const auto &[name, value] : e.params) {
             params.insert(qs(name), value);
         }
-        out.append(QJsonObject{
+        QJsonObject effect{
             {QStringLiteral("type"), qs(e.type)},
             {QStringLiteral("enabled"), e.enabled},
             {QStringLiteral("params"), params},
-        });
+        };
+        if (effectTakesKey(e.type)) {
+            effect.insert(QStringLiteral("key"), qs(e.key));
+        }
+        out.append(effect);
     }
     return out;
 }
@@ -440,6 +444,9 @@ std::vector<EffectSettings> effectsFromJson(const QJsonArray &json)
         for (const auto &p : info) {
             const double value = params.value(QString::fromStdString(p.name)).toDouble(p.initial);
             e.params[p.name] = validParam(p, value);
+        }
+        if (effectTakesKey(e.type)) {
+            e.key = str(o, "key");
         }
         effects.push_back(std::move(e));
     }

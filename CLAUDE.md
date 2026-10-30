@@ -28,6 +28,8 @@ C++23 (for `std::expected` and `std::print`), CMake + Ninja, Qt 6.10 (QML + Kiri
 - Don't use `pkill -f` with a pattern that appears in your own command line: it kills the shell running it. Use `pgrep -x patchprimed` / `pkill -x patchprimed`.
 - QML delegates: read roles through `required property var model` (`model.foo`), not one required property per role, and don't use `ListView.section`. With Qt 6.10 both showed stale data on the wrong row after a row was inserted. Never name a role after an existing Item property (`enabled`, `visible`, ...). For a control the user drags (sliders), follow the daemon by assigning `value` in a change handler (see `VolumeFader.qml`), not with `Binding { when: !pressed }`: that left the slider drawn at one value and grabbed at another.
 - `PATCHPRIME_SCREENSHOT=<file.png> QT_QPA_PLATFORM=offscreen` saves the window and quits, to check the UI without a display; point `XDG_CONFIG_HOME` at a temp dir so your real settings aren't touched.
+- Effects: `engine/src/` `effects`, `eq`, `multiband`, `dynamics`, `denoise` form `patchprime-dsp` (plain C++, linked by the engine and the GUI, which draws curves with it). RNNoise is fetched at configure time (`cmake/RNNoise.cmake`, pinned by SHA-256; `-DPATCHPRIME_RNNOISE=OFF` builds without noise suppression). `PATCHPRIME_EFFECTS=<strip label>` opens a strip's effects window for screenshots (saved as `<file>-2.png`).
+- QML: never give an id or property an existing Item/Layout property name (`scale`, `spacing`, ...): it is shadowed or "set multiple times".
 - Kirigami is used only from QML. Don't `find_package(KF6Kirigami)`: its CMake config needs OpenMP, which Clang builds here lack.
 
 ## GitHub

@@ -314,6 +314,11 @@ QVariantList DaemonClient::eqCurve(const QVariantMap &params, const QVariantList
     return out;
 }
 
+void DaemonClient::setEffectKey(const QString &key, int index, const QString &sourceKey)
+{
+    call(QStringLiteral("SetEffectKey"), {key, index, sourceKey});
+}
+
 void DaemonClient::setChannelPair(const QString &key, int pair)
 {
     call(QStringLiteral("SetChannelPair"), {key, pair});

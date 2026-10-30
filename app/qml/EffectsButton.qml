@@ -4,13 +4,16 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.kingsqueak.patchprime.engine
 
-// A strip's "FX" button, lit while any effect is on, and the panel it opens:
-// the strip's effects chain in order, each with on/bypass, move, remove and
-// its parameters; and a menu to add one. On a hardware input the effects run
-// before the fader (and the system mic gets them); elsewhere, after it.
+// A strip's "FX" button, lit while any effect is on, and the window it opens
+// (a window of its own, beside the mixer, so neither has to be resized for
+// the other): the strip's effects chain in order, each with on/bypass, move,
+// remove and its parameters; and a menu to add one. On a hardware input the
+// effects run before the fader (and the system mic gets them); elsewhere,
+// after it.
 StripToggle {
     id: button
 
@@ -45,21 +48,35 @@ StripToggle {
         return { type: type, label: type, params: [] };
     }
 
-    function formatValue(value, unit) {
-        const text = (Math.abs(value) < 10 ? value.toFixed(1) : value.toFixed(0));
-        return unit.length > 0 ? text + " " + unit : text;
-    }
-
-    Kirigami.Dialog {
+    QQC2.ApplicationWindow {
         id: panel
 
-        title: qsTr("Effects: %1").arg(button.label)
-        standardButtons: Kirigami.Dialog.Close
-        preferredWidth: Kirigami.Units.gridUnit
-                        * (button.effects.some(e => e.type === "eq" || e.type === "multiband") ? 54 : 24)
-        padding: Kirigami.Units.largeSpacing
+        // Shows the window (or brings it forward), sized for its editors.
+        function open() {
+            if (!visible) {
+                const wide = button.effects.some(e => e.type === "eq" || e.type === "multiband");
+                width = Kirigami.Units.gridUnit * (wide ? 56 : 30);
+                height = Math.min(Screen.desktopAvailableHeight * 0.85, Kirigami.Units.gridUnit * 44);
+            }
+            show();
+            raise();
+            requestActivate();
+        }
+
+        title: qsTr("Effects: %1 — Patch Prime").arg(button.label)
+        minimumWidth: Kirigami.Units.gridUnit * 24
+        minimumHeight: Kirigami.Units.gridUnit * 16
+        color: Kirigami.Theme.backgroundColor
+
+        QQC2.ScrollView {
+            id: scroll
+
+            anchors.fill: parent
+            anchors.margins: Kirigami.Units.largeSpacing
+            contentWidth: availableWidth
 
         ColumnLayout {
+            width: scroll.availableWidth
             spacing: Kirigami.Units.largeSpacing
 
             QQC2.Label {
@@ -160,6 +177,20 @@ StripToggle {
                                     const v = slot.modelData.params[modelData.name];
                                     return v === undefined ? modelData.initial : v;
                                 }
+                                readonly property bool log: modelData.kind === "log" && modelData.minimum > 0
+
+                                // Slider position (0-1) <-> value, on a log scale for times and frequencies.
+                                function toPosition(v) {
+                                    const lo = modelData.minimum;
+                                    const hi = modelData.maximum;
+                                    return log ? Math.log(v / lo) / Math.log(hi / lo) : (v - lo) / (hi - lo);
+                                }
+                                function toValue(position) {
+                                    const lo = modelData.minimum;
+                                    const hi = modelData.maximum;
+                                    const v = log ? lo * Math.pow(hi / lo, position) : lo + position * (hi - lo);
+                                    return Math.round(v * (Math.abs(v) < 10 ? 10 : 1)) / (Math.abs(v) < 10 ? 10 : 1);
+                                }
 
                                 Layout.fillWidth: true
 
@@ -173,25 +204,25 @@ StripToggle {
                                     id: slider
 
                                     Layout.fillWidth: true
-                                    from: param.modelData.minimum
-                                    to: param.modelData.maximum
+                                    from: 0
+                                    to: 1
                                     onMoved: Devices.setEffectParam(button.key, slot.index,
                                                                     param.modelData.name,
-                                                                    Math.round(value * 10) / 10)
+                                                                    param.toValue(value))
                                     Accessible.name: param.modelData.label
                                     // Follow the daemon as VolumeFader does.
                                     Connections {
                                         target: param
                                         function onCurrentChanged() {
                                             if (!slider.pressed)
-                                                slider.value = param.current;
+                                                slider.value = param.toPosition(param.current);
                                         }
                                     }
                                     onPressedChanged: {
                                         if (!pressed)
-                                            value = param.current;
+                                            value = param.toPosition(param.current);
                                     }
-                                    Component.onCompleted: value = param.current
+                                    Component.onCompleted: value = param.toPosition(param.current)
 
                                     TapHandler {
                                         onDoubleTapped: Devices.setEffectParam(button.key, slot.index,
@@ -200,13 +231,81 @@ StripToggle {
                                     }
                                 }
 
-                                QQC2.Label {
-                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 4
-                                    horizontalAlignment: Text.AlignRight
-                                    font.family: "monospace"
-                                    text: button.formatValue(slider.pressed ? slider.value : param.current,
-                                                             param.modelData.unit)
+                                ParamField {
+                                    unit: param.modelData.unit
+                                    value: slider.pressed ? param.toValue(slider.value) : param.current
+                                    accessibleName: param.modelData.label
+                                    onRequested: v => Devices.setEffectParam(button.key, slot.index,
+                                                                             param.modelData.name, v)
                                 }
+                            }
+                        }
+
+                        // A ducker's key: the strip whose sound turns this one down.
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: slot.info.takesKey === true
+
+                            QQC2.Label {
+                                Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                text: qsTr("Key")
+                            }
+                            QQC2.ComboBox {
+                                id: keyChoice
+
+                                Layout.fillWidth: true
+                                model: StripFilter {
+                                    sourceModel: Devices
+                                    stages: ["input", "bus", "output"]
+                                }
+                                textRole: "label"
+                                valueRole: "key"
+                                displayText: (slot.modelData.key || "").length > 0
+                                             ? Devices.labelFor(slot.modelData.key)
+                                             : qsTr("None: choose the strip to listen to")
+                                currentIndex: indexOfValue(slot.modelData.key || "")
+                                onActivated: Devices.setEffectKey(button.key, slot.index, currentValue)
+                                Accessible.name: qsTr("Key strip")
+                                QQC2.ToolTip.text: qsTr("Turn this strip down while the chosen strip is above the threshold (e.g. music under the mic). A strip that this one feeds can't be chosen: that would be a loop.")
+                                QQC2.ToolTip.visible: hovered
+                                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                            }
+                            QQC2.ToolButton {
+                                icon.name: "edit-clear"
+                                enabled: (slot.modelData.key || "").length > 0
+                                onClicked: Devices.setEffectKey(button.key, slot.index, "")
+                                Accessible.name: qsTr("No key")
+                            }
+                        }
+
+                        // Effects with a meter: the gate's cut, the ducker's dip, the voice level.
+                        RowLayout {
+                            readonly property var meter: Devices.effectMeters[button.key + "|" + slot.index] || []
+                            readonly property var shown: ({
+                                gate: { label: qsTr("Gate cut"), unit: "dB", range: 40 },
+                                ducker: { label: qsTr("Ducking"), unit: "dB", range: 24 },
+                                denoise: { label: qsTr("Voice"), unit: "%", range: 100 }
+                            })[slot.modelData.type]
+
+                            Layout.fillWidth: true
+                            visible: shown !== undefined
+
+                            QQC2.Label {
+                                Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                text: parent.shown ? parent.shown.label : ""
+                            }
+                            QQC2.ProgressBar {
+                                Layout.fillWidth: true
+                                from: 0
+                                to: parent.shown ? parent.shown.range : 1
+                                value: parent.meter.length > 0 ? parent.meter[0] : 0
+                            }
+                            QQC2.Label {
+                                Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                horizontalAlignment: Text.AlignHCenter
+                                font.family: "monospace"
+                                text: parent.shown ? (parent.meter.length > 0 ? parent.meter[0] : 0).toFixed(parent.shown.unit === "%" ? 0 : 1)
+                                                     + " " + parent.shown.unit : ""
                             }
                         }
                     }
@@ -236,6 +335,7 @@ StripToggle {
                     }
                 }
             }
+        }
         }
     }
 }

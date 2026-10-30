@@ -4,6 +4,8 @@
 # The built-in effects: plain C++ (no Qt, no PipeWire), shared by the engine
 # (which runs them) and the GUI (which draws their curves).
 add_library(patchprime-dsp STATIC
+    src/dynamics.cpp
+    src/dynamics.h
     src/effects.cpp
     src/effects.h
     src/eq.cpp
@@ -11,6 +13,11 @@ add_library(patchprime-dsp STATIC
     src/multiband.cpp
     src/multiband.h)
 target_include_directories(patchprime-dsp PUBLIC src)
+if(PATCHPRIME_RNNOISE)
+    target_sources(patchprime-dsp PRIVATE src/denoise.cpp src/denoise.h)
+    target_link_libraries(patchprime-dsp PRIVATE patchprime-rnnoise)
+    target_compile_definitions(patchprime-dsp PUBLIC PATCHPRIME_HAVE_RNNOISE)
+endif()
 patchprime_set_warnings(patchprime-dsp)
 
 add_library(patchprime-engine STATIC

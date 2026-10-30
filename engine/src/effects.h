@@ -45,12 +45,27 @@ public:
     // updated in place), so it must only store into atomics.
     virtual void setParam(const std::string &name, double value) = 0;
 
+    // Realtime: the effect runs again after being fully bypassed (skipped);
+    // forget what it held from before (buffered audio, filter memory).
+    virtual void resume() noexcept {}
+
     // Main thread: the effect's meters since the last call (gain reduction
     // per band, say) into out; returns how many it wrote. Most have none.
     virtual std::size_t takeMeters(std::span<float> /*out*/) { return 0; }
 
+    // Effects driven by another strip's sound (a ducker) read it here: the
+    // key signal for the current process() call, mono, or null when there's
+    // none. Set by the chain on the realtime thread just before process().
+    void setKey(const float *key) noexcept { m_key = key; }
+
     // On or bypassed. A change crossfades (see EffectChain).
-    std::atomic<bool> enabled{true};
+    std::atomic<bool> enabled{true}; // NOLINT(cppcoreguidelines-non-private-member-variables-in-classes): an atomic flag shared with the realtime thread
+
+protected:
+    [[nodiscard]] const float *key() const noexcept { return m_key; }
+
+private:
+    const float *m_key = nullptr;
 };
 
 // A level trim: "gainDb" from -24 to +24 dB, smoothed so moving it doesn't
@@ -101,6 +116,8 @@ struct ParamInfo
 // A value made valid for a parameter: clamped, and whole for a choice or toggle.
 double validParam(const ParamInfo &info, double value);
 std::vector<ParamInfo> effectParams(const std::string &type);
+// Whether a type listens to another strip (its "key", see EffectSettings).
+bool effectTakesKey(const std::string &type);
 // Effects one strip may have.
 constexpr std::size_t maxEffectsPerStrip = 8;
 
@@ -118,8 +135,8 @@ public:
     [[nodiscard]] std::size_t size() const { return m_effects.size(); }
     [[nodiscard]] Effect &at(std::size_t index) { return *m_effects.at(index); }
 
-    // Realtime.
-    void process(float *const *channels, int frames) noexcept;
+    // Realtime. key: the strip's key input (mono, frames long), or null.
+    void process(float *const *channels, int frames, const float *key = nullptr) noexcept;
 
 private:
     struct Slot
@@ -157,7 +174,9 @@ public:
 
     // Realtime: in and out are planar, channel by channel; in may equal out.
     // Any length: blocks longer than maxEffectFrames are processed in parts.
-    void process(const float *const *in, float *const *out, int channelCount, int frames) noexcept;
+    // key: the key input (mono), or null.
+    void process(const float *const *in, float *const *out, int channelCount, int frames,
+                 const float *key = nullptr) noexcept;
 
 private:
     std::atomic<EffectChain *> m_chain{nullptr};

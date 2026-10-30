@@ -135,6 +135,7 @@ struct PipeWireGraph::Session
         spa_hook listener{};
         std::vector<void *> inPorts;
         std::vector<void *> outPorts;
+        void *keyPort = nullptr;
         std::shared_ptr<Processor> processor;
     };
 
@@ -515,8 +516,11 @@ void PipeWireGraph::Session::onFilterProcess(void *data, spa_io_position *positi
         out[c] = static_cast<float *>(pw_filter_get_dsp_buffer(f->outPorts[c], frames));
         // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
     }
+    const auto *key = f->keyPort != nullptr
+                          ? static_cast<const float *>(pw_filter_get_dsp_buffer(f->keyPort, frames))
+                          : nullptr;
     f->processor->process(in.data(), out.data(), static_cast<int>(channels),
-                          static_cast<int>(frames));
+                          static_cast<int>(frames), key);
 }
 
 void PipeWireGraph::Session::onMeterProcess(void *data)
@@ -849,7 +853,7 @@ std::shared_ptr<MeterLevels> PipeWireGraph::addMeter(const std::string &targetNo
 
 bool PipeWireGraph::addFilter(const std::string &name, const std::vector<std::string> &positions,
                               const Properties &extraProps,
-                              const std::shared_ptr<Processor> &processor)
+                              const std::shared_ptr<Processor> &processor, bool keyInput)
 {
     if (!m_session || positions.empty() || positions.size() > maxEffectChannels || !processor) {
         return false;
@@ -885,6 +889,17 @@ bool PipeWireGraph::addFilter(const std::string &name, const std::vector<std::st
                 (input ? f->inPorts : f->outPorts).push_back(data);
                 ok = ok && data != nullptr;
             }
+        }
+        if (keyInput) {
+            f->keyPort = pw_filter_add_port(f->filter, PW_DIRECTION_INPUT,
+                                            PW_FILTER_PORT_FLAG_MAP_BUFFERS, 0,
+                                            toPwProperties({
+                                                {PW_KEY_FORMAT_DSP, "32 bit float mono audio"},
+                                                {PW_KEY_PORT_NAME, "input_KEY"},
+                                                {PW_KEY_AUDIO_CHANNEL, "KEY"},
+                                            }),
+                                            nullptr, 0);
+            ok = ok && f->keyPort != nullptr;
         }
         ok = ok && pw_filter_connect(f->filter, PW_FILTER_FLAG_RT_PROCESS, nullptr, 0) >= 0;
         if (!ok) {

@@ -92,6 +92,8 @@ public Q_SLOTS:
     void MoveEffect(const QString &key, int from, int to);
     void SetEffectEnabled(const QString &key, int index, bool enabled);
     void SetEffectParam(const QString &key, int index, const QString &name, double value);
+    // The strip an effect listens to (a ducker's key): its key, or "" for none.
+    void SetEffectKey(const QString &key, int index, const QString &sourceKey);
     // kind: "sink" (apps play into it; record its monitor, e.g. "Stream Mix"),
     // "source" (apps record from it like a microphone, e.g. "Chat Mic") or
     // "input" (apps play into it, and it's routed like an input, e.g. "Desktop").

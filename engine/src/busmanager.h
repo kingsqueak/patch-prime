@@ -65,6 +65,12 @@ constexpr std::string_view effectsMediaClass = "Audio/Patchprime/Effects";
 // ("patchprime.out.maudio-1" -> "patchprime.fx.out.maudio-1").
 std::string effectsNodeName(const std::string &busName);
 
+// Whether audio from the strip `from` reaches the strip `to` through sends
+// (directly or via other strips), by endpoint key: a ducker on `from` keyed
+// by `to` would then be a loop. sends: each strip's send destinations.
+bool reaches(const std::map<std::string, std::vector<std::string>> &sends,
+             const std::string &from, const std::string &to);
+
 // Builds a chain running effects, prepared for sampleRate and channels.
 // Effects of unknown types are skipped.
 std::unique_ptr<EffectChain> buildChain(const std::vector<EffectSettings> &effects,
@@ -255,6 +261,7 @@ private:
         std::string key; // the strip's endpoint key
         std::shared_ptr<Processor> processor;
         std::vector<std::string> positions;
+        bool keyed = false;                  // has the key input
         std::vector<EffectSettings> effects; // what the chain was last given
         int sampleRate = 0;
     };
@@ -263,6 +270,7 @@ private:
     {
         std::vector<PortRef> in;
         std::vector<PortRef> out;
+        std::vector<PortRef> key; // the key input, when the strip has a ducker
     };
     // A hardware input: its effects go in front of its bus.
     [[nodiscard]] static bool effectsBeforeBus(const Wanted &wanted);
@@ -276,6 +284,12 @@ private:
                       const LinkMap &existingLinks);
     void link(const std::vector<PortRef> &outputs, const std::vector<PortRef> &inputs,
               const LinkMap &existingLinks);
+    // Feeds each effects node's key input from the strips its duckers
+    // listen to (their outputs, summed), and removes other links into it.
+    void linkKeys(const std::map<std::string, FxPorts> &fx,
+                  const std::map<std::string, Wanted> &wanted,
+                  const std::map<std::string, std::vector<PortRef>> &stripOuts,
+                  const LinkMap &existingLinks);
     void linkSends(const std::map<std::string, std::uint32_t> &ready,
                    const std::map<std::string, std::vector<PortRef>> &stripOuts,
                    const std::map<std::string, Wanted> &wanted,

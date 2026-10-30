@@ -349,6 +349,27 @@ std::string effectsNodeName(const std::string &busName)
     return "patchprime.fx." + std::string(rest);
 }
 
+bool reaches(const std::map<std::string, std::vector<std::string>> &sends,
+             const std::string &from, const std::string &to)
+{
+    std::set<std::string> seen;
+    std::vector<std::string> todo{from};
+    while (!todo.empty()) {
+        const auto at = std::move(todo.back());
+        todo.pop_back();
+        if (at == to) {
+            return true;
+        }
+        if (!seen.insert(at).second) {
+            continue;
+        }
+        if (const auto next = sends.find(at); next != sends.end()) {
+            todo.insert(todo.end(), next->second.begin(), next->second.end());
+        }
+    }
+    return false;
+}
+
 std::unique_ptr<EffectChain> buildChain(const std::vector<EffectSettings> &effects,
                                         double sampleRate, int channels)
 {
@@ -693,6 +714,7 @@ void BusManager::reconcile()
     }
 
     linkSends(ready, stripOuts, wanted, sends, readySends, existingLinks);
+    linkKeys(fx, wanted, stripOuts, existingLinks);
 
     // Meters whose bus is gone or no longer wanted.
     for (auto it = m_meters.begin(); it != m_meters.end();) {
@@ -811,10 +833,14 @@ BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
         keep.insert(fxName);
         const auto positions = busPositions(w.endpoint);
         const int channels = static_cast<int>(positions.size());
+        // A ducker on the strip needs the node's key input.
+        const bool keyed = std::ranges::any_of(
+            w.settings->effects, [](const EffectSettings &e) { return effectTakesKey(e.type); });
 
         auto fx = m_effects.find(fxName);
-        if (fx != m_effects.end() && fx->second.positions != positions) {
-            qCInfo(lcBus, "replacing effects node %s (channels changed)", fxName.c_str());
+        if (fx != m_effects.end() &&
+            (fx->second.positions != positions || fx->second.keyed != keyed)) {
+            qCInfo(lcBus, "replacing effects node %s (ports changed)", fxName.c_str());
             m_graph->removeFilter(fxName);
             m_effects.erase(fx);
             fx = m_effects.end();
@@ -830,13 +856,14 @@ BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
                 {"node.group", "patchprime.fx"},
             };
             qCInfo(lcBus, "creating effects node %s", fxName.c_str());
-            if (!m_graph->addFilter(fxName, positions, props, processor)) {
+            if (!m_graph->addFilter(fxName, positions, props, processor, keyed)) {
                 continue;
             }
             fx = m_effects
                      .emplace(fxName, Fx{.key = w.key,
                                          .processor = std::move(processor),
                                          .positions = positions,
+                                         .keyed = keyed,
                                          .effects = w.settings->effects,
                                          .sampleRate = rate})
                      .first;
@@ -856,9 +883,12 @@ BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
         if (node == filterNodes.end()) {
             continue;
         }
-        FxPorts ports{.in = portsOf(node->second, "in", false),
-                      .out = portsOf(node->second, "out", false)};
-        if (ports.in.size() != positions.size() || ports.out.size() != positions.size()) {
+        FxPorts ports{.in = {}, .out = portsOf(node->second, "out", false), .key = {}};
+        for (auto &port : portsOf(node->second, "in", false)) {
+            (port.channel == "KEY" ? ports.key : ports.in).push_back(std::move(port));
+        }
+        if (ports.in.size() != positions.size() || ports.out.size() != positions.size() ||
+            ports.key.size() != (keyed ? 1U : 0U)) {
             continue;
         }
         if (effectsBeforeBus(w)) {
@@ -879,6 +909,55 @@ BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
         }
     }
     return up;
+}
+
+void BusManager::linkKeys(const std::map<std::string, FxPorts> &fx,
+                          const std::map<std::string, Wanted> &wanted,
+                          const std::map<std::string, std::vector<PortRef>> &stripOuts,
+                          const LinkMap &existingLinks)
+{
+    std::map<std::string, std::string> nameOf; // endpoint key -> bus name
+    std::map<std::string, std::vector<std::string>> sendsOf;
+    for (const auto &[name, w] : wanted) {
+        nameOf[w.key] = name;
+        sendsOf[w.key] = w.settings->sends;
+    }
+    for (const auto &[name, ports] : fx) {
+        if (ports.key.empty()) {
+            continue;
+        }
+        const auto &w = wanted.at(name);
+        std::set<std::uint32_t> desired;
+        for (const auto &e : w.settings->effects) {
+            if (!effectTakesKey(e.type) || e.key.empty() || e.key == w.key) {
+                continue;
+            }
+            if (reaches(sendsOf, w.key, e.key)) {
+                qCWarning(lcBus, "%s can't be keyed by %s: it feeds it (a loop)", w.key.c_str(),
+                          e.key.c_str());
+                continue;
+            }
+            const auto source = nameOf.find(e.key);
+            if (source == nameOf.end()) {
+                continue; // disabled or offline
+            }
+            const auto out = stripOuts.find(source->second);
+            if (out == stripOuts.end()) {
+                continue;
+            }
+            for (const auto &port : out->second) {
+                desired.insert(port.portId);
+            }
+            link(out->second, ports.key, existingLinks);
+        }
+        // Links into the key input from anything no ducker asks for go.
+        const auto keyPort = ports.key.front().portId;
+        for (const auto &[pair, linkId] : existingLinks) {
+            if (pair.second == keyPort && !desired.contains(pair.first)) {
+                m_graph->destroyObject(linkId);
+            }
+        }
+    }
 }
 
 void BusManager::linkSends(const std::map<std::string, std::uint32_t> &ready,

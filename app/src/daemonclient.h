@@ -115,6 +115,7 @@ public:
     Q_INVOKABLE void setEffectEnabled(const QString &key, int index, bool enabled);
     Q_INVOKABLE void setEffectParam(const QString &key, int index, const QString &name,
                                     double value);
+    Q_INVOKABLE void setEffectKey(const QString &key, int index, const QString &sourceKey);
     // An EQ's response in dB at each frequency in freqs (Hz), from its
     // parameters (an "effects" entry's params; missing ones take their
     // defaults); only band (1-6) when given, else all bands together.

@@ -520,7 +520,7 @@ void DeviceModel::addEffect(int row, const QString &type)
         if (effects.size() >= maxEffectsPerStrip) {
             return false;
         }
-        EffectSettings e{.type = type.toStdString(), .enabled = true, .params = {}};
+        EffectSettings e{.type = type.toStdString(), .enabled = true, .params = {}, .key = {}};
         for (const auto &p : params) {
             e.params[p.name] = p.initial;
         }
@@ -588,6 +588,27 @@ void DeviceModel::setEffectParam(int row, int index, const QString &name, double
             }
         }
         return false;
+    });
+}
+
+void DeviceModel::setEffectKey(int row, int index, const QString &key)
+{
+    const auto source = key.toStdString();
+    if (row < 0 || row >= rowCount() ||
+        (!source.empty() && (m_store->find(source) == nullptr ||
+                             source == m_rows[static_cast<std::size_t>(row)].endpoint.key))) {
+        return; // unknown, or the strip itself
+    }
+    editEffects(row, [index, &source](std::vector<EffectSettings> &effects) {
+        if (index < 0 || std::cmp_greater_equal(index, effects.size())) {
+            return false;
+        }
+        auto &e = effects[static_cast<std::size_t>(index)];
+        if (!effectTakesKey(e.type) || e.key == source) {
+            return false;
+        }
+        e.key = source;
+        return true;
     });
 }
 

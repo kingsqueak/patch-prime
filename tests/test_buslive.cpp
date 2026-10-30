@@ -681,6 +681,29 @@ private Q_SLOTS:
             },
             5000));
 
+        // A ducker on the mix keyed by the mic: the mic's output feeds the
+        // mix's effects node's key input (both mic channels into one port).
+        const auto mixRow = [&] { return devices.rowForKey(mixKey.toStdString()); };
+        devices.addEffect(mixRow(), QStringLiteral("ducker"));
+        devices.setEffectKey(mixRow(), 1, QString::fromStdString(micKey));
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return linkCount(m_graph, inBus, mixFx) == 2 && // the key
+                       linkCount(m_graph, mixNode, mixFx) == 2 &&
+                       linkCount(m_graph, mixFx, mixSend) == 2;
+            },
+            5000));
+        // The other way round would be a loop (the mic feeds the mix): refused.
+        devices.addEffect(devices.rowForKey(micKey), QStringLiteral("ducker"));
+        devices.setEffectKey(devices.rowForKey(micKey), 1, mixKey);
+        QTest::qWait(1000);
+        QCOMPARE(linkCount(m_graph, mixFx, micFx), 0);
+        QCOMPARE(linkCount(m_graph, mixNode, micFx), 0);
+        devices.removeEffect(devices.rowForKey(micKey), 1);
+        // Unkeyed: the key link goes.
+        devices.setEffectKey(mixRow(), 1, QString());
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, inBus, mixFx) == 0; }, 5000));
+
         // An output strip: bus -> effects -> hardware.
         const auto outFx = effectsNodeName(outBus);
         devices.addEffect(devices.rowForKey(sinkKey), QStringLiteral("gain"));

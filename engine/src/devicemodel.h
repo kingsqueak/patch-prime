@@ -104,6 +104,9 @@ public:
     Q_INVOKABLE void moveEffect(int row, int from, int to);
     Q_INVOKABLE void setEffectEnabled(int row, int index, bool enabled);
     Q_INVOKABLE void setEffectParam(int row, int index, const QString &name, double value);
+    // The strip an effect listens to (a ducker's key): another strip's key,
+    // or empty for none. Ignored for effects that don't take one.
+    Q_INVOKABLE void setEffectKey(int row, int index, const QString &key);
     // Sets a strip's mix from a scene (see mixFromJson), keeping only what
     // still applies: the level clamped, mono on inputs only, sends to strips
     // that exist in a later stage. False when there's no such strip.

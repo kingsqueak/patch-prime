@@ -102,6 +102,7 @@ QString PatchPrimeService::GetState() const
             });
         }
         effectTypes.append(QJsonObject{
+            {QStringLiteral("takesKey"), pp::effectTakesKey(type)},
             {QStringLiteral("type"), QString::fromStdString(type)},
             {QStringLiteral("label"), QString::fromStdString(pp::effectLabel(type))},
             {QStringLiteral("params"), params},
@@ -385,6 +386,13 @@ void PatchPrimeService::SetEffectParam(const QString &key, int index, const QStr
 {
     if (const int row = rowFor(key); row >= 0) {
         m_devices->setEffectParam(row, index, name, value);
+    }
+}
+
+void PatchPrimeService::SetEffectKey(const QString &key, int index, const QString &sourceKey)
+{
+    if (const int row = rowFor(key); row >= 0) {
+        m_devices->setEffectKey(row, index, sourceKey);
     }
 }
 

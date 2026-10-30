@@ -94,6 +94,9 @@ struct EffectSettings
     std::string type;
     bool enabled = true;
     std::map<std::string, double> params;
+    // Effects that listen to another strip (see effectTakesKey): that
+    // strip's endpoint key; empty for none.
+    std::string key;
 
     bool operator==(const EffectSettings &) const = default;
 };

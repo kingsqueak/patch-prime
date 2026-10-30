@@ -18,6 +18,7 @@ set(CMAKE_AUTOMOC ON)
 option(PATCHPRIME_BUILD_APP "Build the Kirigami GUI" ON)
 option(PATCHPRIME_BUILD_TESTS "Build the tests" ON)
 option(PATCHPRIME_WERROR "Treat compiler warnings as errors" OFF)
+option(PATCHPRIME_RNNOISE "Noise suppression with RNNoise (fetched at configure time)" ON)
 
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
@@ -26,6 +27,9 @@ endif()
 
 include(GNUInstallDirs)
 include(cmake/Warnings.cmake)
+if(PATCHPRIME_RNNOISE)
+    include(cmake/RNNoise.cmake)
+endif()
 
 # systemd also searches $XDG_DATA_DIRS/systemd/user, so this works for both a
 # /usr and a ~/.local install.
