@@ -6,6 +6,7 @@
 #include "endpoint.h"
 
 #include <QDateTime>
+#include <QJsonObject>
 #include <QString>
 
 #include <map>
@@ -129,6 +130,13 @@ struct DeviceSettings
     Signature signature;
     QDateTime lastSeen;
 };
+
+// A strip's mix, as a scene stores it: level, mute, mono, sends and send
+// levels. The one place that decides what a scene covers per strip; the
+// effects chain joins here when it exists.
+QJsonObject mixToJson(const DeviceSettings &settings);
+// Sets the mix fields present in json (others stay as they are).
+void mixFromJson(DeviceSettings &settings, const QJsonObject &json);
 
 // ~/.config/patchprime/devices.json, keyed by Endpoint::key. Saves atomically.
 // Only endpoints the user has touched (enabled or labelled) are stored.

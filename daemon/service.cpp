@@ -8,6 +8,7 @@
 #include "devicemodel.h"
 #include "endpoint.h"
 #include "pipewiregraph.h"
+#include "scenes.h"
 
 #include <QDBusConnection>
 #include <QDBusError>
@@ -20,8 +21,10 @@
 #include <array>
 
 PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *devices,
-                                     pp::BusManager *buses, pp::AppRouter *apps, QObject *parent)
-    : QObject(parent), m_graph(graph), m_devices(devices), m_buses(buses), m_apps(apps)
+                                     pp::BusManager *buses, pp::AppRouter *apps,
+                                     pp::SceneStore *scenes, QObject *parent)
+    : QObject(parent), m_graph(graph), m_devices(devices), m_buses(buses), m_apps(apps),
+      m_scenes(scenes)
 {
     m_stateTimer.setSingleShot(true);
     m_stateTimer.setInterval(30);
@@ -85,6 +88,8 @@ QString PatchPrimeService::GetState() const
         {QStringLiteral("clockDevice"), QString::fromStdString(m_devices->store().clockDevice())},
         {QStringLiteral("clockNow"), clockNow()},
         {QStringLiteral("sampleRate"), m_devices->store().sampleRate()},
+        {QStringLiteral("scenes"), QJsonArray::fromStringList(m_scenes->names())},
+        {QStringLiteral("currentScene"), m_currentScene},
         {QStringLiteral("blockSize"), m_devices->store().blockSize()},
     };
     return QString::fromUtf8(QJsonDocument(state).toJson(QJsonDocument::Compact));
@@ -347,6 +352,49 @@ void PatchPrimeService::ForgetApp(const QString &appKey)
         sendErrorReply(QDBusError::InvalidArgs,
                        QStringLiteral("no remembered app that isn't running: ") + appKey);
     }
+}
+
+void PatchPrimeService::SaveScene(const QString &name)
+{
+    const auto trimmed = name.trimmed();
+    const auto scene = pp::captureScene(trimmed, m_devices->store(), m_apps->store(),
+                                        m_graph->defaultSinkName(), m_graph->defaultSourceName());
+    if (trimmed.isEmpty() || !m_scenes->save(scene)) {
+        if (calledFromDBus()) {
+            sendErrorReply(QDBusError::Failed, QStringLiteral("could not save the scene ") + name);
+        }
+        return;
+    }
+    m_currentScene = trimmed;
+    scheduleState();
+}
+
+void PatchPrimeService::LoadScene(const QString &name)
+{
+    const auto scene = m_scenes->load(name);
+    if (scene.isEmpty()) {
+        if (calledFromDBus()) {
+            sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no scene called ") + name);
+        }
+        return;
+    }
+    pp::applyScene(scene, *m_devices, m_apps, m_graph);
+    m_currentScene = name.trimmed();
+    scheduleState();
+}
+
+void PatchPrimeService::DeleteScene(const QString &name)
+{
+    if (!m_scenes->remove(name)) {
+        if (calledFromDBus()) {
+            sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no scene called ") + name);
+        }
+        return;
+    }
+    if (m_currentScene == name.trimmed()) {
+        m_currentScene.clear();
+    }
+    scheduleState();
 }
 
 void PatchPrimeService::WatchLevels()

@@ -78,6 +78,8 @@ public:
     // Forgets a remembered app that isn't running.
     bool forget(const std::string &key);
 
+    [[nodiscard]] const AppStore &store() const { return *m_store; }
+
     static constexpr std::chrono::milliseconds settleTime{1500};
 
 Q_SIGNALS:

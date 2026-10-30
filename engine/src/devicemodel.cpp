@@ -486,6 +486,42 @@ void DeviceModel::setSendLevel(int row, const QString &destinationKey, double db
     Q_EMIT settingsChanged(qs(r.endpoint.key));
 }
 
+bool DeviceModel::applyMix(const std::string &key, const QJsonObject &mix)
+{
+    const int row = rowForKey(key);
+    if (row < 0) {
+        return false;
+    }
+    const auto &r = m_rows[static_cast<std::size_t>(row)];
+    m_store->upsert(key);
+    remember(r, r.nodeId.has_value());
+    auto &s = m_store->upsert(key);
+    DeviceSettings next = s;
+    mixFromJson(next, mix);
+
+    s.volumeDb = std::clamp(next.volumeDb, minimumVolumeDb(), maximumVolumeDb());
+    s.muted = next.muted;
+    s.mono = r.endpoint.direction == Direction::Input && next.mono;
+    const auto stage = stageOfRow(r);
+    s.sends.clear();
+    for (const auto &destination : next.sends) {
+        const int to = rowForKey(destination);
+        if (to >= 0 && stageOfRow(m_rows[static_cast<std::size_t>(to)]) > stage &&
+            std::ranges::find(s.sends, destination) == s.sends.end()) {
+            s.sends.push_back(destination);
+        }
+    }
+    s.sendLevels.clear();
+    for (const auto &[destination, db] : next.sendLevels) {
+        s.sendLevels[destination] = std::clamp(db, minimumVolumeDb(), maximumVolumeDb());
+    }
+    saveLater();
+    const auto i = index(row);
+    Q_EMIT dataChanged(i, i, {VolumeRole, MutedRole, MonoRole, SendsRole, SendLevelsRole, SavedRole});
+    Q_EMIT settingsChanged(qs(key));
+    return true;
+}
+
 void DeviceModel::setChannelPair(int row, int pair)
 {
     if (row < 0 || row >= rowCount()) {

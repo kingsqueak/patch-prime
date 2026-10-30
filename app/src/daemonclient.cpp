@@ -185,10 +185,13 @@ void DaemonClient::fetchState()
     });
 }
 
+// The analyzer doesn't follow Qt parents: the watcher isn't leaked.
+// NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
 void DaemonClient::call(const QString &method, const QVariantList &args)
 {
     auto message = QDBusMessage::createMethodCall(service, path, interface, method);
     message.setArguments(args);
+    // Owned by this (its Qt parent) and deleted when finished.
     auto *watcher =
         new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](auto *w) {
@@ -198,6 +201,7 @@ void DaemonClient::call(const QString &method, const QVariantList &args)
         }
     });
 }
+// NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 void DaemonClient::setEnabled(const QString &key, bool enabled)
 {
@@ -284,6 +288,21 @@ void DaemonClient::setClock(const QString &mode)
     call(QStringLiteral("SetClock"), {mode});
 }
 
+void DaemonClient::saveScene(const QString &name)
+{
+    call(QStringLiteral("SaveScene"), {name});
+}
+
+void DaemonClient::loadScene(const QString &name)
+{
+    call(QStringLiteral("LoadScene"), {name});
+}
+
+void DaemonClient::deleteScene(const QString &name)
+{
+    call(QStringLiteral("DeleteScene"), {name});
+}
+
 void DaemonClient::setClockDevice(const QString &key)
 {
     call(QStringLiteral("SetClockDevice"), {key});
@@ -316,6 +335,17 @@ void DaemonClient::onStateChanged(const QString &state)
         connected != m_connected) {
         m_connected = connected;
         Q_EMIT connectedChanged();
+    }
+
+    QStringList scenes;
+    for (const auto &scene : root.value(QLatin1String("scenes")).toArray()) {
+        scenes.append(scene.toString());
+    }
+    if (const auto current = root.value(QLatin1String("currentScene")).toString();
+        scenes != m_scenes || current != m_currentScene) {
+        m_scenes = scenes;
+        m_currentScene = current;
+        Q_EMIT scenesChanged();
     }
 
     QList<QVariantMap> rows;

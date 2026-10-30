@@ -33,6 +33,9 @@ class DaemonClient : public QAbstractListModel
     // What can be the clock: [{value, text}], "internal" first, then the
     // enabled hardware devices by key.
     Q_PROPERTY(QVariantList clockChoices READ clockChoices NOTIFY clockChanged)
+    // Saved scenes (names), and the one last saved or loaded.
+    Q_PROPERTY(QStringList scenes READ scenes NOTIFY scenesChanged)
+    Q_PROPERTY(QString currentScene READ currentScene NOTIFY scenesChanged)
     // The mixer's sample rate (Hz) and block size (frames, 0 = automatic).
     Q_PROPERTY(int sampleRate READ sampleRate NOTIFY clockChanged)
     Q_PROPERTY(int blockSize READ blockSize NOTIFY clockChanged)
@@ -60,6 +63,8 @@ public:
     [[nodiscard]] QString clockDevice() const { return m_clockDevice; }
     [[nodiscard]] QString clockNow() const { return m_clockNow; }
     [[nodiscard]] QVariantList clockChoices() const { return m_clockChoices; }
+    [[nodiscard]] QStringList scenes() const { return m_scenes; }
+    [[nodiscard]] QString currentScene() const { return m_currentScene; }
     [[nodiscard]] int sampleRate() const { return m_sampleRate; }
     [[nodiscard]] int blockSize() const { return m_blockSize; }
     [[nodiscard]] QVariantList playbackTargets() const { return m_playbackTargets; }
@@ -88,6 +93,9 @@ public:
     Q_INVOKABLE void forgetApp(const QString &appKey);
     Q_INVOKABLE void setClock(const QString &mode);
     Q_INVOKABLE void setClockDevice(const QString &key);
+    Q_INVOKABLE void saveScene(const QString &name);
+    Q_INVOKABLE void loadScene(const QString &name);
+    Q_INVOKABLE void deleteScene(const QString &name);
     Q_INVOKABLE void setSampleRate(int rate);
     Q_INVOKABLE void setBlockSize(int frames);
     Q_INVOKABLE void setDeviceSampleRate(const QString &key, int rate);
@@ -105,6 +113,7 @@ Q_SIGNALS:
     void lastErrorChanged();
     void appsChanged();
     void clockChanged();
+    void scenesChanged();
 
 private Q_SLOTS:
     void onStateChanged(const QString &state);
@@ -132,6 +141,8 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QString m_clockDevice;
     QString m_clockNow;
     QVariantList m_clockChoices;
+    QStringList m_scenes;
+    QString m_currentScene;
     int m_sampleRate = 0;
     int m_blockSize = 0;
     QVariantList m_playbackTargets;

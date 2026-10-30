@@ -12,6 +12,7 @@
 
 namespace pp {
 class AppRouter;
+class SceneStore;
 class BusManager;
 class DeviceModel;
 class PipeWireGraph;
@@ -38,7 +39,7 @@ public:
     static constexpr auto objectPath = "/org/kingsqueak/PatchPrime";
 
     PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *devices, pp::BusManager *buses,
-                      pp::AppRouter *apps, QObject *parent = nullptr);
+                      pp::AppRouter *apps, pp::SceneStore *scenes, QObject *parent = nullptr);
 
 public Q_SLOTS:
     QString GetState() const;
@@ -91,6 +92,13 @@ public Q_SLOTS:
     void SetAppTarget(const QString &appKey, const QString &nodeName);
     // Forgets an app that isn't running.
     void ForgetApp(const QString &appKey);
+    // Scenes: the whole mix (levels, mutes, mono, sends and send levels, app
+    // routes, default output and input) saved under a name, and loaded back
+    // without creating, deleting or restarting anything. In the state as
+    // "scenes" (names) and "currentScene" (the last saved or loaded).
+    void SaveScene(const QString &name);
+    void LoadScene(const QString &name);
+    void DeleteScene(const QString &name);
     void WatchLevels();
     void UnwatchLevels();
 
@@ -109,6 +117,8 @@ private:
     pp::DeviceModel *m_devices;
     pp::BusManager *m_buses;
     pp::AppRouter *m_apps;
+    pp::SceneStore *m_scenes;
+    QString m_currentScene;
     QTimer m_stateTimer;
     QTimer m_levelsTimer;
     QDBusServiceWatcher m_watcher;

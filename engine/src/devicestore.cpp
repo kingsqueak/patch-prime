@@ -354,6 +354,51 @@ bool DeviceStore::rekey(const std::string &from, const std::string &to)
     return true;
 }
 
+QJsonObject mixToJson(const DeviceSettings &settings)
+{
+    QJsonArray sends;
+    for (const auto &s : settings.sends) {
+        sends.append(qs(s));
+    }
+    QJsonObject sendLevels;
+    for (const auto &[key, db] : settings.sendLevels) {
+        sendLevels.insert(qs(key), db);
+    }
+    return {
+        {QStringLiteral("volumeDb"), settings.volumeDb},
+        {QStringLiteral("muted"), settings.muted},
+        {QStringLiteral("mono"), settings.mono},
+        {QStringLiteral("sends"), sends},
+        {QStringLiteral("sendLevels"), sendLevels},
+    };
+}
+
+void mixFromJson(DeviceSettings &settings, const QJsonObject &json)
+{
+    if (const auto v = json.value(QLatin1String("volumeDb")); v.isDouble()) {
+        settings.volumeDb = v.toDouble();
+    }
+    if (const auto v = json.value(QLatin1String("muted")); v.isBool()) {
+        settings.muted = v.toBool();
+    }
+    if (const auto v = json.value(QLatin1String("mono")); v.isBool()) {
+        settings.mono = v.toBool();
+    }
+    if (const auto v = json.value(QLatin1String("sends")); v.isArray()) {
+        settings.sends.clear();
+        for (const auto &s : v.toArray()) {
+            settings.sends.push_back(s.toString().toStdString());
+        }
+    }
+    if (const auto v = json.value(QLatin1String("sendLevels")); v.isObject()) {
+        settings.sendLevels.clear();
+        const auto levels = v.toObject();
+        for (auto it = levels.begin(); it != levels.end(); ++it) {
+            settings.sendLevels[it.key().toStdString()] = it.value().toDouble();
+        }
+    }
+}
+
 bool isPatchPrimeVirtual(std::string_view key)
 {
     return key.starts_with("patchprime-virtual|");

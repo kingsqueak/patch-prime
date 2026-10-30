@@ -13,7 +13,8 @@ QtObject {
     // Layout
     readonly property real gap: Kirigami.Units.smallSpacing
     readonly property real groupGap: Kirigami.Units.gridUnit
-    readonly property real stripWidth: Kirigami.Units.gridUnit * 5
+    // Room for three toggles (an input: mute, mono, default) plus padding.
+    readonly property real stripWidth: controlHeight * 3 + stripPadding * 2 + gap
     readonly property real stripPadding: Kirigami.Units.smallSpacing
     readonly property real headerHeight: Kirigami.Units.gridUnit * 2.5
     readonly property real controlHeight: Kirigami.Units.gridUnit * 1.75

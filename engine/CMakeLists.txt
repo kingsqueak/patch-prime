@@ -22,7 +22,9 @@ add_library(patchprime-engine STATIC
     src/hotplugrecovery.cpp
     src/hotplugrecovery.h
     src/pipewiregraph.cpp
-    src/pipewiregraph.h)
+    src/pipewiregraph.h
+    src/scenes.cpp
+    src/scenes.h)
 add_library(PatchPrime::Engine ALIAS patchprime-engine)
 
 target_include_directories(patchprime-engine PUBLIC src)

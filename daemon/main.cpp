@@ -8,11 +8,12 @@
 #include "appstore.h"
 #include "audiosetup.h"
 #include "busmanager.h"
-#include "hotplugrecovery.h"
-#include "notifier.h"
 #include "devicemodel.h"
 #include "devicestore.h"
+#include "hotplugrecovery.h"
+#include "notifier.h"
 #include "pipewiregraph.h"
+#include "scenes.h"
 #include "service.h"
 
 #include <QCommandLineParser>
@@ -140,7 +141,8 @@ int run(int &argc, char **argv)
     pp::AudioSetup setup(&graph, &devices);
     pp::HotplugRecovery recovery(&graph, &devices);
     Notifier notifier(&devices, &recovery);
-    PatchPrimeService service(&graph, &devices, &buses, &apps);
+    pp::SceneStore scenes;
+    PatchPrimeService service(&graph, &devices, &buses, &apps, &scenes);
     bus.registerObject(QString::fromLatin1(PatchPrimeService::objectPath), &service,
                        QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);
 

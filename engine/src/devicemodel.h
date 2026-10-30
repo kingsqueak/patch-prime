@@ -93,6 +93,10 @@ public:
     Q_INVOKABLE void setSend(int row, const QString &destinationKey, bool enabled);
     // The level of an existing send, clamped like the fader.
     Q_INVOKABLE void setSendLevel(int row, const QString &destinationKey, double db);
+    // Sets a strip's mix from a scene (see mixFromJson), keeping only what
+    // still applies: the level clamped, mono on inputs only, sends to strips
+    // that exist in a later stage. False when there's no such strip.
+    bool applyMix(const std::string &key, const QJsonObject &mix);
     // What clocks the graph; buses are rebuilt with the new driver priority.
     void setClock(ClockMode clock);
     // Makes a hardware device the clock (switches to the hardware clock).

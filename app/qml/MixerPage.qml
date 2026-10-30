@@ -67,10 +67,23 @@ Kirigami.Page {
         }
     }
 
+    // Scenes: the whole mix saved under a name and loaded back.
+    SceneBar {
+        id: sceneBar
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        visible: inputs.count > 0 || buses.count > 0 || outputs.count > 0
+    }
+
     // Inputs, mix buses and outputs side by side, like a console; scrolls
     // sideways when there are more strips than fit.
     Flickable {
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.top: sceneBar.visible ? sceneBar.bottom : parent.top
+        anchors.topMargin: sceneBar.visible ? Style.gap * 2 : 0
         visible: inputs.count > 0 || buses.count > 0 || outputs.count > 0
         contentWidth: consoleRow.implicitWidth
         contentHeight: height
