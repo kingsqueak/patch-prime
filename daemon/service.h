@@ -60,6 +60,10 @@ public Q_SLOTS:
     // an interface doesn't interrupt the rest) or "hardware" (PipeWire picks a
     // device; lowest latency). In the state as "clock".
     void SetClock(const QString &mode);
+    // Makes a hardware device (by key) the clock; switches to the hardware
+    // clock. In the state as "clockDevice"; "clockNow" names the clock that
+    // setting gives ("Patch Prime", a device's label, or PipeWire's choice).
+    void SetClockDevice(const QString &key);
     // The mixer's sample rate in Hz (48000 by default) and block size in
     // frames (0 = PipeWire picks). In the state as "sampleRate", "blockSize".
     void SetSampleRate(int rate);
@@ -90,6 +94,7 @@ Q_SIGNALS:
 
 private:
     [[nodiscard]] int rowFor(const QString &key);
+    [[nodiscard]] QString clockNow() const;
     void scheduleState();
     void updateMetering();
     void emitLevels();

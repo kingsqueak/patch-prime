@@ -134,6 +134,7 @@ Kirigami.ScrollablePage {
                 Layout.fillWidth: true
                 Layout.margins: Kirigami.Units.largeSpacing
 
+                // Patch Prime's own clock, or one interface as the master clock.
                 QQC2.ComboBox {
                     id: clockChoice
                     Kirigami.FormData.label: qsTr("Clock:")
@@ -141,12 +142,21 @@ Kirigami.ScrollablePage {
                     enabled: Devices.daemonRunning
                     textRole: "text"
                     valueRole: "value"
-                    model: [
-                        { value: "internal", text: qsTr("Patch Prime") },
-                        { value: "hardware", text: qsTr("Hardware device") },
-                    ]
-                    currentIndex: Devices.clock === "hardware" ? 1 : 0
-                    onActivated: Devices.setClock(currentValue)
+                    model: Devices.clockChoices
+                    currentIndex: Devices.clock === "hardware"
+                                  ? model.findIndex(c => c.value === Devices.clockDevice) : 0
+                    displayText: currentIndex >= 0 ? currentText : qsTr("Hardware (PipeWire's choice)")
+                    onActivated: {
+                        if (currentValue === "internal")
+                            Devices.setClock("internal");
+                        else
+                            Devices.setClockDevice(currentValue);
+                    }
+                }
+
+                QQC2.Label {
+                    Kirigami.FormData.label: qsTr("Clock now:")
+                    text: Devices.clockNow
                 }
 
                 QQC2.Label {
@@ -154,8 +164,8 @@ Kirigami.ScrollablePage {
                     wrapMode: Text.Wrap
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
-                    text: clockChoice.currentIndex === 1
-                        ? qsTr("PipeWire uses an interface's own clock: the lowest latency, but unplugging that interface briefly stops all audio, and some apps pause.")
+                    text: Devices.clock === "hardware"
+                        ? qsTr("That interface is the master clock: the others follow it on timer scheduling. Unplugging it briefly stops all audio, and some apps pause.")
                         : qsTr("Patch Prime keeps time itself, so unplugging any interface doesn't interrupt the others. Interfaces follow it with PipeWire's rate matching.")
                 }
 

@@ -65,6 +65,38 @@ private Q_SLOTS:
         QVERIFY(rules.contains("alsa_output.pci.pro-output-0"));
     }
 
+    void clockDevice()
+    {
+        QCOMPARE(alsaCardOf("alsa_input.usb-Focusrite_8i6_USB_F8T-00.pro-input-0"),
+                 "usb-Focusrite_8i6_USB_F8T-00");
+        QCOMPARE(alsaCardOf("alsa_output.usb-Focusrite_8i6_USB_F8T-00.pro-output-0"),
+                 "usb-Focusrite_8i6_USB_F8T-00");
+        QVERIFY(alsaCardOf("patchprime.bus.in.1").empty());
+
+        DeviceStore store(QStringLiteral("/dev/null/unused"));
+        const std::string scarlettIn = "Audio/Source|alsa_input.usb-Scarlett-00.pro-input-0";
+        store.upsert(scarlettIn).nodeName = "alsa_input.usb-Scarlett-00.pro-input-0";
+        store.upsert("Audio/Sink|alsa_output.usb-Scarlett-00.pro-output-0").nodeName =
+            "alsa_output.usb-Scarlett-00.pro-output-0";
+        store.upsert("Audio/Source|alsa_input.usb-FastTrack-00.pro-input-0").nodeName =
+            "alsa_input.usb-FastTrack-00.pro-input-0";
+        store.setClock(ClockMode::Hardware);
+        store.setClockDevice(scarlettIn);
+
+        // The Scarlett is the clock: top priority, and its card stays on
+        // interrupts; the Fast Track follows on a timer.
+        const auto rules = wirePlumberRules(store);
+        QVERIFY(rules.contains("\"alsa_input.usb-Scarlett-00.pro-input-0\" } ]\n"
+                               "    actions = { update-props = { priority.driver = 30000 } }"));
+        QVERIFY(!rules.contains("alsa_output.usb-Scarlett-00.pro-output-0")); // nothing to change
+        QVERIFY(rules.contains("\"alsa_input.usb-FastTrack-00.pro-input-0\" } ]\n"
+                               "    actions = { update-props = { api.alsa.disable-tsched = false } }"));
+
+        // The choice follows the device when it's recognised under a new name.
+        QVERIFY(store.rekey(scarlettIn, "Audio/Source|alsa_input.usb-Scarlett-00.multichannel-input"));
+        QCOMPARE(store.clockDevice(), "Audio/Source|alsa_input.usb-Scarlett-00.multichannel-input");
+    }
+
     void rulesFileOnlyChangesWithTheSettings()
     {
         QTemporaryDir dir;

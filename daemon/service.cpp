@@ -6,6 +6,7 @@
 #include "approuter.h"
 #include "busmanager.h"
 #include "devicemodel.h"
+#include "endpoint.h"
 #include "pipewiregraph.h"
 
 #include <QDBusConnection>
@@ -81,6 +82,8 @@ QString PatchPrimeService::GetState() const
         {QStringLiteral("apps"), apps},
         {QStringLiteral("clock"),
          QString::fromStdString(pp::clockModeName(m_devices->store().clock()))},
+        {QStringLiteral("clockDevice"), QString::fromStdString(m_devices->store().clockDevice())},
+        {QStringLiteral("clockNow"), clockNow()},
         {QStringLiteral("sampleRate"), m_devices->store().sampleRate()},
         {QStringLiteral("blockSize"), m_devices->store().blockSize()},
     };
@@ -202,6 +205,33 @@ void PatchPrimeService::SetClock(const QString &mode)
         return;
     }
     m_devices->setClock(pp::clockModeFromName(mode.toStdString()));
+}
+
+void PatchPrimeService::SetClockDevice(const QString &key)
+{
+    if (const int row = rowFor(key); row >= 0) {
+        m_devices->setClockDevice(key.toStdString());
+    }
+}
+
+QString PatchPrimeService::clockNow() const
+{
+    // The clock follows from the setting: Patch Prime's buses, or the chosen
+    // device, outrank everything else as the graph driver. (PipeWire's own
+    // node.driver-id isn't reliably updated on our side when it changes.)
+    const auto &store = m_devices->store();
+    if (store.clock() == pp::ClockMode::Internal) {
+        return QStringLiteral("Patch Prime");
+    }
+    const int row = m_devices->rowForKey(store.clockDevice());
+    if (row < 0) {
+        return QStringLiteral("PipeWire's choice");
+    }
+    const auto index = m_devices->index(row);
+    const auto label = m_devices->data(index, pp::DeviceModel::LabelRole).toString();
+    return m_devices->data(index, pp::DeviceModel::OnlineRole).toBool()
+               ? label
+               : label + QStringLiteral(" (unplugged: PipeWire's choice)");
 }
 
 void PatchPrimeService::SetSampleRate(int rate)

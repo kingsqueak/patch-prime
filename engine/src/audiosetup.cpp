@@ -43,22 +43,42 @@ std::map<std::string, std::string> wantedSettings(const DeviceStore &store)
     };
 }
 
+int clockDevicePriority()
+{
+    return 30000; // above any hardware (about 1000-2600) and Patch Prime's buses
+}
+
 std::string wirePlumberRules(const DeviceStore &store)
 {
+    // The chosen clock device's card: its nodes keep interrupt scheduling
+    // (they are the clock); every other device follows on a timer.
+    const auto *clockDevice = store.clock() == ClockMode::Hardware
+                                  ? store.find(store.clockDevice())
+                                  : nullptr;
+    const auto clockCard = clockDevice != nullptr ? alsaCardOf(clockDevice->nodeName) : std::string{};
+
     std::string rules;
     for (const auto &[key, s] : store.entries()) {
         if (s.kind != EndpointKind::Hardware || !s.nodeName.starts_with("alsa_")) {
             continue;
         }
+        const bool onClockCard = !clockCard.empty() && alsaCardOf(s.nodeName) == clockCard;
         std::vector<std::string> props;
-        const bool timer =
-            s.scheduling == Scheduling::Timer ||
-            (s.scheduling == Scheduling::Auto && store.clock() == ClockMode::Internal);
+        // Automatic: a timer for anything that follows another clock. With
+        // the hardware clock but no device chosen, PipeWire picks, so the
+        // device's own default stays.
+        const bool follows = store.clock() == ClockMode::Internal ||
+                             (clockDevice != nullptr && !onClockCard);
+        const bool timer = s.scheduling == Scheduling::Timer ||
+                           (s.scheduling == Scheduling::Auto && follows);
         if (timer || s.scheduling == Scheduling::Interrupt) {
             props.push_back(std::string("api.alsa.disable-tsched = ") + (timer ? "false" : "true"));
         }
         if (s.sampleRate > 0) {
             props.push_back("audio.rate = " + std::to_string(s.sampleRate));
+        }
+        if (clockDevice != nullptr && key == store.clockDevice()) {
+            props.push_back("priority.driver = " + std::to_string(clockDevicePriority()));
         }
         if (props.empty()) {
             continue;

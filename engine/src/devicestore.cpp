@@ -193,6 +193,18 @@ Scheduling schedulingFromName(std::string_view name)
     return Scheduling::Auto;
 }
 
+std::string alsaCardOf(std::string_view nodeName)
+{
+    for (const std::string_view prefix : {"alsa_input.", "alsa_output."}) {
+        if (nodeName.starts_with(prefix)) {
+            nodeName.remove_prefix(prefix.size());
+            const auto dot = nodeName.rfind('.');
+            return std::string(dot == std::string_view::npos ? nodeName : nodeName.substr(0, dot));
+        }
+    }
+    return {};
+}
+
 std::string clockModeName(ClockMode mode)
 {
     return mode == ClockMode::Hardware ? "hardware" : "internal";
@@ -215,6 +227,7 @@ bool DeviceStore::load()
 {
     m_entries.clear();
     m_clock = ClockMode::Internal;
+    m_clockDevice.clear();
     m_sampleRate = defaultSampleRate;
     m_blockSize = 0;
     m_lastError.clear();
@@ -234,6 +247,7 @@ bool DeviceStore::load()
     }
     const auto root = document.object();
     m_clock = clockModeFromName(root.value(QLatin1String("clock")).toString().toStdString());
+    m_clockDevice = root.value(QLatin1String("clockDevice")).toString().toStdString();
     m_sampleRate = root.value(QLatin1String("sampleRate")).toInt(defaultSampleRate);
     m_blockSize = std::max(0, root.value(QLatin1String("blockSize")).toInt());
     const auto devices = document.object().value(QLatin1String("devices")).toObject();
@@ -261,6 +275,7 @@ bool DeviceStore::save()
     const QJsonObject root{
         {QStringLiteral("version"), formatVersion},
         {QStringLiteral("clock"), qs(clockModeName(m_clock))},
+        {QStringLiteral("clockDevice"), qs(m_clockDevice)},
         {QStringLiteral("sampleRate"), m_sampleRate},
         {QStringLiteral("blockSize"), m_blockSize},
         {QStringLiteral("devices"), devices},
@@ -324,6 +339,9 @@ bool DeviceStore::rekey(const std::string &from, const std::string &to)
     }
     node.key() = to;
     m_entries.insert(std::move(node));
+    if (m_clockDevice == from) {
+        m_clockDevice = to;
+    }
     for (auto &[key, settings] : m_entries) {
         std::ranges::replace(settings.sends, from, to);
         if (auto level = settings.sendLevels.extract(from)) {

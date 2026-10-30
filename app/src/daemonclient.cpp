@@ -279,6 +279,11 @@ void DaemonClient::setClock(const QString &mode)
     call(QStringLiteral("SetClock"), {mode});
 }
 
+void DaemonClient::setClockDevice(const QString &key)
+{
+    call(QStringLiteral("SetClockDevice"), {key});
+}
+
 void DaemonClient::setSampleRate(int rate)
 {
     call(QStringLiteral("SetSampleRate"), {rate});
@@ -308,19 +313,35 @@ void DaemonClient::onStateChanged(const QString &state)
         Q_EMIT connectedChanged();
     }
 
-    const auto clock = root.value(QLatin1String("clock")).toString();
-    const auto rate = root.value(QLatin1String("sampleRate")).toInt();
-    const auto block = root.value(QLatin1String("blockSize")).toInt();
-    if (clock != m_clock || rate != m_sampleRate || block != m_blockSize) {
-        m_clock = clock;
-        m_sampleRate = rate;
-        m_blockSize = block;
-        Q_EMIT clockChanged();
-    }
-
     QList<QVariantMap> rows;
     for (const auto &device : root.value(QLatin1String("devices")).toArray()) {
         rows.append(device.toObject().toVariantMap());
+    }
+
+    QVariantList choices{QVariantMap{{QStringLiteral("value"), QStringLiteral("internal")},
+                                     {QStringLiteral("text"), tr("Patch Prime")}}};
+    for (const auto &row : std::as_const(rows)) {
+        if (row.value(QStringLiteral("kind")).toString() == QLatin1String("hardware") &&
+            row.value(QStringLiteral("isEnabled")).toBool()) {
+            choices.append(
+                QVariantMap{{QStringLiteral("value"), row.value(QStringLiteral("key"))},
+                            {QStringLiteral("text"), row.value(QStringLiteral("label"))}});
+        }
+    }
+    const auto clock = root.value(QLatin1String("clock")).toString();
+    const auto clockDevice = root.value(QLatin1String("clockDevice")).toString();
+    const auto clockNow = root.value(QLatin1String("clockNow")).toString();
+    const auto rate = root.value(QLatin1String("sampleRate")).toInt();
+    const auto block = root.value(QLatin1String("blockSize")).toInt();
+    if (clock != m_clock || clockDevice != m_clockDevice || clockNow != m_clockNow ||
+        choices != m_clockChoices || rate != m_sampleRate || block != m_blockSize) {
+        m_clock = clock;
+        m_clockDevice = clockDevice;
+        m_clockNow = clockNow;
+        m_clockChoices = std::move(choices);
+        m_sampleRate = rate;
+        m_blockSize = block;
+        Q_EMIT clockChanged();
     }
 
     // Targets for the app matrix: every enabled strip's bus. Apps play into

@@ -29,7 +29,14 @@ std::map<std::string, std::string> wantedSettings(const DeviceStore &store);
 // timer scheduling while Patch Prime is the clock: an interface that
 // follows another clock on interrupts can't rate-match smoothly, and its
 // audio pulses (found with a Scarlett 8i6 next to a Fast Track).
+//
+// With the hardware clock and a chosen device, that device gets a driver
+// priority above everything else (it becomes the clock), its card keeps
+// interrupt scheduling, and every other device follows on a timer.
 std::string wirePlumberRules(const DeviceStore &store);
+
+// The driver priority given to the chosen clock device.
+int clockDevicePriority();
 
 // --- AudioSetup --------------------------------------------------------------
 

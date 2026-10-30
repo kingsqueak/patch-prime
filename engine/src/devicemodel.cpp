@@ -379,6 +379,24 @@ void DeviceModel::setClock(ClockMode clock)
     Q_EMIT settingsChanged({});
 }
 
+void DeviceModel::setClockDevice(const std::string &key)
+{
+    const auto *saved = m_store->find(key);
+    if (saved == nullptr || saved->kind != EndpointKind::Hardware ||
+        (m_store->clock() == ClockMode::Hardware && m_store->clockDevice() == key)) {
+        return;
+    }
+    const bool modeChanges = m_store->clock() != ClockMode::Hardware;
+    m_store->setClock(ClockMode::Hardware);
+    m_store->setClockDevice(key);
+    saveStore();
+    Q_EMIT clockChanged();
+    Q_EMIT audioSettingsChanged();
+    if (modeChanges) {
+        Q_EMIT settingsChanged({}); // buses lose their clock priority
+    }
+}
+
 void DeviceModel::setSampleRate(int rate)
 {
     if (rate <= 0 || rate == m_store->sampleRate()) {

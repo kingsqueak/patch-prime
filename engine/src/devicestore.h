@@ -48,8 +48,9 @@ enum class ClockMode : std::uint8_t
     // Patch Prime's own buses: unplugging any interface doesn't stall the
     // rest. Hardware follows with PipeWire's rate matching.
     Internal,
-    // A hardware device, as PipeWire picks it: the lowest latency, but
-    // unplugging that device stalls everything linked to it for a moment.
+    // A hardware device (DeviceStore::clockDevice(), or PipeWire's pick when
+    // none is chosen): the lowest latency, but unplugging that device stalls
+    // everything linked to it for a moment.
     Hardware,
 };
 
@@ -67,6 +68,12 @@ Scheduling schedulingFromName(std::string_view name);
 
 // The mixer's sample rate when nothing has been chosen.
 constexpr int defaultSampleRate = 48000;
+
+// The sound card part of an ALSA node name ("usb-Focusrite_Scarlett_8i6_USB_
+// F8TFW0D970427A-00" for "alsa_input.usb-Focusrite_…-00.pro-input-0"), so a
+// card's input and output can be told apart from other cards'. Empty for
+// anything that isn't an ALSA node.
+std::string alsaCardOf(std::string_view nodeName);
 
 // "internal" / "hardware"; anything unknown is Internal.
 std::string clockModeName(ClockMode mode);
@@ -131,6 +138,9 @@ public:
 
     [[nodiscard]] ClockMode clock() const { return m_clock; }
     void setClock(ClockMode clock) { m_clock = clock; }
+    // With the hardware clock: the key of the device that is the clock.
+    [[nodiscard]] const std::string &clockDevice() const { return m_clockDevice; }
+    void setClockDevice(std::string key) { m_clockDevice = std::move(key); }
     // The mixer's sample rate (Hz) and block size (frames; 0 = PipeWire picks).
     [[nodiscard]] int sampleRate() const { return m_sampleRate; }
     void setSampleRate(int rate) { m_sampleRate = rate; }
@@ -156,6 +166,7 @@ private:
     QString m_path;
     QString m_lastError;
     ClockMode m_clock = ClockMode::Internal;
+    std::string m_clockDevice;
     int m_sampleRate = defaultSampleRate;
     int m_blockSize = 0;
     std::map<std::string, DeviceSettings> m_entries;

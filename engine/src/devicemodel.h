@@ -95,6 +95,8 @@ public:
     Q_INVOKABLE void setSendLevel(int row, const QString &destinationKey, double db);
     // What clocks the graph; buses are rebuilt with the new driver priority.
     void setClock(ClockMode clock);
+    // Makes a hardware device the clock (switches to the hardware clock).
+    void setClockDevice(const std::string &key);
     // The mixer's sample rate and block size (0 = PipeWire picks).
     void setSampleRate(int rate);
     void setBlockSize(int frames);

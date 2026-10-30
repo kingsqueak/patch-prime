@@ -26,6 +26,13 @@ class DaemonClient : public QAbstractListModel
     Q_PROPERTY(QVariantList apps READ apps NOTIFY appsChanged)
     // What clocks the audio graph: "internal" or "hardware".
     Q_PROPERTY(QString clock READ clock NOTIFY clockChanged)
+    // With the hardware clock: the chosen device's key. clockNow: the device
+    // that actually clocks the graph right now.
+    Q_PROPERTY(QString clockDevice READ clockDevice NOTIFY clockChanged)
+    Q_PROPERTY(QString clockNow READ clockNow NOTIFY clockChanged)
+    // What can be the clock: [{value, text}], "internal" first, then the
+    // enabled hardware devices by key.
+    Q_PROPERTY(QVariantList clockChoices READ clockChoices NOTIFY clockChanged)
     // The mixer's sample rate (Hz) and block size (frames, 0 = automatic).
     Q_PROPERTY(int sampleRate READ sampleRate NOTIFY clockChanged)
     Q_PROPERTY(int blockSize READ blockSize NOTIFY clockChanged)
@@ -50,6 +57,9 @@ public:
     [[nodiscard]] QString lastError() const { return m_lastError; }
     [[nodiscard]] QVariantList apps() const { return m_apps; }
     [[nodiscard]] QString clock() const { return m_clock; }
+    [[nodiscard]] QString clockDevice() const { return m_clockDevice; }
+    [[nodiscard]] QString clockNow() const { return m_clockNow; }
+    [[nodiscard]] QVariantList clockChoices() const { return m_clockChoices; }
     [[nodiscard]] int sampleRate() const { return m_sampleRate; }
     [[nodiscard]] int blockSize() const { return m_blockSize; }
     [[nodiscard]] QVariantList playbackTargets() const { return m_playbackTargets; }
@@ -76,6 +86,7 @@ public:
     Q_INVOKABLE void setAppTarget(const QString &appKey, const QString &nodeName);
     Q_INVOKABLE void forgetApp(const QString &appKey);
     Q_INVOKABLE void setClock(const QString &mode);
+    Q_INVOKABLE void setClockDevice(const QString &key);
     Q_INVOKABLE void setSampleRate(int rate);
     Q_INVOKABLE void setBlockSize(int frames);
     Q_INVOKABLE void setDeviceSampleRate(const QString &key, int rate);
@@ -117,6 +128,9 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QString m_lastError;
     QVariantList m_apps;
     QString m_clock;
+    QString m_clockDevice;
+    QString m_clockNow;
+    QVariantList m_clockChoices;
     int m_sampleRate = 0;
     int m_blockSize = 0;
     QVariantList m_playbackTargets;
