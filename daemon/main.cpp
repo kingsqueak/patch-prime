@@ -90,6 +90,22 @@ int run(int &argc, char **argv)
         qWarning("could not read %s: %s; starting with no saved app routes",
                  qPrintable(appStore.path()), qPrintable(appStore.lastError()));
     }
+
+    // Strips from before readable bus names get one now; app routes follow,
+    // and the bus manager moves any system default over (setRenamed).
+    const auto renamed = pp::migrateBusNames(store);
+    if (!renamed.empty()) {
+        for (const auto &[from, to] : renamed) {
+            std::println("patchprimed: {} is now called {}", from, to);
+        }
+        store.save();
+        for (const auto &[key, route] : appStore.entries()) {
+            if (const auto it = renamed.find(route.target); it != renamed.end()) {
+                appStore.upsert(key).target = it->second;
+            }
+        }
+        appStore.save();
+    }
     pp::PipeWireGraph graph;
     pp::DeviceModel devices(&store);
     devices.attach(&graph);
@@ -119,6 +135,7 @@ int run(int &argc, char **argv)
     }
 
     pp::BusManager buses(&graph, &devices);
+    buses.setRenamed(renamed);
     pp::AppRouter apps(&graph, &appStore);
     pp::AudioSetup setup(&graph, &devices);
     pp::HotplugRecovery recovery(&graph, &devices);

@@ -36,10 +36,26 @@ constexpr std::string_view sendNamePrefix = "patchprime.send.";
 // pactl and WirePlumber don't list it as a device or link it.
 constexpr std::string_view sendMediaClass = "Audio/Patchprime/Send";
 
-// "patchprime.bus.in.<busId>" or "patchprime.bus.out.<busId>"
+// The old id-based names, still used by entries without a busName:
+// "patchprime.bus.in.<busId>" or "patchprime.bus.out.<busId>",
+// and "patchprime.virtual.<busId>" (a virtual device is its own bus).
 std::string busNodeName(Direction direction, const std::string &busId);
-// "patchprime.virtual.<busId>": a virtual device is its own bus.
 std::string virtualNodeName(const std::string &busId);
+
+// A label as a node-name part: lowercase letters, digits and dashes
+// ("Maudio 1" -> "maudio-1"); "device" when nothing is left.
+std::string nameSlug(const std::string &label);
+
+// A readable, unused bus name for the entry under key, from its label (or
+// description): "patchprime.in.<slug>" / "patchprime.out.<slug>" for a
+// hardware endpoint, "patchprime.<slug>" for a virtual device; "-2", "-3"...
+// when taken.
+std::string readableBusName(const DeviceStore &store, const std::string &key);
+
+// Gives every entry without a busName a readable one (and a virtual device
+// its matching nodeName). Returns old name -> new name, so the defaults and
+// app routes that used the old names can follow.
+std::map<std::string, std::string> migrateBusNames(DeviceStore &store);
 
 // "patchprime.send.<from busId>.<to busId>"
 std::string sendNodeName(const std::string &fromBusId, const std::string &toBusId);
@@ -158,6 +174,11 @@ public:
 
     // Meter streams cost a little CPU, so they only run while someone watches.
     void setMetering(bool enabled);
+
+    // Old bus names -> new ones (see migrateBusNames): when an old-named bus
+    // is removed while it's a system default, the default moves to its new
+    // name instead of back to the hardware.
+    void setRenamed(std::map<std::string, std::string> renamed) { m_renamed = std::move(renamed); }
     [[nodiscard]] bool isMetering() const { return m_metering; }
 
     // Peaks per endpoint key since the last call (linear, per channel).
@@ -217,6 +238,7 @@ private:
     // doesn't ask twice. They expire in case PipeWire refused silently.
     std::map<std::string, Clock::time_point> m_pendingBuses;
     CreationLimiter m_limiter;
+    std::map<std::string, std::string> m_renamed;
     std::map<std::pair<std::uint32_t, std::uint32_t>, Clock::time_point> m_pendingLinks;
     // Last volume and mute sent to each bus node, so unchanged values aren't resent.
     std::map<std::uint32_t, std::pair<std::vector<float>, bool>> m_applied;

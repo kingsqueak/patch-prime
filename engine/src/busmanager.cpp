@@ -10,8 +10,10 @@
 #include <QLoggingCategory>
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <cmath>
+#include <set>
 #include <utility>
 
 Q_LOGGING_CATEGORY(lcBus, "patchprime.bus")
@@ -142,8 +144,82 @@ std::string busOwnerFor(const QString &storePath)
         .toStdString();
 }
 
+std::string nameSlug(const std::string &label)
+{
+    std::string slug;
+    for (const char ch : label) {
+        const auto c = static_cast<unsigned char>(ch);
+        if (std::isalnum(c) != 0 && c < 0x80) {
+            slug += static_cast<char>(std::tolower(c));
+        } else if (!slug.empty() && slug.back() != '-') {
+            slug += '-';
+        }
+        if (slug.size() >= 32) {
+            break;
+        }
+    }
+    while (!slug.empty() && slug.back() == '-') {
+        slug.pop_back();
+    }
+    return slug.empty() ? "device" : slug;
+}
+
+std::string readableBusName(const DeviceStore &store, const std::string &key)
+{
+    const auto *s = store.find(key);
+    if (s == nullptr) {
+        return {};
+    }
+    auto slug = nameSlug(s->label.empty() ? s->description : s->label);
+    // Names Patch Prime uses for other things.
+    if (slug == "bus" || slug == "send" || slug == "virtual" || slug == "meter" || slug == "in" ||
+        slug == "out") {
+        slug += "-1";
+    }
+    const std::string base =
+        s->kind != EndpointKind::Hardware
+            ? std::string("patchprime.") + slug
+            : std::string(s->direction == Direction::Input ? "patchprime.in." : "patchprime.out.") +
+                  slug;
+    std::set<std::string> taken;
+    for (const auto &[other, settings] : store.entries()) {
+        if (other != key && !settings.busName.empty()) {
+            taken.insert(settings.busName);
+        }
+    }
+    auto name = base;
+    for (int n = 2; taken.contains(name); ++n) {
+        name = base + "-" + std::to_string(n);
+    }
+    return name;
+}
+
+std::map<std::string, std::string> migrateBusNames(DeviceStore &store)
+{
+    std::map<std::string, std::string> renamed;
+    for (const auto &[key, settings] : store.entries()) {
+        if (!settings.busName.empty() || settings.busId.empty()) {
+            continue;
+        }
+        const auto old = settings.kind != EndpointKind::Hardware
+                             ? virtualNodeName(settings.busId)
+                             : busNodeName(settings.direction, settings.busId);
+        const auto name = readableBusName(store, key);
+        auto &s = store.upsert(key);
+        s.busName = name;
+        if (s.kind != EndpointKind::Hardware) {
+            s.nodeName = name; // a virtual device is its own bus
+        }
+        renamed[old] = name;
+    }
+    return renamed;
+}
+
 std::string busNameFor(const Endpoint &endpoint, const DeviceSettings &settings)
 {
+    if (!settings.busName.empty()) {
+        return settings.busName;
+    }
     return settings.kind == EndpointKind::Hardware ? busNodeName(endpoint.direction, settings.busId)
                                                    : virtualNodeName(settings.busId);
 }
@@ -290,8 +366,11 @@ std::map<std::string, std::vector<float>> BusManager::takeLevels()
 void BusManager::removeAllBusesIn(PipeWireGraph &graph)
 {
     for (const auto &[id, node] : graph.nodes()) {
+        // Every bus, virtual device and send node Patch Prime made (they carry
+        // an owner tag, or have an old id-based name); not meters.
         if (const auto &name = prop(node, "node.name");
-            name.starts_with(busNamePrefix) || name.starts_with(sendNamePrefix)) {
+            !prop(node, "patchprime.owner").empty() || name.starts_with(busNamePrefix) ||
+            name.starts_with(sendNamePrefix)) {
             graph.destroyObject(id);
         }
     }
@@ -390,9 +469,12 @@ void BusManager::reconcile()
     for (const auto &[id, node] : m_graph->nodes()) {
         const auto &name = prop(node, "node.name");
         const auto &owner = prop(node, "patchprime.owner");
-        if ((name.starts_with(busNamePrefix) || name.starts_with(virtualNamePrefix) ||
-             name.starts_with(sendNamePrefix)) &&
-            (owner.empty() || owner == m_owner)) {
+        // Ours: tagged with our owner (any name), or untagged with an old
+        // id-based name from before the owner tag.
+        const bool legacy = owner.empty() && (name.starts_with(busNamePrefix) ||
+                                              name.starts_with(virtualNamePrefix) ||
+                                              name.starts_with(sendNamePrefix));
+        if (owner == m_owner || legacy) {
             // Two of ours with one name (a reconnect that raced the graph's
             // listing used to cause this): keep the older one and remove the
             // extra, or the link cleanup would tear down one copy's routing.
@@ -433,6 +515,11 @@ void BusManager::reconcile()
             const auto &current = direction == Direction::Output ? m_graph->defaultSinkName()
                                                                  : m_graph->defaultSourceName();
             if (name != current) {
+                continue;
+            }
+            if (const auto to = m_renamed.find(name); to != m_renamed.end()) {
+                // Renamed, not removed: the default follows the new name.
+                m_graph->setConfiguredDefault(direction, to->second);
                 continue;
             }
             const auto &key = prop(m_graph->nodes().at(id), "patchprime.key");

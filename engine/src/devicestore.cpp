@@ -54,6 +54,7 @@ QJsonObject toJson(const DeviceSettings &d)
         {QStringLiteral("sampleRate"), d.sampleRate},
         {QStringLiteral("scheduling"), qs(schedulingName(d.scheduling))},
         {QStringLiteral("busId"), qs(d.busId)},
+        {QStringLiteral("busName"), qs(d.busName)},
         {QStringLiteral("enabled"), d.enabled},
         {QStringLiteral("label"), qs(d.label)},
         {QStringLiteral("volumeDb"), d.volumeDb},
@@ -94,6 +95,7 @@ DeviceSettings fromJson(const QJsonObject &o)
         d.sendLevels[it.key().toStdString()] = it.value().toDouble();
     }
     d.busId = str(o, "busId");
+    d.busName = str(o, "busName");
     d.enabled = o.value(QLatin1String("enabled")).toBool();
     d.label = str(o, "label");
     d.volumeDb = o.value(QLatin1String("volumeDb")).toDouble(0.0);
@@ -350,6 +352,11 @@ bool DeviceStore::rekey(const std::string &from, const std::string &to)
         }
     }
     return true;
+}
+
+bool isPatchPrimeVirtual(std::string_view key)
+{
+    return key.starts_with("patchprime-virtual|");
 }
 
 std::string DeviceStore::virtualKey(const std::string &busId)

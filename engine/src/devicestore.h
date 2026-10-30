@@ -28,6 +28,10 @@ enum class EndpointKind : std::uint8_t
 // "hardware", "virtual-sink", "virtual-source", "virtual-input" (in the settings
 // file and the D-Bus state).
 std::string kindName(EndpointKind kind);
+
+// True for the key of a virtual device Patch Prime made (see
+// DeviceStore::virtualKey), whatever its node is called.
+bool isPatchPrimeVirtual(std::string_view key);
 // The reverse; anything unknown is Hardware.
 EndpointKind kindFromName(std::string_view name);
 
@@ -89,6 +93,12 @@ struct DeviceSettings
     // endpoint's bus, so the bus keeps its name when the endpoint is recognised
     // under a new node.name.
     std::string busId;
+    // The node.name of this endpoint's bus (for a virtual device, of the
+    // device itself), readable in apps that list node names, e.g.
+    // "patchprime.out.maudio-1" or "patchprime.desktop". Fixed once given:
+    // defaults, app routes and apps' own settings refer to it. Empty in
+    // files from before 2026-10-30 (then the old id-based name is used).
+    std::string busName;
     bool enabled = false;
     std::string label; // empty: show the system description
     double volumeDb = 0.0;

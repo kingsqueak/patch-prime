@@ -348,7 +348,7 @@ void DeviceModel::forget(int row)
     saveStore();
     Q_EMIT settingsChanged(key);
     // A virtual device exists only through its entry, so it goes entirely.
-    const bool isOwnVirtual = r.endpoint.nodeName.starts_with(virtualNamePrefix);
+    const bool isOwnVirtual = isPatchPrimeVirtual(r.endpoint.key);
     if (r.nodeId && !isOwnVirtual) {
         const auto i = index(row);
         Q_EMIT dataChanged(i, i);
@@ -432,7 +432,7 @@ void DeviceModel::setDeviceSampleRate(int row, int rate)
         return;
     }
     const auto &r = m_rows[static_cast<std::size_t>(row)];
-    if (r.endpoint.nodeName.starts_with(virtualNamePrefix)) {
+    if (isPatchPrimeVirtual(r.endpoint.key)) {
         return; // hardware only
     }
     m_store->upsert(r.endpoint.key);
@@ -450,7 +450,7 @@ void DeviceModel::setDeviceScheduling(int row, Scheduling scheduling)
         return;
     }
     const auto &r = m_rows[static_cast<std::size_t>(row)];
-    if (r.endpoint.nodeName.starts_with(virtualNamePrefix)) {
+    if (isPatchPrimeVirtual(r.endpoint.key)) {
         return; // hardware only
     }
     m_store->upsert(r.endpoint.key);
@@ -492,7 +492,7 @@ void DeviceModel::setChannelPair(int row, int pair)
         return;
     }
     const auto &r = m_rows[static_cast<std::size_t>(row)];
-    if (r.endpoint.nodeName.starts_with(virtualNamePrefix) || pair < 0 ||
+    if (isPatchPrimeVirtual(r.endpoint.key) || pair < 0 ||
         pair * 2 > r.endpoint.channels || (pair > 0 && r.endpoint.channels <= 2)) {
         return;
     }
@@ -547,7 +547,8 @@ QString DeviceModel::createVirtual(const QString &name, EndpointKind kind)
     s.kind = kind;
     s.enabled = true;
     s.label = name.trimmed().toStdString();
-    s.nodeName = virtualNodeName(busId);
+    s.busName = readableBusName(*m_store, key);
+    s.nodeName = s.busName; // a virtual device is its own bus
     s.mediaClass = kind == EndpointKind::VirtualSource ? "Audio/Source/Virtual" : "Audio/Sink";
     // A virtual input feeds sends like a hardware input; the others are destinations.
     s.direction = kind == EndpointKind::VirtualInput ? Direction::Input : Direction::Output;
@@ -564,8 +565,10 @@ QString DeviceModel::createVirtual(const QString &name, EndpointKind kind)
 
 void DeviceModel::upsertNode(const GraphObject &node, const GraphObject *device)
 {
-    // Our own virtual devices: online once their node exists.
-    if (const auto &name = prop(node, "node.name"); name.starts_with(virtualNamePrefix)) {
+    // Our own nodes (buses, virtual devices: tagged with patchprime.key): a
+    // virtual device is online once its node exists; buses are no rows.
+    if (!prop(node, "patchprime.key").empty()) {
+        const auto &name = prop(node, "node.name");
         const auto it = std::ranges::find_if(
             m_rows, [&name](const Row &r) { return r.endpoint.nodeName == name; });
         if (it != m_rows.end() && it->nodeId != node.id) {
@@ -796,7 +799,11 @@ void DeviceModel::remember(const Row &row, bool seenNow)
     if (seenNow) {
         s.lastSeen = QDateTime::currentDateTimeUtc();
     }
-    if (detailsChanged || seenNow) {
+    const bool named = s.busName.empty();
+    if (named) {
+        s.busName = readableBusName(*m_store, row.endpoint.key); // a new strip's bus name
+    }
+    if (detailsChanged || seenNow || named) {
         saveStore();
     }
 }

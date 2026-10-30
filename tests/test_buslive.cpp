@@ -201,7 +201,7 @@ private Q_SLOTS:
 
         // Enable: a bus appears, named from the busId, linked to the sink.
         devices.setEnabled(devices.rowForKey(key), true);
-        m_busName = busNodeName(Direction::Output, store.find(key)->busId);
+        m_busName = store.find(key)->busName;
         QVERIFY(QTest::qWaitFor([&] { return nodeNamed(m_graph, m_busName) != nullptr; }, 5000));
         const auto busId = nodeNamed(m_graph, m_busName)->id;
         QCOMPARE(prop(*nodeNamed(m_graph, m_busName), "patchprime.key"), key);
@@ -313,7 +313,7 @@ private Q_SLOTS:
         const auto key = makeEndpointKey("Audio/Sink", m_sinkName);
         QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(key) >= 0; }, 5000));
         devices.setEnabled(devices.rowForKey(key), true);
-        const auto bus = busNodeName(Direction::Output, store.find(key)->busId);
+        const auto bus = store.find(key)->busName;
         auto driverPriority = [&] {
             const auto *node = nodeNamed(m_graph, bus);
             return node != nullptr ? prop(*node, "priority.driver") : std::string{};
@@ -352,8 +352,8 @@ private Q_SLOTS:
             devices.createVirtual(QStringLiteral("Test Mix"), EndpointKind::VirtualSink);
         devices.setSend(devices.rowForKey(desktopKey.toStdString()), mixKey, true);
 
-        const auto desktopNode = virtualNodeName(store.find(desktopKey.toStdString())->busId);
-        const auto mixNode = virtualNodeName(store.find(mixKey.toStdString())->busId);
+        const auto desktopNode = store.find(desktopKey.toStdString())->busName;
+        const auto mixNode = store.find(mixKey.toStdString())->busName;
         QVERIFY(QTest::qWaitFor(
             [&] { return nodeNamed(m_graph, desktopNode) && nodeNamed(m_graph, mixNode); }, 5000));
         QCOMPARE(prop(*nodeNamed(m_graph, desktopNode), "media.class"), "Audio/Sink");
@@ -370,7 +370,7 @@ private Q_SLOTS:
         devices.setEnabled(devices.rowForKey(outKey), true);
         devices.setSend(devices.rowForKey(mixKey.toStdString()), QString::fromStdString(outKey),
                         true);
-        const auto outBus = busNodeName(Direction::Output, store.find(outKey)->busId);
+        const auto outBus = store.find(outKey)->busName;
         const auto mixSend =
             sendNodeName(store.find(mixKey.toStdString())->busId, store.find(outKey)->busId);
         QVERIFY(QTest::qWaitFor([&] { return sentThrough(m_graph, mixNode, outBus, mixSend, 2); },
@@ -455,8 +455,8 @@ private Q_SLOTS:
             devices.createVirtual(QStringLiteral("Test Mix"), EndpointKind::VirtualSink);
         devices.setSend(devices.rowForKey(micKey), mixKey, true);
 
-        const auto inBus = busNodeName(Direction::Input, store.find(micKey)->busId);
-        const auto mixNode = virtualNodeName(store.find(mixKey.toStdString())->busId);
+        const auto inBus = store.find(micKey)->busName;
+        const auto mixNode = store.find(mixKey.toStdString())->busName;
         QVERIFY(QTest::qWaitFor(
             [&] { return nodeNamed(m_graph, inBus) && nodeNamed(m_graph, mixNode); }, 5000));
         QCOMPARE(prop(*nodeNamed(m_graph, inBus), "media.class"), "Audio/Source/Virtual");
@@ -591,7 +591,7 @@ private Q_SLOTS:
         QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(key) >= 0; }, 5000));
         devices.setChannelPair(devices.rowForKey(key), 2); // channels 3-4
         devices.setEnabled(devices.rowForKey(key), true);
-        const auto bus = busNodeName(Direction::Output, store.find(key)->busId);
+        const auto bus = store.find(key)->busName;
 
         // Which of the card's channels the bus feeds.
         auto fedChannels = [&] {

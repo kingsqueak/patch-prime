@@ -127,6 +127,61 @@ private Q_SLOTS:
         QCOMPARE(busNameFor(mix, sink), "patchprime.virtual.22222222");
     }
 
+    void readableNames()
+    {
+        QCOMPARE(nameSlug("Maudio 1"), "maudio-1");
+        QCOMPARE(nameSlug("  PC Snd Crd!! "), "pc-snd-crd");
+        QCOMPARE(nameSlug("Scarlett8i6"), "scarlett8i6");
+        QCOMPARE(nameSlug("Café Mix"), "caf-mix"); // non-ASCII dropped
+        QCOMPARE(nameSlug("***"), "device");
+
+        DeviceStore store(QStringLiteral("/dev/null/unused"));
+        auto &mic = store.upsert("Audio/Source|mic");
+        mic.direction = Direction::Input;
+        mic.label = "Mic1";
+        auto &phones = store.upsert("Audio/Sink|phones");
+        phones.direction = Direction::Output;
+        phones.description = "Maudio 1"; // no label: the description
+        auto &desktop = store.upsert(DeviceStore::virtualKey("3d5c6eea"));
+        desktop.kind = EndpointKind::VirtualInput;
+        desktop.label = "Desktop";
+        auto &send = store.upsert(DeviceStore::virtualKey("11111111"));
+        send.kind = EndpointKind::VirtualSink;
+        send.label = "Send"; // a word Patch Prime uses itself
+        QCOMPARE(readableBusName(store, "Audio/Source|mic"), "patchprime.in.mic1");
+        QCOMPARE(readableBusName(store, "Audio/Sink|phones"), "patchprime.out.maudio-1");
+        QCOMPARE(readableBusName(store, DeviceStore::virtualKey("3d5c6eea")), "patchprime.desktop");
+        QCOMPARE(readableBusName(store, DeviceStore::virtualKey("11111111")), "patchprime.send-1");
+
+        // A clash gets a number.
+        store.upsert("Audio/Source|other").busName = "patchprime.in.mic1";
+        QCOMPARE(readableBusName(store, "Audio/Source|mic"), "patchprime.in.mic1-2");
+    }
+
+    void migratesOldNames()
+    {
+        DeviceStore store(QStringLiteral("/dev/null/unused"));
+        auto &mic = store.upsert("Audio/Source|mic");
+        mic.direction = Direction::Input;
+        mic.label = "Mic1";
+        const auto micId = mic.busId;
+        auto &desktop = store.upsert(DeviceStore::virtualKey("3d5c6eea"));
+        desktop.busId = "3d5c6eea";
+        desktop.kind = EndpointKind::VirtualInput;
+        desktop.label = "Desktop";
+        desktop.nodeName = virtualNodeName("3d5c6eea");
+        store.upsert("Audio/Sink|named").busName = "patchprime.out.keep";
+
+        const auto renamed = migrateBusNames(store);
+        QCOMPARE(renamed.size(), 2U); // the one already named is left alone
+        QCOMPARE(renamed.at(busNodeName(Direction::Input, micId)), "patchprime.in.mic1");
+        QCOMPARE(renamed.at("patchprime.virtual.3d5c6eea"), "patchprime.desktop");
+        // A virtual device is its own bus: its node name follows.
+        QCOMPARE(store.find(DeviceStore::virtualKey("3d5c6eea"))->nodeName, "patchprime.desktop");
+        QCOMPARE(store.find("Audio/Sink|named")->busName, "patchprime.out.keep");
+        QVERIFY(migrateBusNames(store).empty()); // once only
+    }
+
     void creationLimiter()
     {
         using Decision = CreationLimiter::Decision;

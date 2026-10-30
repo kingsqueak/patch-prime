@@ -323,7 +323,7 @@ private Q_SLOTS:
         DeviceModel model(&store);
         model.upsertNode(sinkNode(10, "speakers", nullptr), nullptr);
         model.setEnabled(0, true);
-        const auto bus = busNodeName(Direction::Output, store.find("Audio/Sink|speakers")->busId);
+        const auto bus = store.find("Audio/Sink|speakers")->busName;
         model.setDefaults(bus, "");
         QVERIFY(role(model, 0, DeviceModel::BusDefaultRole).toBool());
         QVERIFY(!role(model, 0, DeviceModel::DefaultRole).toBool()); // the device itself isn't
@@ -349,11 +349,13 @@ private Q_SLOTS:
         QVERIFY(!role(model, row, DeviceModel::OnlineRole).toBool());
 
         // Online once its node shows up.
-        const auto nodeName = virtualNodeName(store.find(key.toStdString())->busId);
+        const auto nodeName = store.find(key.toStdString())->busName;
         model.upsertNode({.id = 77,
                           .type = "PipeWire:Interface:Node",
                           .version = 3,
-                          .props = {{"node.name", nodeName}, {"media.class", "Audio/Sink"}}},
+                          .props = {{"node.name", nodeName},
+                                    {"media.class", "Audio/Sink"},
+                                    {"patchprime.key", key.toStdString()}}},
                          nullptr);
         QVERIFY(role(model, model.rowForKey(key.toStdString()), DeviceModel::OnlineRole).toBool());
 
@@ -412,11 +414,13 @@ private Q_SLOTS:
         QVERIFY(store.find("Audio/Source|mic") == nullptr);
 
         // Apps play into it, so it's a default *output*.
-        const auto nodeName = virtualNodeName(store.find(desktop.toStdString())->busId);
+        const auto nodeName = store.find(desktop.toStdString())->busName;
         model.upsertNode({.id = 78,
                           .type = "PipeWire:Interface:Node",
                           .version = 3,
-                          .props = {{"node.name", nodeName}, {"media.class", "Audio/Sink"}}},
+                          .props = {{"node.name", nodeName},
+                                    {"media.class", "Audio/Sink"},
+                                    {"patchprime.key", desktop.toStdString()}}},
                          nullptr);
         model.setDefaults(nodeName, "mic");
         QVERIFY(role(model, row(), DeviceModel::DefaultRole).toBool());
@@ -510,7 +514,7 @@ private Q_SLOTS:
 
         // The mic's bus as the default input marks the mic's strip.
         model.setEnabled(0, true);
-        const auto bus = busNodeName(Direction::Input, store.find("Audio/Source|mic")->busId);
+        const auto bus = store.find("Audio/Source|mic")->busName;
         QVERIFY(!role(model, 0, DeviceModel::BusDefaultRole).toBool());
         model.setDefaults("other", bus);
         QVERIFY(role(model, 0, DeviceModel::BusDefaultRole).toBool());

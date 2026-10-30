@@ -165,7 +165,7 @@ Kirigami.ScrollablePage {
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
                     text: Devices.clock === "hardware"
-                        ? qsTr("That interface is the master clock: the others follow it on timer scheduling. If it's unplugged, Patch Prime keeps time until it's back.")
+                        ? qsTr("That interface is the master clock: the others follow it on timer scheduling. If it's unplugged, Patch Prime keeps time until it's back, with a brief glitch on the other interfaces as the clock changes hands.")
                         : qsTr("Patch Prime keeps time itself, so unplugging any interface doesn't interrupt the others. Interfaces follow it with PipeWire's rate matching.")
                 }
 
