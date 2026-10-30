@@ -102,6 +102,7 @@ Kirigami.Page {
                 Layout.fillHeight: true
                 visible: count > 0
                 title: qsTr("Inputs")
+                stage: "input"
                 strips: inputs
             }
 
@@ -114,6 +115,7 @@ Kirigami.Page {
                 Layout.fillHeight: true
                 visible: count > 0
                 title: qsTr("Mix Buses")
+                stage: "bus"
                 strips: buses
             }
 
@@ -126,6 +128,7 @@ Kirigami.Page {
                 Layout.fillHeight: true
                 visible: count > 0
                 title: qsTr("Outputs")
+                stage: "output"
                 strips: outputs
             }
         }

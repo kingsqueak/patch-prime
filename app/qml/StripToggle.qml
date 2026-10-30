@@ -52,10 +52,16 @@ QQC2.ToolButton {
         }
     }
 
-    background: Rectangle {
-        radius: Style.toggleRadius
-        color: button.checked ? button.onColor : button.hovered ? Style.toggleHover : Style.toggleOff
-        opacity: button.enabled ? 1 : 0.5
+    // A lit button: faintly filled when off (so it reads as a button), in
+    // its color when on. A little inset, so neighbours don't touch.
+    background: Item {
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: Style.toggleRadius
+            color: button.checked ? button.onColor : button.hovered ? Style.toggleHover : Style.toggleOff
+            opacity: button.enabled ? 1 : 0.5
+        }
     }
 
     QQC2.ToolTip.text: tip.length > 0 ? tip : text

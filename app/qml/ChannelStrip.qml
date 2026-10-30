@@ -7,15 +7,18 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kingsqueak.patchprime.engine
 
-// One mixer channel. Every strip has the same sections, top to bottom, each
-// a fixed height except the body, so strips line up side by side:
+// One mixer channel, laid out like a console strip. Every strip has the same
+// zones, top to bottom, each a fixed height except the body, so strips line
+// up side by side:
 //
-//   header   name, and a status line (offline, virtual, ...)
-//   body     meters (RMS, peak, peak hold; loudness under them on mix
-//            buses and outputs) + fader (fills the height)
+//   bar      the stage's color (inputs, mix buses, outputs)
+//   header   name, and a status line (offline, virtual, channels)
+//   inserts  the strip's effects as slots (click to edit)
+//   sends    where it goes (inputs and mix buses; blank on outputs)
+//   body     meters (RMS, peak, hold; loudness under them on mix buses and
+//            outputs), the dB scale and the fader (fills the height)
 //   readout  fader level in dB (click to type one)
 //   toggles  mute, cue, mono, default
-//   sends    where it goes (inputs and mix buses), and the effects button
 //   options  the channel pair choice (blank when there's none)
 //
 // Sizes and colors come from Style. Roles are read through `model` (see the
@@ -42,7 +45,7 @@ QQC2.Control {
     readonly property int channelPair: model.channelPair
     readonly property string stage: model.stage
     readonly property var sends: model.sends
-    readonly property var effects: model.effects
+    readonly property var effects: model.effects || []
     readonly property bool cued: model.cued === true
 
     readonly property bool ownVirtual: kind !== "hardware"
@@ -59,11 +62,29 @@ QQC2.Control {
 
     implicitWidth: Style.stripWidth
     padding: Style.stripPadding
+    topPadding: Style.stripPadding + Style.stageBarHeight
+
+    // A card in the View colors (lighter than the window in a light theme,
+    // darker in a dark one), with the stage's color along the top.
+    Kirigami.Theme.colorSet: Kirigami.Theme.View
+    Kirigami.Theme.inherit: false
 
     background: Rectangle {
-        color: Style.stripBackground
-        border.color: Style.stripBorder
+        color: Kirigami.Theme.backgroundColor
+        border.color: strip.cued ? Style.cueOn : Style.stripBorder
+        border.width: strip.cued ? 2 : 1
         radius: Style.stripRadius
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 1
+            height: Style.stageBarHeight
+            radius: Style.stripRadius
+            color: Style.stageColor(strip.stage)
+            opacity: strip.online ? 1 : 0.4
+        }
     }
 
     contentItem: ColumnLayout {
@@ -96,7 +117,6 @@ QQC2.Control {
                     Layout.fillWidth: true
                     text: strip.label
                     font.bold: true
-                    horizontalAlignment: Text.AlignHCenter
                     elide: Text.ElideRight
                     QQC2.ToolTip.text: strip.label
                     QQC2.ToolTip.visible: truncated && labelHover.hovered
@@ -106,22 +126,45 @@ QQC2.Control {
 
             QQC2.Label {
                 Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
                 font: Kirigami.Theme.smallFont
                 elide: Text.ElideRight
                 color: strip.online ? Style.dimText : Style.offlineText
                 text: !strip.online ? qsTr("Offline")
                     : strip.kind === "virtual-input" ? qsTr("Virtual input")
                     : strip.kind === "virtual-source" ? qsTr("Virtual mic")
+                    : strip.kind === "virtual-sink" ? qsTr("Mix bus")
                     : strip.hasPairs && strip.channelPair > 0
                       ? qsTr("Ch %1–%2").arg(strip.channelPair * 2 - 1).arg(strip.channelPair * 2)
-                    : ""
+                    : strip.channels === 1 || strip.mono ? qsTr("Mono") : qsTr("Stereo")
             }
 
             Item { Layout.fillHeight: true }
         }
 
-        // --- body: meters and fader
+        // --- inserts
+        InsertSlots {
+            Layout.fillWidth: true
+            key: strip.key
+            label: strip.label
+            effects: strip.effects
+        }
+
+        // --- sends
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: Style.controlHeight
+
+            SendButton {
+                anchors.fill: parent
+                visible: strip.stage !== "output"
+                enabled: Devices.daemonRunning
+                key: strip.key
+                stage: strip.stage
+                sends: strip.sends
+            }
+        }
+
+        // --- body: meters, scale and fader
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -166,7 +209,7 @@ QQC2.Control {
                 }
             }
 
-            VolumeFader {
+            ConsoleFader {
                 Layout.fillHeight: true
                 accessibleName: qsTr("Level for %1").arg(strip.label)
                 volumeDb: strip.volumeDb
@@ -212,7 +255,7 @@ QQC2.Control {
                 // Cue: hear this strip alone in the headphones.
                 visible: Devices.cueOutput.length > 0 && Devices.cueOutput !== strip.key
                 letter: qsTr("C", "cue button")
-                onColor: Kirigami.Theme.neutralTextColor
+                onColor: Style.cueOn
                 text: qsTr("Cue")
                 tip: qsTr("Cue: hear this strip on %1 without changing the mix. While anything is cued, %1 plays only the cued strips.").arg(Devices.labelFor(Devices.cueOutput))
                 on: strip.cued
@@ -254,35 +297,6 @@ QQC2.Control {
             }
         }
 
-        // --- sends and effects
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.preferredHeight: Style.controlHeight
-            spacing: Style.gap
-
-            SendButton {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                visible: strip.stage !== "output"
-                enabled: Devices.daemonRunning
-                key: strip.key
-                stage: strip.stage
-                sends: strip.sends
-            }
-
-            Item {
-                Layout.fillWidth: true
-                visible: strip.stage === "output"
-            }
-
-            EffectsButton {
-                enabled: Devices.daemonRunning
-                key: strip.key
-                label: strip.label
-                effects: strip.effects
-            }
-        }
-
         // --- options
         Item {
             Layout.fillWidth: true
@@ -292,6 +306,7 @@ QQC2.Control {
                 anchors.fill: parent
                 visible: strip.hasPairs
                 enabled: Devices.daemonRunning
+                font: Kirigami.Theme.smallFont
                 model: {
                     const list = [qsTr("All %1 ch").arg(strip.channels)];
                     for (let pair = 1; pair * 2 <= strip.channels; ++pair)

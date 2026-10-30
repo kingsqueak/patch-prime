@@ -74,18 +74,38 @@ Kirigami.Page {
                 Repeater {
                     model: outputs
 
-                    delegate: QQC2.Label {
+                    // The destination's name over a bar in its stage's color.
+                    delegate: ColumnLayout {
                         required property var model
                         Layout.preferredWidth: page.cellWidth
                         Layout.maximumWidth: page.cellWidth
                         Layout.alignment: Qt.AlignBottom
-                        text: model.stage === "bus" ? qsTr("%1\n(mix bus)").arg(model.label) : model.label
-                        font.bold: true
-                        horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.Wrap
-                        maximumLineCount: 3
-                        elide: Text.ElideRight
+                        spacing: 2
                         opacity: model.online ? 1 : 0.5
+
+                        QQC2.Label {
+                            Layout.fillWidth: true
+                            text: parent.model.label
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.Wrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                        }
+                        QQC2.Label {
+                            Layout.fillWidth: true
+                            text: parent.model.stage === "bus" ? qsTr("Mix bus") : qsTr("Output")
+                            font: Kirigami.Theme.smallFont
+                            color: Style.dimText
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                        Rectangle {
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.preferredWidth: page.cellWidth * 0.6
+                            Layout.preferredHeight: Style.stageBarHeight
+                            radius: height / 2
+                            color: Style.stageColor(parent.model.stage)
+                        }
                     }
                 }
             }
@@ -103,21 +123,45 @@ Kirigami.Page {
                     id: inputRow
 
                     required property var model
+                    required property int index
                     readonly property string key: model.key
                     readonly property var sends: model.sends
                     readonly property var sendLevels: model.sendLevels
 
                     spacing: 0
 
-                    QQC2.Label {
+                    // The sender: a bar in its stage's color, its name and kind.
+                    RowLayout {
                         Layout.preferredWidth: page.nameWidth
                         Layout.maximumWidth: page.nameWidth
                         Layout.preferredHeight: page.rowHeight
-                        verticalAlignment: Text.AlignVCenter
-                        text: inputRow.model.stage === "bus" ? qsTr("%1 (mix bus)").arg(inputRow.model.label)
-                                                             : inputRow.model.label
-                        elide: Text.ElideRight
+                        spacing: Kirigami.Units.smallSpacing
                         opacity: inputRow.model.online ? 1 : 0.5
+
+                        Rectangle {
+                            Layout.preferredWidth: Style.stageBarHeight
+                            Layout.fillHeight: true
+                            Layout.topMargin: Kirigami.Units.smallSpacing
+                            Layout.bottomMargin: Kirigami.Units.smallSpacing
+                            radius: width / 2
+                            color: Style.stageColor(inputRow.model.stage)
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+                            QQC2.Label {
+                                Layout.fillWidth: true
+                                text: inputRow.model.label
+                                font.bold: true
+                                elide: Text.ElideRight
+                            }
+                            QQC2.Label {
+                                Layout.fillWidth: true
+                                text: inputRow.model.stage === "bus" ? qsTr("Mix bus") : qsTr("Input")
+                                font: Kirigami.Theme.smallFont
+                                color: Style.dimText
+                            }
+                        }
                     }
 
                     Repeater {
@@ -137,19 +181,49 @@ Kirigami.Page {
                             Layout.maximumWidth: page.cellWidth
                             Layout.preferredHeight: page.rowHeight
 
-                            QQC2.CheckBox {
+                            // Every other row faintly shaded, to follow it across.
+                            Rectangle {
+                                anchors.fill: parent
+                                color: inputRow.index % 2 === 0 ? Style.toggleOff : "transparent"
+                                opacity: 0.6
+                            }
+
+                            // The send: a lit button (a tick when on, a + when off).
+                            QQC2.AbstractButton {
                                 id: tick
 
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.top: parent.top
+                                anchors.topMargin: Kirigami.Units.smallSpacing
+                                width: page.cellWidth * 0.45
+                                height: Style.controlHeight
                                 visible: cell.allowed
                                 enabled: Devices.daemonRunning
+                                checkable: true
+                                hoverEnabled: true
                                 onToggled: Devices.setSend(inputRow.key, cell.model.key, checked)
                                 Accessible.name: qsTr("Send %1 to %2").arg(inputRow.model.label).arg(cell.model.label)
                                 // Stays bound to the daemon's state after a click.
                                 Binding on checked {
                                     value: cell.sent
                                 }
+                                contentItem: Kirigami.Icon {
+                                    source: tick.checked ? "checkmark" : "list-add"
+                                    implicitWidth: Kirigami.Units.iconSizes.small
+                                    implicitHeight: Kirigami.Units.iconSizes.small
+                                    color: tick.checked ? Style.toggleOnText : Style.dimText
+                                    isMask: true
+                                }
+                                background: Rectangle {
+                                    radius: Style.toggleRadius
+                                    color: tick.checked ? Style.toggleOn : tick.hovered ? Style.toggleHover : "transparent"
+                                    border.color: tick.checked ? "transparent" : Style.stripBorder
+                                    border.width: 1
+                                }
+                                QQC2.ToolTip.text: tick.checked ? qsTr("%1 goes to %2. Click to stop.").arg(inputRow.model.label).arg(cell.model.label)
+                                                                : qsTr("Send %1 to %2").arg(inputRow.model.label).arg(cell.model.label)
+                                QQC2.ToolTip.visible: hovered
+                                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
                             }
 
                             // The send's level, once it's on.
