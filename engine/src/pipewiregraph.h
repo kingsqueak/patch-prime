@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "effects.h"
 #include "endpoint.h"
 #include "graphtypes.h"
 
@@ -111,6 +112,16 @@ public:
     std::shared_ptr<MeterLevels> addMeter(const std::string &targetNodeName, int channels,
                                           bool sinkMonitor = true);
     void removeMeter(const std::shared_ptr<MeterLevels> &meter);
+
+    // A processing node running processor on the realtime thread: a filter
+    // named name with an input and an output port per channel position
+    // ("input_FL", "output_FL"). Like meters, filters belong to the current
+    // connection and to this process: they go when either does. extraProps
+    // are added to the node (description, owner tag, ...).
+    bool addFilter(const std::string &name, const std::vector<std::string> &positions,
+                   const Properties &extraProps, const std::shared_ptr<Processor> &processor);
+    void removeFilter(const std::string &name);
+    [[nodiscard]] bool hasFilter(const std::string &name) const;
 
 Q_SIGNALS:
     void connectedChanged(bool connected);

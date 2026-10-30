@@ -10,6 +10,7 @@
 #include <QLoggingCategory>
 
 #include <pipewire/extensions/metadata.h>
+#include <pipewire/filter.h>
 #include <pipewire/pipewire.h>
 #include <spa/param/audio/format-utils.h>
 #include <spa/param/props.h>
@@ -126,6 +127,17 @@ struct PipeWireGraph::Session
         std::shared_ptr<MeterLevels> levels;
     };
 
+    // A strip's processing node: a filter with an input and an output port
+    // per channel, running a Processor on PipeWire's realtime thread.
+    struct Filter
+    {
+        pw_filter *filter = nullptr;
+        spa_hook listener{};
+        std::vector<void *> inPorts;
+        std::vector<void *> outPorts;
+        std::shared_ptr<Processor> processor;
+    };
+
     void bind(const GraphObject &object, std::uint32_t version);
 
     static void onCoreError(void *data, std::uint32_t id, int seq, int res, const char *message);
@@ -140,6 +152,7 @@ struct PipeWireGraph::Session
     static void onCreatedRemoved(void *data);
     static void onCreatedDestroy(void *data);
     static void onMeterProcess(void *data);
+    static void onFilterProcess(void *data, spa_io_position *position);
 
     void announce(Bound &bound, const spa_dict *props, bool propsChanged);
 
@@ -162,6 +175,7 @@ struct PipeWireGraph::Session
     std::map<std::uint32_t, bool> plain;                   // ports and links, announced at once
     std::map<pw_proxy *, std::unique_ptr<Created>> created;
     std::map<const MeterLevels *, std::unique_ptr<Meter>> meters;
+    std::map<std::string, std::unique_ptr<Filter>> filters; // by node name
 };
 
 namespace {
@@ -209,6 +223,13 @@ const pw_proxy_events createdEvents = [] {
     e.version = PW_VERSION_PROXY_EVENTS;
     e.removed = &PipeWireGraph::Session::onCreatedRemoved;
     e.destroy = &PipeWireGraph::Session::onCreatedDestroy;
+    return e;
+}();
+
+const pw_filter_events filterEvents = [] {
+    pw_filter_events e{};
+    e.version = PW_VERSION_FILTER_EVENTS;
+    e.process = &PipeWireGraph::Session::onFilterProcess;
     return e;
 }();
 
@@ -261,6 +282,11 @@ PipeWireGraph::Session::~Session()
         pw_stream_destroy(meter->stream);
     }
     meters.clear();
+    for (auto &[name, f] : filters) {
+        spa_hook_remove(&f->listener);
+        pw_filter_destroy(f->filter);
+    }
+    filters.clear();
     // Lingering objects (buses, links) stay on the server after this.
     for (auto &[proxy, c] : created) {
         spa_hook_remove(&c->listener);
@@ -472,6 +498,27 @@ void PipeWireGraph::Session::onCreatedDestroy(void *data)
 }
 
 // Realtime data thread: no allocation, no locks.
+void PipeWireGraph::Session::onFilterProcess(void *data, spa_io_position *position)
+{
+    auto *f = static_cast<Filter *>(data);
+    if (position == nullptr) {
+        return;
+    }
+    const auto frames = static_cast<std::uint32_t>(
+        std::min<std::uint64_t>(position->clock.duration, maxEffectFrames));
+    std::array<const float *, maxEffectChannels> in{};
+    std::array<float *, maxEffectChannels> out{};
+    const std::size_t channels = std::min(f->inPorts.size(), in.size());
+    for (std::size_t c = 0; c < channels; ++c) {
+        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index): c < size, checked above
+        in[c] = static_cast<const float *>(pw_filter_get_dsp_buffer(f->inPorts[c], frames));
+        out[c] = static_cast<float *>(pw_filter_get_dsp_buffer(f->outPorts[c], frames));
+        // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
+    }
+    f->processor->process(in.data(), out.data(), static_cast<int>(channels),
+                          static_cast<int>(frames));
+}
+
 void PipeWireGraph::Session::onMeterProcess(void *data)
 {
     auto *meter = static_cast<Meter *>(data);
@@ -798,6 +845,84 @@ std::shared_ptr<MeterLevels> PipeWireGraph::addMeter(const std::string &targetNo
     }
     pw_thread_loop_unlock(session.loop);
     return levels;
+}
+
+bool PipeWireGraph::addFilter(const std::string &name, const std::vector<std::string> &positions,
+                              const Properties &extraProps,
+                              const std::shared_ptr<Processor> &processor)
+{
+    if (!m_session || positions.empty() || positions.size() > maxEffectChannels || !processor) {
+        return false;
+    }
+    auto &session = *m_session;
+    pw_thread_loop_lock(session.loop);
+    if (session.filters.contains(name)) {
+        pw_thread_loop_unlock(session.loop);
+        return true;
+    }
+    Properties props = extraProps;
+    props[PW_KEY_NODE_NAME] = name;
+    props[PW_KEY_MEDIA_TYPE] = "Audio";
+    props[PW_KEY_MEDIA_CATEGORY] = "Filter";
+    props[PW_KEY_MEDIA_ROLE] = "DSP";
+    props[PW_KEY_NODE_AUTOCONNECT] = "false";
+    auto f = std::make_unique<Session::Filter>();
+    f->processor = processor;
+    f->filter = pw_filter_new(session.core, name.c_str(), toPwProperties(props)); // takes props
+    bool ok = f->filter != nullptr;
+    if (ok) {
+        pw_filter_add_listener(f->filter, &f->listener, &filterEvents, f.get());
+        for (const auto &position : positions) {
+            for (const auto direction : {PW_DIRECTION_INPUT, PW_DIRECTION_OUTPUT}) {
+                const bool input = direction == PW_DIRECTION_INPUT;
+                pw_properties *port = toPwProperties({
+                    {PW_KEY_FORMAT_DSP, "32 bit float mono audio"},
+                    {PW_KEY_PORT_NAME, (input ? "input_" : "output_") + position},
+                    {PW_KEY_AUDIO_CHANNEL, position},
+                });
+                void *data = pw_filter_add_port(f->filter, direction,
+                                                PW_FILTER_PORT_FLAG_MAP_BUFFERS, 0, port, nullptr, 0);
+                (input ? f->inPorts : f->outPorts).push_back(data);
+                ok = ok && data != nullptr;
+            }
+        }
+        ok = ok && pw_filter_connect(f->filter, PW_FILTER_FLAG_RT_PROCESS, nullptr, 0) >= 0;
+        if (!ok) {
+            spa_hook_remove(&f->listener);
+            pw_filter_destroy(f->filter);
+        }
+    }
+    if (ok) {
+        session.filters[name] = std::move(f);
+    }
+    pw_thread_loop_unlock(session.loop);
+    return ok;
+}
+
+void PipeWireGraph::removeFilter(const std::string &name)
+{
+    if (!m_session) {
+        return;
+    }
+    auto &session = *m_session;
+    pw_thread_loop_lock(session.loop);
+    if (auto it = session.filters.find(name); it != session.filters.end()) {
+        spa_hook_remove(&it->second->listener);
+        pw_filter_destroy(it->second->filter);
+        session.filters.erase(it);
+    }
+    pw_thread_loop_unlock(session.loop);
+}
+
+bool PipeWireGraph::hasFilter(const std::string &name) const
+{
+    if (!m_session) {
+        return false;
+    }
+    pw_thread_loop_lock(m_session->loop);
+    const bool has = m_session->filters.contains(name);
+    pw_thread_loop_unlock(m_session->loop);
+    return has;
 }
 
 void PipeWireGraph::removeMeter(const std::shared_ptr<MeterLevels> &meter)

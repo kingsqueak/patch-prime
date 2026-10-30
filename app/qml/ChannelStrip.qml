@@ -14,7 +14,7 @@ import org.kingsqueak.patchprime.engine
 //   body     meters + fader (fills the height)
 //   readout  fader level in dB (click to type one)
 //   toggles  mute, mono, default
-//   sends    where it goes (inputs and mix buses; blank on outputs)
+//   sends    where it goes (inputs and mix buses), and the effects button
 //   options  the channel pair choice (blank when there's none)
 //
 // Sizes and colors come from Style. Roles are read through `model` (see the
@@ -38,6 +38,7 @@ QQC2.Control {
     readonly property int channelPair: model.channelPair
     readonly property string stage: model.stage
     readonly property var sends: model.sends
+    readonly property var effects: model.effects
 
     readonly property bool ownVirtual: kind !== "hardware"
     readonly property bool isInput: direction === "input"
@@ -215,18 +216,32 @@ QQC2.Control {
             }
         }
 
-        // --- sends
-        Item {
+        // --- sends and effects
+        RowLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: Style.controlHeight
+            spacing: Style.gap
 
             SendButton {
-                anchors.fill: parent
+                Layout.fillWidth: true
+                Layout.fillHeight: true
                 visible: strip.stage !== "output"
                 enabled: Devices.daemonRunning
                 key: strip.key
                 stage: strip.stage
                 sends: strip.sends
+            }
+
+            Item {
+                Layout.fillWidth: true
+                visible: strip.stage === "output"
+            }
+
+            EffectsButton {
+                enabled: Devices.daemonRunning
+                key: strip.key
+                label: strip.label
+                effects: strip.effects
             }
         }
 

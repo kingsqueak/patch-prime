@@ -4,6 +4,7 @@
 #pragma once
 
 #include "devicestore.h"
+#include "effects.h"
 #include "endpoint.h"
 #include "graphtypes.h"
 
@@ -56,6 +57,22 @@ std::string readableBusName(const DeviceStore &store, const std::string &key);
 // its matching nodeName). Returns old name -> new name, so the defaults and
 // app routes that used the old names can follow.
 std::map<std::string, std::string> migrateBusNames(DeviceStore &store);
+
+// The media class of a strip's effects node (see BusManager): hidden, like sends.
+constexpr std::string_view effectsMediaClass = "Audio/Patchprime/Effects";
+
+// The effects node for the bus named busName: "patchprime.fx.<rest>"
+// ("patchprime.out.maudio-1" -> "patchprime.fx.out.maudio-1").
+std::string effectsNodeName(const std::string &busName);
+
+// Builds a chain running effects, prepared for sampleRate and channels.
+// Effects of unknown types are skipped.
+std::unique_ptr<EffectChain> buildChain(const std::vector<EffectSettings> &effects,
+                                        double sampleRate, int channels);
+// Applies effects to chain in place when it holds the same types in the same
+// order (so levels glide and bypass crossfades instead of starting afresh);
+// false when the chain has to be rebuilt.
+bool updateChain(EffectChain &chain, const std::vector<EffectSettings> &effects);
 
 // "patchprime.send.<from busId>.<to busId>"
 std::string sendNodeName(const std::string &fromBusId, const std::string &toBusId);
@@ -154,6 +171,18 @@ private:
 //   mix bus  sends ──► [virtual sink] ──monitor──► sends
 //   output   sends ──► [bus] ──monitor──links──► hardware sink
 //   send     [bus] ──monitor──► [send node] ──monitor──► [bus]
+//   effects  hardware source ──► [fx filter] ──► [bus]           (inputs)
+//            [bus] ──monitor──► [fx filter] ──► hardware, sends  (the rest)
+//
+// A strip with effects gets a processing node (patchprime.fx.*, a pw_filter
+// in this process running the chain on the realtime thread). On a hardware
+// input it sits in front of the bus, so apps recording the bus (the system
+// mic) and the sends get the processed sound, and the fader comes after the
+// effects, as on a console. Elsewhere it sits after the bus, so the fader
+// comes first (right for a limiter on an output); apps recording a virtual
+// device's monitor get it without the effects. Meters show the bus. Unlike
+// buses, filters don't linger: while the daemon is down, a strip with effects
+// is silent; before its filter is up, it runs dry.
 //
 // Each send has its own small gain node (patchprime.send.*), whose volume
 // is the send level, so one input can go to two places at different levels.
@@ -217,8 +246,34 @@ private:
     // Asks the limiter; warns the first time a node is refused.
     bool mayCreate(const std::string &name, CreationLimiter::Clock::time_point now);
     using LinkMap = std::map<std::pair<std::uint32_t, std::uint32_t>, std::uint32_t>;
-    void linkHardware(std::uint32_t busNodeId, const Wanted &wanted, const LinkMap &existingLinks);
+    // A strip's processing node, by effects node name.
+    struct Fx
+    {
+        std::shared_ptr<Processor> processor;
+        std::vector<std::string> positions;
+        std::vector<EffectSettings> effects; // what the chain was last given
+        int sampleRate = 0;
+    };
+
+    struct FxPorts
+    {
+        std::vector<PortRef> in;
+        std::vector<PortRef> out;
+    };
+    // A hardware input: its effects go in front of its bus.
+    [[nodiscard]] static bool effectsBeforeBus(const Wanted &wanted);
+    // Makes, updates and removes effects nodes for the ready buses, and links
+    // each to its bus; returns the ports of those that are up, by bus name.
+    std::map<std::string, FxPorts> reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
+                                                    const std::map<std::string, Wanted> &wanted,
+                                                    const LinkMap &existingLinks);
+    // Links a hardware strip to its bus, or through fx when it has effects.
+    void linkHardware(std::uint32_t busNodeId, const FxPorts *fx, const Wanted &wanted,
+                      const LinkMap &existingLinks);
+    void link(const std::vector<PortRef> &outputs, const std::vector<PortRef> &inputs,
+              const LinkMap &existingLinks);
     void linkSends(const std::map<std::string, std::uint32_t> &ready,
+                   const std::map<std::string, std::vector<PortRef>> &stripOuts,
                    const std::map<std::string, Wanted> &wanted,
                    const std::map<std::string, WantedSend> &sends,
                    const std::map<std::string, std::uint32_t> &readySends,
@@ -244,6 +299,7 @@ private:
     std::map<std::uint32_t, std::pair<std::vector<float>, bool>> m_applied;
     // Meter per bus node name, and the endpoint key it reports for.
     std::map<std::string, std::pair<std::string, std::shared_ptr<MeterLevels>>> m_meters;
+    std::map<std::string, Fx> m_effects;
 };
 
 } // namespace pp

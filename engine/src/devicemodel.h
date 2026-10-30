@@ -9,6 +9,7 @@
 #include <QAbstractListModel>
 #include <QTimer>
 
+#include <functional>
 #include <optional>
 #include <vector>
 
@@ -60,6 +61,7 @@ public:
         SendLevelsRole,  // {destination key: dB} for this strip's sends (0 dB when missing)
         DeviceRateRole,  // hardware: its own sample rate, 0 = the mixer's
         SchedulingRole,  // hardware: "auto", "timer" or "interrupt"
+        EffectsRole,     // [{type, enabled, params: {name: value}}] in order
     };
     Q_ENUM(Role)
 
@@ -93,6 +95,15 @@ public:
     Q_INVOKABLE void setSend(int row, const QString &destinationKey, bool enabled);
     // The level of an existing send, clamped like the fader.
     Q_INVOKABLE void setSendLevel(int row, const QString &destinationKey, double db);
+    // A strip's effects chain (see EffectSettings): add one of a type at the
+    // end (with its initial parameters; up to maxEffectsPerStrip), remove,
+    // reorder, bypass, and set a parameter (clamped to its range). Unknown
+    // types, indexes and parameters are ignored.
+    Q_INVOKABLE void addEffect(int row, const QString &type);
+    Q_INVOKABLE void removeEffect(int row, int index);
+    Q_INVOKABLE void moveEffect(int row, int from, int to);
+    Q_INVOKABLE void setEffectEnabled(int row, int index, bool enabled);
+    Q_INVOKABLE void setEffectParam(int row, int index, const QString &name, double value);
     // Sets a strip's mix from a scene (see mixFromJson), keeping only what
     // still applies: the level clamped, mono on inputs only, sends to strips
     // that exist in a later stage. False when there's no such strip.
@@ -155,6 +166,9 @@ private:
     void remember(const Row &row, bool seenNow);
     void saveStore();
     void saveLater();
+    // Runs edit on a strip's effects (making its entry if needed); when it
+    // returns true, saves and announces the change.
+    bool editEffects(int row, const std::function<bool(std::vector<EffectSettings> &)> &edit);
 
     DeviceStore *m_store;
     PipeWireGraph *m_graph = nullptr;

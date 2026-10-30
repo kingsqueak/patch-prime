@@ -32,7 +32,7 @@ constexpr std::array fields{
     "isVirtual",  "online",       "isEnabled",   "channels",    "positions",   "isDefault",
     "saved",      "sectionStart", "volumeDb",    "muted",       "busId",       "busIsDefault",
     "kind",       "sends",        "mono",        "busName",     "channelPair", "stage",
-    "sendLevels", "deviceRate",   "scheduling",
+    "sendLevels", "deviceRate",   "scheduling",  "effects",
 };
 
 // How far a meter falls per update (about 30 per second): 60 dB in ~1.6 s.
@@ -248,6 +248,32 @@ void DaemonClient::setSendLevel(const QString &inputKey, const QString &destinat
     call(QStringLiteral("SetSendLevel"), {inputKey, destinationKey, db});
 }
 
+void DaemonClient::addEffect(const QString &key, const QString &type)
+{
+    call(QStringLiteral("AddEffect"), {key, type});
+}
+
+void DaemonClient::removeEffect(const QString &key, int index)
+{
+    call(QStringLiteral("RemoveEffect"), {key, index});
+}
+
+void DaemonClient::moveEffect(const QString &key, int from, int to)
+{
+    call(QStringLiteral("MoveEffect"), {key, from, to});
+}
+
+void DaemonClient::setEffectEnabled(const QString &key, int index, bool enabled)
+{
+    call(QStringLiteral("SetEffectEnabled"), {key, index, enabled});
+}
+
+void DaemonClient::setEffectParam(const QString &key, int index, const QString &name,
+                                  double value)
+{
+    call(QStringLiteral("SetEffectParam"), {key, index, name, value});
+}
+
 void DaemonClient::setChannelPair(const QString &key, int pair)
 {
     call(QStringLiteral("SetChannelPair"), {key, pair});
@@ -346,6 +372,12 @@ void DaemonClient::onStateChanged(const QString &state)
         m_scenes = scenes;
         m_currentScene = current;
         Q_EMIT scenesChanged();
+    }
+
+    if (const auto types = root.value(QLatin1String("effectTypes")).toArray().toVariantList();
+        types != m_effectTypes) {
+        m_effectTypes = types;
+        Q_EMIT effectTypesChanged();
     }
 
     QList<QVariantMap> rows;

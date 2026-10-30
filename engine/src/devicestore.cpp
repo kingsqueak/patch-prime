@@ -3,6 +3,8 @@
 
 #include "devicestore.h"
 
+#include "effects.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -49,6 +51,7 @@ QJsonObject toJson(const DeviceSettings &d)
         {QStringLiteral("kind"), qs(kindName(d.kind))},
         {QStringLiteral("sends"), sends},
         {QStringLiteral("sendLevels"), sendLevels},
+        {QStringLiteral("effects"), effectsToJson(d.effects)},
         {QStringLiteral("mono"), d.mono},
         {QStringLiteral("channelPair"), d.channelPair},
         {QStringLiteral("sampleRate"), d.sampleRate},
@@ -94,6 +97,7 @@ DeviceSettings fromJson(const QJsonObject &o)
     for (auto it = sendLevels.begin(); it != sendLevels.end(); ++it) {
         d.sendLevels[it.key().toStdString()] = it.value().toDouble();
     }
+    d.effects = effectsFromJson(o.value(QLatin1String("effects")).toArray());
     d.busId = str(o, "busId");
     d.busName = str(o, "busName");
     d.enabled = o.value(QLatin1String("enabled")).toBool();
@@ -370,6 +374,7 @@ QJsonObject mixToJson(const DeviceSettings &settings)
         {QStringLiteral("mono"), settings.mono},
         {QStringLiteral("sends"), sends},
         {QStringLiteral("sendLevels"), sendLevels},
+        {QStringLiteral("effects"), effectsToJson(settings.effects)},
     };
 }
 
@@ -397,6 +402,48 @@ void mixFromJson(DeviceSettings &settings, const QJsonObject &json)
             settings.sendLevels[it.key().toStdString()] = it.value().toDouble();
         }
     }
+    if (const auto v = json.value(QLatin1String("effects")); v.isArray()) {
+        settings.effects = effectsFromJson(v.toArray());
+    }
+}
+
+QJsonArray effectsToJson(const std::vector<EffectSettings> &effects)
+{
+    QJsonArray out;
+    for (const auto &e : effects) {
+        QJsonObject params;
+        for (const auto &[name, value] : e.params) {
+            params.insert(qs(name), value);
+        }
+        out.append(QJsonObject{
+            {QStringLiteral("type"), qs(e.type)},
+            {QStringLiteral("enabled"), e.enabled},
+            {QStringLiteral("params"), params},
+        });
+    }
+    return out;
+}
+
+std::vector<EffectSettings> effectsFromJson(const QJsonArray &json)
+{
+    std::vector<EffectSettings> effects;
+    for (const auto &v : json) {
+        const auto o = v.toObject();
+        EffectSettings e;
+        e.type = str(o, "type");
+        const auto info = effectParams(e.type);
+        if (info.empty()) {
+            continue; // unknown (or from a newer version)
+        }
+        e.enabled = o.value(QLatin1String("enabled")).toBool(true);
+        const auto params = o.value(QLatin1String("params")).toObject();
+        for (const auto &p : info) {
+            const double value = params.value(QString::fromStdString(p.name)).toDouble(p.initial);
+            e.params[p.name] = std::clamp(value, p.minimum, p.maximum);
+        }
+        effects.push_back(std::move(e));
+    }
+    return effects;
 }
 
 bool isPatchPrimeVirtual(std::string_view key)

@@ -14,6 +14,8 @@ add_library(patchprime-engine STATIC
     src/devicemodel.h
     src/devicestore.cpp
     src/devicestore.h
+    src/effects.cpp
+    src/effects.h
     src/endpoint.cpp
     src/endpoint.h
     src/graphsnapshot.cpp

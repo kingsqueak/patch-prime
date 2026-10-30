@@ -39,6 +39,9 @@ class DaemonClient : public QAbstractListModel
     // The mixer's sample rate (Hz) and block size (frames, 0 = automatic).
     Q_PROPERTY(int sampleRate READ sampleRate NOTIFY clockChanged)
     Q_PROPERTY(int blockSize READ blockSize NOTIFY clockChanged)
+    // Built-in effects on offer: [{type, label, params: [{name, label, unit,
+    // minimum, maximum, initial}]}]. A strip's chain is its "effects" role.
+    Q_PROPERTY(QVariantList effectTypes READ effectTypes NOTIFY effectTypesChanged)
     // Where apps can play to / record from: [{name (a node.name), label, kind}].
     Q_PROPERTY(QVariantList playbackTargets READ playbackTargets NOTIFY appsChanged)
     Q_PROPERTY(QVariantList recordTargets READ recordTargets NOTIFY appsChanged)
@@ -67,6 +70,7 @@ public:
     [[nodiscard]] QString currentScene() const { return m_currentScene; }
     [[nodiscard]] int sampleRate() const { return m_sampleRate; }
     [[nodiscard]] int blockSize() const { return m_blockSize; }
+    [[nodiscard]] QVariantList effectTypes() const { return m_effectTypes; }
     [[nodiscard]] QVariantList playbackTargets() const { return m_playbackTargets; }
     [[nodiscard]] QVariantList recordTargets() const { return m_recordTargets; }
     static constexpr double minimumVolumeDb() { return -60.0; }
@@ -100,6 +104,12 @@ public:
     Q_INVOKABLE void setBlockSize(int frames);
     Q_INVOKABLE void setDeviceSampleRate(const QString &key, int rate);
     Q_INVOKABLE void setDeviceScheduling(const QString &key, const QString &scheduling);
+    Q_INVOKABLE void addEffect(const QString &key, const QString &type);
+    Q_INVOKABLE void removeEffect(const QString &key, int index);
+    Q_INVOKABLE void moveEffect(const QString &key, int from, int to);
+    Q_INVOKABLE void setEffectEnabled(const QString &key, int index, bool enabled);
+    Q_INVOKABLE void setEffectParam(const QString &key, int index, const QString &name,
+                                    double value);
     // D-Bus activation first; failing that, a patchprimed next to this program
     // (installed side by side, or in the build tree).
     Q_INVOKABLE void startDaemon();
@@ -114,6 +124,7 @@ Q_SIGNALS:
     void appsChanged();
     void clockChanged();
     void scenesChanged();
+    void effectTypesChanged();
 
 private Q_SLOTS:
     void onStateChanged(const QString &state);
@@ -145,6 +156,7 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QString m_currentScene;
     int m_sampleRate = 0;
     int m_blockSize = 0;
+    QVariantList m_effectTypes;
     QVariantList m_playbackTargets;
     QVariantList m_recordTargets;
 };

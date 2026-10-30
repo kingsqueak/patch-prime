@@ -82,6 +82,14 @@ public Q_SLOTS:
     void SetDeviceScheduling(const QString &key, const QString &scheduling);
     // The level of an existing send in dB (-60 = silent .. +12).
     void SetSendLevel(const QString &inputKey, const QString &destinationKey, double db);
+    // A strip's effects (built-in; in the state per device as "effects", and
+    // the types on offer as "effectTypes"): add one of a type at the end,
+    // remove or move one by index, bypass it, set a parameter.
+    void AddEffect(const QString &key, const QString &type);
+    void RemoveEffect(const QString &key, int index);
+    void MoveEffect(const QString &key, int from, int to);
+    void SetEffectEnabled(const QString &key, int index, bool enabled);
+    void SetEffectParam(const QString &key, int index, const QString &name, double value);
     // kind: "sink" (apps play into it; record its monitor, e.g. "Stream Mix"),
     // "source" (apps record from it like a microphone, e.g. "Chat Mic") or
     // "input" (apps play into it, and it's routed like an input, e.g. "Desktop").

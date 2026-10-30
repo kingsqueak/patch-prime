@@ -6,6 +6,7 @@
 #include "endpoint.h"
 
 #include <QDateTime>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QString>
 
@@ -86,6 +87,17 @@ ClockMode clockModeFromName(std::string_view name);
 // "input", "bus", "output" (in the D-Bus state).
 std::string stageName(Stage stage);
 
+// One effect in a strip's chain: a built-in type (see makeEffect), on or
+// bypassed, and its parameters by name (missing ones take their initial value).
+struct EffectSettings
+{
+    std::string type;
+    bool enabled = true;
+    std::map<std::string, double> params;
+
+    bool operator==(const EffectSettings &) const = default;
+};
+
 // What the user chose for one endpoint, kept across restarts and replugs.
 struct DeviceSettings
 {
@@ -115,6 +127,9 @@ struct DeviceSettings
     // every channel; n uses only the stereo pair 2n-1 and 2n (1 = channels
     // 1-2, 2 = 3-4, ...), and the bus is stereo.
     int channelPair = 0;
+    // The strip's effects, in order, run after its bus. Empty: no processing
+    // node at all.
+    std::vector<EffectSettings> effects;
     // Hardware: a sample rate for this device (resampled to the mixer's), or
     // 0 to run at the mixer's rate; and how its driver is scheduled.
     int sampleRate = 0;
@@ -131,12 +146,14 @@ struct DeviceSettings
     QDateTime lastSeen;
 };
 
-// A strip's mix, as a scene stores it: level, mute, mono, sends and send
-// levels. The one place that decides what a scene covers per strip; the
-// effects chain joins here when it exists.
+// A strip's mix, as a scene stores it: level, mute, mono, sends, send levels
+// and effects. The one place that decides what a scene covers per strip.
 QJsonObject mixToJson(const DeviceSettings &settings);
 // Sets the mix fields present in json (others stay as they are).
 void mixFromJson(DeviceSettings &settings, const QJsonObject &json);
+// An effects chain as JSON, and back; effects of unknown types are dropped.
+QJsonArray effectsToJson(const std::vector<EffectSettings> &effects);
+std::vector<EffectSettings> effectsFromJson(const QJsonArray &json);
 
 // ~/.config/patchprime/devices.json, keyed by Endpoint::key. Saves atomically.
 // Only endpoints the user has touched (enabled or labelled) are stored.

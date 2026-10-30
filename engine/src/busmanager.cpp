@@ -339,6 +339,59 @@ BusManager::BusManager(PipeWireGraph *graph, DeviceModel *devices, QObject *pare
     scheduleReconcile();
 }
 
+std::string effectsNodeName(const std::string &busName)
+{
+    constexpr std::string_view prefix = "patchprime.";
+    const std::string_view rest = std::string_view(busName).starts_with(prefix)
+                                      ? std::string_view(busName).substr(prefix.size())
+                                      : std::string_view(busName);
+    return "patchprime.fx." + std::string(rest);
+}
+
+std::unique_ptr<EffectChain> buildChain(const std::vector<EffectSettings> &effects,
+                                        double sampleRate, int channels)
+{
+    std::vector<std::unique_ptr<Effect>> made;
+    for (const auto &e : effects) {
+        auto effect = makeEffect(e.type);
+        if (!effect) {
+            continue;
+        }
+        for (const auto &[name, value] : e.params) {
+            effect->setParam(name, value);
+        }
+        effect->enabled = e.enabled;
+        made.push_back(std::move(effect));
+    }
+    return std::make_unique<EffectChain>(std::move(made), sampleRate, channels);
+}
+
+bool updateChain(EffectChain &chain, const std::vector<EffectSettings> &effects)
+{
+    std::vector<const EffectSettings *> known;
+    for (const auto &e : effects) {
+        if (makeEffect(e.type)) {
+            known.push_back(&e);
+        }
+    }
+    if (known.size() != chain.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < known.size(); ++i) {
+        if (chain.at(i).type() != known[i]->type) {
+            return false;
+        }
+    }
+    for (std::size_t i = 0; i < known.size(); ++i) {
+        Effect &effect = chain.at(i);
+        for (const auto &[name, value] : known[i]->params) {
+            effect.setParam(name, value);
+        }
+        effect.enabled = known[i]->enabled;
+    }
+    return true;
+}
+
 void BusManager::setMetering(bool enabled)
 {
     if (enabled == m_metering) {
@@ -390,6 +443,7 @@ void BusManager::onConnectedChanged(bool connected)
     m_pendingLinks.clear();
     m_applied.clear();
     m_meters.clear();
+    m_effects.clear();
     if (connected) {
         scheduleReconcile();
     }
@@ -575,8 +629,6 @@ void BusManager::reconcile()
 
         applyVolume(busId, channels, w.settings->volumeDb, w.settings->muted); // fader and mute
 
-        linkHardware(busId, w, existingLinks);
-
         if (m_metering && !m_meters.contains(name)) {
             const bool sink = busMediaClass(w.endpoint, *w.settings) == "Audio/Sink";
             if (auto levels = m_graph->addMeter(name, static_cast<int>(channels), sink)) {
@@ -607,7 +659,20 @@ void BusManager::reconcile()
         applyVolume(it->second, s.positions.size(), s.levelDb, false);
     }
 
-    linkSends(ready, wanted, sends, readySends, existingLinks);
+    // What each strip feeds the next stage from: its effects node, or its
+    // bus (also when the effects come before the bus).
+    const auto fx = reconcileEffects(ready, wanted, existingLinks);
+    std::map<std::string, std::vector<PortRef>> stripOuts;
+    for (const auto &[name, busId] : ready) {
+        const auto &w = wanted.at(name);
+        const auto f = fx.find(name);
+        const FxPorts *ports = f != fx.end() ? &f->second : nullptr;
+        stripOuts[name] = ports != nullptr && !effectsBeforeBus(w) ? ports->out
+                                                                   : portsOf(busId, "out", true);
+        linkHardware(busId, ports, w, existingLinks);
+    }
+
+    linkSends(ready, stripOuts, wanted, sends, readySends, existingLinks);
 
     // Meters whose bus is gone or no longer wanted.
     for (auto it = m_meters.begin(); it != m_meters.end();) {
@@ -682,14 +747,128 @@ BusManager::wantedSends(const std::map<std::string, Wanted> &buses)
     return out;
 }
 
+bool BusManager::effectsBeforeBus(const Wanted &wanted)
+{
+    return wanted.settings->kind == EndpointKind::Hardware &&
+           wanted.endpoint.direction == Direction::Input;
+}
+
+void BusManager::link(const std::vector<PortRef> &outputs, const std::vector<PortRef> &inputs,
+                      const LinkMap &existingLinks)
+{
+    for (const auto &[out, in] : pairPorts(outputs, inputs)) {
+        const std::pair ports{out.portId, in.portId};
+        if (!existingLinks.contains(ports) && !m_pendingLinks.contains(ports) &&
+            m_graph->createLink(out.nodeId, out.portId, in.nodeId, in.portId, true)) {
+            m_pendingLinks[ports] = Clock::now();
+        }
+    }
+}
+
+std::map<std::string, BusManager::FxPorts>
+BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
+                             const std::map<std::string, Wanted> &wanted,
+                             const LinkMap &existingLinks)
+{
+    // Our filters in the graph, by node name.
+    std::map<std::string, std::uint32_t> filterNodes;
+    for (const auto &[id, node] : m_graph->nodes()) {
+        if (prop(node, "media.class") == effectsMediaClass &&
+            prop(node, "patchprime.fx.owner") == m_owner) {
+            filterNodes[prop(node, "node.name")] = id;
+        }
+    }
+
+    const int rate = m_devices->store().sampleRate();
+    std::map<std::string, FxPorts> up;
+    std::set<std::string> keep;
+    for (const auto &[name, busId] : ready) {
+        const auto &w = wanted.at(name);
+        if (w.settings->effects.empty()) {
+            continue;
+        }
+        const auto fxName = effectsNodeName(name);
+        keep.insert(fxName);
+        const auto positions = busPositions(w.endpoint);
+        const int channels = static_cast<int>(positions.size());
+
+        auto fx = m_effects.find(fxName);
+        if (fx != m_effects.end() && fx->second.positions != positions) {
+            qCInfo(lcBus, "replacing effects node %s (channels changed)", fxName.c_str());
+            m_graph->removeFilter(fxName);
+            m_effects.erase(fx);
+            fx = m_effects.end();
+        }
+        if (fx == m_effects.end()) {
+            auto processor = std::make_shared<Processor>();
+            processor->setChain(buildChain(w.settings->effects, rate, channels));
+            const Properties props{
+                {"media.class", std::string(effectsMediaClass)},
+                {"node.description",
+                 "Patch Prime effects: " + busDescription(w.endpoint, *w.settings)},
+                {"patchprime.fx.owner", m_owner},
+                {"node.group", "patchprime.fx"},
+            };
+            qCInfo(lcBus, "creating effects node %s", fxName.c_str());
+            if (!m_graph->addFilter(fxName, positions, props, processor)) {
+                continue;
+            }
+            fx = m_effects
+                     .emplace(fxName, Fx{.processor = std::move(processor),
+                                         .positions = positions,
+                                         .effects = w.settings->effects,
+                                         .sampleRate = rate})
+                     .first;
+        } else if (fx->second.effects != w.settings->effects || fx->second.sampleRate != rate) {
+            auto *chain = fx->second.processor->chain();
+            if (fx->second.sampleRate != rate || chain == nullptr ||
+                !updateChain(*chain, w.settings->effects)) {
+                fx->second.processor->setChain(buildChain(w.settings->effects, rate, channels));
+            }
+            fx->second.effects = w.settings->effects;
+            fx->second.sampleRate = rate;
+        }
+        fx->second.processor->collect();
+
+        // Until the filter shows up with all its ports, the strip runs dry.
+        const auto node = filterNodes.find(fxName);
+        if (node == filterNodes.end()) {
+            continue;
+        }
+        FxPorts ports{.in = portsOf(node->second, "in", false),
+                      .out = portsOf(node->second, "out", false)};
+        if (ports.in.size() != positions.size() || ports.out.size() != positions.size()) {
+            continue;
+        }
+        if (effectsBeforeBus(w)) {
+            link(ports.out, portsOf(busId, "in", false), existingLinks);
+        } else {
+            link(portsOf(busId, "out", true), ports.in, existingLinks);
+        }
+        up[name] = std::move(ports);
+    }
+
+    for (auto it = m_effects.begin(); it != m_effects.end();) {
+        if (!keep.contains(it->first)) {
+            qCInfo(lcBus, "removing effects node %s", it->first.c_str());
+            m_graph->removeFilter(it->first);
+            it = m_effects.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return up;
+}
+
 void BusManager::linkSends(const std::map<std::string, std::uint32_t> &ready,
+                           const std::map<std::string, std::vector<PortRef>> &stripOuts,
                            const std::map<std::string, Wanted> &wanted,
                            const std::map<std::string, WantedSend> &sends,
                            const std::map<std::string, std::uint32_t> &readySends,
                            const LinkMap &existingLinks)
 {
     std::set<std::pair<std::uint32_t, std::uint32_t>> desired;
-    auto link = [&](const std::vector<PortRef> &outputs, const std::vector<PortRef> &inputs) {
+    auto want = [&](const std::vector<PortRef> &outputs, const std::vector<PortRef> &inputs) {
         for (const auto &[out, in] : pairPorts(outputs, inputs)) {
             const std::pair ports{out.portId, in.portId};
             desired.insert(ports);
@@ -708,6 +887,11 @@ void BusManager::linkSends(const std::map<std::string, std::uint32_t> &ready,
         const auto &w = wanted.at(name);
         if (stageOf(w.endpoint.direction, w.settings->kind) != Stage::Output) {
             senders.insert(id);
+            // The bus and its effects node both send (the bus fed the sends
+            // before the strip had effects).
+            for (const auto &port : stripOuts.at(name)) {
+                senders.insert(port.nodeId);
+            }
         }
     }
     for (const auto &[name, id] : readySends) {
@@ -719,8 +903,8 @@ void BusManager::linkSends(const std::map<std::string, std::uint32_t> &ready,
         if (from == ready.end() || to == ready.end()) {
             continue;
         }
-        link(portsOf(from->second, "out", true), portsOf(id, "in", false));
-        link(portsOf(id, "out", true), portsOf(to->second, "in", false));
+        want(stripOuts.at(s.from), portsOf(id, "in", false));
+        want(portsOf(id, "out", true), portsOf(to->second, "in", false));
     }
 
     // Links from one of our sending nodes into another of our nodes are ours
@@ -741,7 +925,7 @@ void BusManager::linkSends(const std::map<std::string, std::uint32_t> &ready,
     }
 }
 
-void BusManager::linkHardware(std::uint32_t busNodeId, const Wanted &wanted,
+void BusManager::linkHardware(std::uint32_t busNodeId, const FxPorts *fx, const Wanted &wanted,
                               const LinkMap &existingLinks)
 {
     if (!wanted.hardwareNodeId || wanted.settings->kind != EndpointKind::Hardware) {
@@ -756,7 +940,13 @@ void BusManager::linkHardware(std::uint32_t busNodeId, const Wanted &wanted,
         hardwarePorts =
             portsOf(hardware, "out", true); // a virtual source: its outputs are monitor ports
     }
-    const auto busPorts = input ? portsOf(busNodeId, "in", false) : portsOf(busNodeId, "out", true);
+    // With effects, the hardware links to the effects node instead (which
+    // reconcileEffects() links to the bus).
+    const auto ownPorts = input ? portsOf(busNodeId, "in", false) : portsOf(busNodeId, "out", true);
+    auto busPorts = ownPorts;
+    if (fx != nullptr) {
+        busPorts = input ? fx->in : fx->out;
+    }
     const auto used = selectPair(hardwarePorts, wanted.settings->channelPair);
     const auto pairs = input ? pairPorts(used, busPorts) : pairPorts(busPorts, used);
 
@@ -781,6 +971,11 @@ void BusManager::linkHardware(std::uint32_t busNodeId, const Wanted &wanted,
         hardwareIds.insert(p.portId);
     }
     for (const auto &p : busPorts) {
+        busIds.insert(p.portId);
+    }
+    // The bus's own ports too, in use or not: when its effects node takes
+    // over, the direct links go. (The effects node's links go with it.)
+    for (const auto &p : ownPorts) {
         busIds.insert(p.portId);
     }
     for (const auto &[ports, linkId] : existingLinks) {

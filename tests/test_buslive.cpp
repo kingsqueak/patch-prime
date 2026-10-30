@@ -564,6 +564,154 @@ private Q_SLOTS:
             [&] { return !nodeNamed(m_graph, inBus) && !nodeNamed(m_graph, mixNode); }, 5000));
     }
 
+    void runsEffects()
+    {
+        // A fake mic sent to a mix bus, and the test sink as an output: each
+        // strip with effects runs through its own effects node.
+        const auto pid = std::to_string(QCoreApplication::applicationPid());
+        const auto feed = "pp_fxfeed_" + pid;
+        const auto mic = "pp_fxsrc_" + pid;
+        QProcess loopback;
+        loopback.start(QStringLiteral("pw-loopback"),
+                       {QString::fromStdString("--capture-props=media.class=Audio/Sink node.name=" +
+                                               feed + " audio.position=[FL,FR]"),
+                        QString::fromStdString("--playback-props=media.class=Audio/Source "
+                                               "node.name=" +
+                                               mic + " audio.position=[FL,FR]")});
+        auto stopLoopback = qScopeGuard([&loopback] {
+            loopback.terminate();
+            loopback.waitForFinished(2000);
+        });
+
+        QTemporaryDir dir;
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel devices(&store);
+        devices.attach(&m_graph);
+        BusManager buses(&m_graph, &devices);
+        m_owners.insert(busOwnerFor(store.path()));
+
+        const auto micKey = makeEndpointKey("Audio/Source", mic);
+        const auto sinkKey = makeEndpointKey("Audio/Sink", m_sinkName);
+        QVERIFY(QTest::qWaitFor(
+            [&] { return devices.rowForKey(micKey) >= 0 && devices.rowForKey(sinkKey) >= 0; },
+            5000));
+        devices.setEnabled(devices.rowForKey(micKey), true);
+        devices.setEnabled(devices.rowForKey(sinkKey), true);
+        const auto mixKey =
+            devices.createVirtual(QStringLiteral("FX Mix"), EndpointKind::VirtualSink);
+        devices.setSend(devices.rowForKey(micKey), mixKey, true);
+        const auto inBus = store.find(micKey)->busName;
+        const auto outBus = store.find(sinkKey)->busName;
+        m_busName = outBus;
+        const auto mixNode = store.find(mixKey.toStdString())->busName;
+        const auto send =
+            sendNodeName(store.find(micKey)->busId, store.find(mixKey.toStdString())->busId);
+        QVERIFY(
+            QTest::qWaitFor([&] { return sentThrough(m_graph, inBus, mixNode, send, 2); }, 5000));
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, outBus, m_sinkName) == 2; }, 5000));
+
+        // -20 dB on the mic: its effects node goes in front of its bus (so
+        // apps recording the bus get the effects too); the send is unchanged.
+        const auto micFx = effectsNodeName(inBus);
+        devices.addEffect(devices.rowForKey(micKey), QStringLiteral("gain"));
+        devices.setEffectParam(devices.rowForKey(micKey), 0, QStringLiteral("gainDb"), -20.0);
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return linkCount(m_graph, mic, micFx) == 2 && linkCount(m_graph, micFx, inBus) == 2 &&
+                       linkCount(m_graph, mic, inBus) == 0 &&
+                       sentThrough(m_graph, inBus, mixNode, send, 2);
+            },
+            5000));
+        const auto *fxNode = nodeNamed(m_graph, micFx);
+        QCOMPARE(prop(*fxNode, "media.class"), std::string(effectsMediaClass));
+        QCOMPARE(prop(*fxNode, "node.autoconnect"), "false");
+
+        // And sound gets through it, 20 dB down (the tone peaks near 0.5).
+        buses.setMetering(true);
+        QTemporaryDir toneDir;
+        const auto tone = toneDir.filePath(QStringLiteral("tone.wav"));
+        QVERIFY(writeTone(tone));
+        const auto peakWhilePlaying = [&](int ms) {
+            QProcess player;
+            player.start(QStringLiteral("pw-play"),
+                         {QStringLiteral("-P"),
+                          QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                          QStringLiteral("--target"), QString::fromStdString(feed), tone});
+            QTest::qWait(300);
+            buses.takeLevels();
+            float peak = 0.0F;
+            [[maybe_unused]] const bool never = QTest::qWaitFor(
+                [&] {
+                    if (const auto levels = buses.takeLevels();
+                        levels.contains(mixKey.toStdString())) {
+                        for (const float level : levels.at(mixKey.toStdString())) {
+                            peak = std::max(peak, level);
+                        }
+                    }
+                    return false;
+                },
+                ms);
+            player.kill();
+            player.waitForFinished();
+            return peak;
+        };
+        const float reduced = peakWhilePlaying(1200);
+        QVERIFY2(reduced > 0.02F && reduced < 0.1F, qPrintable(QString::number(reduced)));
+
+        // Bypassed: full level again, through the same node.
+        devices.setEffectEnabled(devices.rowForKey(micKey), 0, false);
+        QTest::qWait(100);
+        const float bypassed = peakWhilePlaying(1200);
+        QVERIFY2(bypassed > 0.3F, qPrintable(QString::number(bypassed)));
+        QCOMPARE(nodeNamed(m_graph, micFx)->id, fxNode->id);
+        buses.setMetering(false);
+
+        // A mix bus: bus -> effects -> sends.
+        const auto mixFx = effectsNodeName(mixNode);
+        const auto mixSend =
+            sendNodeName(store.find(mixKey.toStdString())->busId, store.find(sinkKey)->busId);
+        devices.setSend(devices.rowForKey(mixKey.toStdString()), QString::fromStdString(sinkKey),
+                        true);
+        devices.addEffect(devices.rowForKey(mixKey.toStdString()), QStringLiteral("gain"));
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return linkCount(m_graph, mixNode, mixFx) == 2 &&
+                       linkCount(m_graph, mixFx, mixSend) == 2 &&
+                       linkCount(m_graph, mixNode, mixSend) == 0;
+            },
+            5000));
+
+        // An output strip: bus -> effects -> hardware.
+        const auto outFx = effectsNodeName(outBus);
+        devices.addEffect(devices.rowForKey(sinkKey), QStringLiteral("gain"));
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return linkCount(m_graph, outBus, outFx) == 2 &&
+                       linkCount(m_graph, outFx, m_sinkName) == 2 &&
+                       linkCount(m_graph, outBus, m_sinkName) == 0;
+            },
+            5000));
+
+        // No effects: the nodes go and the direct links come back.
+        devices.removeEffect(devices.rowForKey(micKey), 0);
+        devices.removeEffect(devices.rowForKey(sinkKey), 0);
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return !nodeNamed(m_graph, micFx) && !nodeNamed(m_graph, outFx) &&
+                       linkCount(m_graph, mic, inBus) == 2 &&
+                       sentThrough(m_graph, inBus, mixNode, send, 2) &&
+                       linkCount(m_graph, outBus, m_sinkName) == 2;
+            },
+            5000));
+
+        devices.forget(devices.rowForKey(mixKey.toStdString()));
+        devices.setEnabled(devices.rowForKey(micKey), false);
+        devices.setEnabled(devices.rowForKey(sinkKey), false);
+        QVERIFY(QTest::qWaitFor(
+            [&] { return !nodeNamed(m_graph, inBus) && !nodeNamed(m_graph, outBus); }, 5000));
+        m_busName.clear();
+    }
+
     void usesOneChannelPair()
     {
         // A 6-channel card, like an onboard card in pro-audio mode.

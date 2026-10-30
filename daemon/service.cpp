@@ -5,6 +5,7 @@
 
 #include "approuter.h"
 #include "busmanager.h"
+#include "effects.h"
 #include "devicemodel.h"
 #include "endpoint.h"
 #include "pipewiregraph.h"
@@ -79,7 +80,27 @@ QString PatchPrimeService::GetState() const
             {QStringLiteral("streams"), app.streams},
         });
     }
+    QJsonArray effectTypes;
+    for (const auto &type : pp::effectTypes()) {
+        QJsonArray params;
+        for (const auto &p : pp::effectParams(type)) {
+            params.append(QJsonObject{
+                {QStringLiteral("name"), QString::fromStdString(p.name)},
+                {QStringLiteral("label"), QString::fromStdString(p.label)},
+                {QStringLiteral("unit"), QString::fromStdString(p.unit)},
+                {QStringLiteral("minimum"), p.minimum},
+                {QStringLiteral("maximum"), p.maximum},
+                {QStringLiteral("initial"), p.initial},
+            });
+        }
+        effectTypes.append(QJsonObject{
+            {QStringLiteral("type"), QString::fromStdString(type)},
+            {QStringLiteral("label"), QString::fromStdString(pp::effectLabel(type))},
+            {QStringLiteral("params"), params},
+        });
+    }
     const QJsonObject state{
+        {QStringLiteral("effectTypes"), effectTypes},
         {QStringLiteral("connected"), m_devices->isConnected()},
         {QStringLiteral("devices"), devices},
         {QStringLiteral("apps"), apps},
@@ -320,6 +341,42 @@ void PatchPrimeService::SetSendLevel(const QString &inputKey, const QString &des
 {
     if (const int row = rowFor(inputKey); row >= 0) {
         m_devices->setSendLevel(row, destinationKey, db);
+    }
+}
+
+void PatchPrimeService::AddEffect(const QString &key, const QString &type)
+{
+    if (const int row = rowFor(key); row >= 0) {
+        m_devices->addEffect(row, type);
+    }
+}
+
+void PatchPrimeService::RemoveEffect(const QString &key, int index)
+{
+    if (const int row = rowFor(key); row >= 0) {
+        m_devices->removeEffect(row, index);
+    }
+}
+
+void PatchPrimeService::MoveEffect(const QString &key, int from, int to)
+{
+    if (const int row = rowFor(key); row >= 0) {
+        m_devices->moveEffect(row, from, to);
+    }
+}
+
+void PatchPrimeService::SetEffectEnabled(const QString &key, int index, bool enabled)
+{
+    if (const int row = rowFor(key); row >= 0) {
+        m_devices->setEffectEnabled(row, index, enabled);
+    }
+}
+
+void PatchPrimeService::SetEffectParam(const QString &key, int index, const QString &name,
+                                       double value)
+{
+    if (const int row = rowFor(key); row >= 0) {
+        m_devices->setEffectParam(row, index, name, value);
     }
 }
 

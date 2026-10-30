@@ -4,6 +4,7 @@
 #include "devicemodel.h"
 
 #include "busmanager.h"
+#include "effects.h"
 #include "pipewiregraph.h"
 
 #include <QLoggingCategory>
@@ -12,6 +13,7 @@
 #include <cctype>
 #include <charconv>
 #include <tuple>
+#include <utility>
 
 Q_LOGGING_CATEGORY(lcDevices, "patchprime.devices")
 
@@ -205,6 +207,8 @@ QVariant DeviceModel::data(const QModelIndex &index, int role) const
     }
     case DeviceRateRole:
         return saved != nullptr ? saved->sampleRate : 0;
+    case EffectsRole:
+        return saved != nullptr ? effectsToJson(saved->effects).toVariantList() : QVariantList{};
     case SchedulingRole:
         return qs(schedulingName(saved != nullptr ? saved->scheduling : Scheduling::Auto));
     case StageRole:
@@ -261,6 +265,7 @@ QHash<int, QByteArray> DeviceModel::roleNames() const
         {SendLevelsRole, "sendLevels"},
         {DeviceRateRole, "deviceRate"},
         {SchedulingRole, "scheduling"},
+        {EffectsRole, "effects"},
         {ChannelPairRole, "channelPair"},
         {SendsRole, "sends"},
         {MonoRole, "mono"},
@@ -486,6 +491,106 @@ void DeviceModel::setSendLevel(int row, const QString &destinationKey, double db
     Q_EMIT settingsChanged(qs(r.endpoint.key));
 }
 
+bool DeviceModel::editEffects(int row, const std::function<bool(std::vector<EffectSettings> &)> &edit)
+{
+    if (row < 0 || row >= rowCount()) {
+        return false;
+    }
+    const auto &r = m_rows[static_cast<std::size_t>(row)];
+    m_store->upsert(r.endpoint.key);
+    remember(r, r.nodeId.has_value());
+    auto &effects = m_store->upsert(r.endpoint.key).effects;
+    if (!edit(effects)) {
+        return false;
+    }
+    saveLater();
+    const auto i = index(row);
+    Q_EMIT dataChanged(i, i, {EffectsRole, SavedRole});
+    Q_EMIT settingsChanged(qs(r.endpoint.key));
+    return true;
+}
+
+void DeviceModel::addEffect(int row, const QString &type)
+{
+    const auto params = effectParams(type.toStdString());
+    if (params.empty()) {
+        return;
+    }
+    editEffects(row, [&](std::vector<EffectSettings> &effects) {
+        if (effects.size() >= maxEffectsPerStrip) {
+            return false;
+        }
+        EffectSettings e{.type = type.toStdString(), .enabled = true, .params = {}};
+        for (const auto &p : params) {
+            e.params[p.name] = p.initial;
+        }
+        effects.push_back(std::move(e));
+        return true;
+    });
+}
+
+void DeviceModel::removeEffect(int row, int index)
+{
+    editEffects(row, [index](std::vector<EffectSettings> &effects) {
+        if (index < 0 || std::cmp_greater_equal(index, effects.size())) {
+            return false;
+        }
+        effects.erase(effects.begin() + index);
+        return true;
+    });
+}
+
+void DeviceModel::moveEffect(int row, int from, int to)
+{
+    editEffects(row, [from, to](std::vector<EffectSettings> &effects) {
+        const auto size = static_cast<int>(effects.size());
+        if (from < 0 || from >= size || to < 0 || to >= size || from == to) {
+            return false;
+        }
+        auto moved = std::move(effects[static_cast<std::size_t>(from)]);
+        effects.erase(effects.begin() + from);
+        effects.insert(effects.begin() + to, std::move(moved));
+        return true;
+    });
+}
+
+void DeviceModel::setEffectEnabled(int row, int index, bool enabled)
+{
+    editEffects(row, [index, enabled](std::vector<EffectSettings> &effects) {
+        if (index < 0 || std::cmp_greater_equal(index, effects.size())) {
+            return false;
+        }
+        auto &e = effects[static_cast<std::size_t>(index)];
+        if (e.enabled == enabled) {
+            return false;
+        }
+        e.enabled = enabled;
+        return true;
+    });
+}
+
+void DeviceModel::setEffectParam(int row, int index, const QString &name, double value)
+{
+    editEffects(row, [index, &name, value](std::vector<EffectSettings> &effects) {
+        if (index < 0 || std::cmp_greater_equal(index, effects.size())) {
+            return false;
+        }
+        auto &e = effects[static_cast<std::size_t>(index)];
+        const auto key = name.toStdString();
+        for (const auto &p : effectParams(e.type)) {
+            if (p.name == key) {
+                const double clamped = std::clamp(value, p.minimum, p.maximum);
+                if (e.params[key] == clamped) {
+                    return false;
+                }
+                e.params[key] = clamped;
+                return true;
+            }
+        }
+        return false;
+    });
+}
+
 bool DeviceModel::applyMix(const std::string &key, const QJsonObject &mix)
 {
     const int row = rowForKey(key);
@@ -515,9 +620,15 @@ bool DeviceModel::applyMix(const std::string &key, const QJsonObject &mix)
     for (const auto &[destination, db] : next.sendLevels) {
         s.sendLevels[destination] = std::clamp(db, minimumVolumeDb(), maximumVolumeDb());
     }
+    s.effects = std::move(next.effects);
+    if (s.effects.size() > maxEffectsPerStrip) {
+        s.effects.resize(maxEffectsPerStrip);
+    }
     saveLater();
     const auto i = index(row);
-    Q_EMIT dataChanged(i, i, {VolumeRole, MutedRole, MonoRole, SendsRole, SendLevelsRole, SavedRole});
+    Q_EMIT dataChanged(i, i,
+                       {VolumeRole, MutedRole, MonoRole, SendsRole, SendLevelsRole, EffectsRole,
+                        SavedRole});
     Q_EMIT settingsChanged(qs(key));
     return true;
 }
