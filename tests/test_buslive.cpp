@@ -631,6 +631,9 @@ private Q_SLOTS:
         QTemporaryDir toneDir;
         const auto tone = toneDir.filePath(QStringLiteral("tone.wav"));
         QVERIFY(writeTone(tone));
+        // The effect's own input and output levels, while they're watched.
+        float fxIn = 0.0F;
+        float fxOut = 0.0F;
         const auto peakWhilePlaying = [&](int ms) {
             QProcess player;
             player.start(QStringLiteral("pw-play"),
@@ -648,6 +651,12 @@ private Q_SLOTS:
                             peak = std::max(peak, level);
                         }
                     }
+                    for (const auto &[at, io] : buses.takeEffectLevels()) {
+                        if (at == std::pair{micKey, std::size_t{0}}) {
+                            fxIn = std::max({fxIn, io.inPeak[0], io.inPeak[1]});
+                            fxOut = std::max({fxOut, io.outPeak[0], io.outPeak[1]});
+                        }
+                    }
                     return false;
                 },
                 ms);
@@ -655,8 +664,14 @@ private Q_SLOTS:
             player.waitForFinished();
             return peak;
         };
+        QVERIFY(buses.takeEffectLevels().empty()); // nobody watching
+        buses.setEffectMetering({micKey});
         const float reduced = peakWhilePlaying(1200);
         QVERIFY2(reduced > 0.02F && reduced < 0.1F, qPrintable(QString::number(reduced)));
+        QVERIFY2(fxIn > 0.3F && std::abs((20.0F * std::log10(fxOut / fxIn)) + 20.0F) < 1.0F,
+                 qPrintable(QStringLiteral("%1 %2").arg(fxIn).arg(fxOut)));
+        buses.setEffectMetering({});
+        QVERIFY(buses.takeEffectLevels().empty());
 
         // Bypassed: full level again, through the same node.
         devices.setEffectEnabled(devices.rowForKey(micKey), 0, false);

@@ -6,10 +6,12 @@ import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kingsqueak.patchprime.engine
+import "effectmeters.js" as EffectMeters
 
 // A strip's effects as insert slots, like on a console: a short name per
 // effect in chain order, lit while on and dim while bypassed. Click one (or
-// the empty slot) to open the strip's effects window. Always the same
+// the empty slot) to open the strip's effects window. A dynamics effect's
+// slot shows its gain reduction as an amber bar along the bottom. Always the same
 // height, so strips line up: with more effects than slots, the last slot
 // says how many more.
 ColumnLayout {
@@ -47,6 +49,7 @@ ColumnLayout {
 
         property bool lit: false
         property bool placeholder: false
+        property real reduction: 0 // 0..1 of the effect's gain-reduction meter
 
         Layout.fillWidth: true
         Layout.preferredHeight: Style.slotHeight
@@ -67,6 +70,17 @@ ColumnLayout {
             color: slot.lit ? Style.slotOn : slot.hovered ? Style.toggleHover : Style.slotOff
             border.color: slot.placeholder ? Style.stripBorder : "transparent"
             border.width: 1
+
+            Rectangle {
+                visible: slot.lit && slot.reduction > 0.01
+                anchors.left: parent.left
+                anchors.bottom: parent.bottom
+                anchors.margins: 1
+                width: (parent.width - 2) * Math.min(1, slot.reduction)
+                height: Style.slotReductionHeight
+                radius: 1
+                color: Style.grColor
+            }
         }
 
         QQC2.ToolTip.visible: hovered
@@ -82,6 +96,11 @@ ColumnLayout {
 
             text: inserts.shortNames[effect.type] || effect.type
             lit: effect.enabled
+            reduction: {
+                const db = EffectMeters.gainReduction(effect.type,
+                                                      Devices.effectMeters[inserts.key + "|" + index]);
+                return db === null ? 0 : db / EffectMeters.reductionRange(effect.type);
+            }
             QQC2.ToolTip.text: (effect.enabled ? qsTr("%1 (on)") : qsTr("%1 (bypassed)"))
                                .arg(inserts.shortNames[effect.type] || effect.type)
                                + "\n" + qsTr("Click to edit the effects")

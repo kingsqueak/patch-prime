@@ -130,6 +130,7 @@ Click a strip's insert slots to open its effects window. The window is separate 
 - The **power button** on each effect turns it on or bypasses it, crossfading so it doesn't click.
 - Every value can be dragged or typed: click a value box, type (for example `2.5k`, `-6`, `40 ms`), and press Enter. Double-click a slider to reset it.
 - A strip without effects has no processing at all. Effects are saved with the strip and in scenes.
+- Each effect has a **meter bridge** on its right: **IN** and **OUT** levels (one bar per channel, left and right on stereo), with the peak in dBFS underneath, and between them **GR**, the gain reduction, for the effects that turn the sound down (gate, ducker, multiband compressor, limiter). The leveler shows **GAIN** instead, centred on 0 dB: up when it boosts, down when it cuts. Comparing IN and OUT shows what an effect does to the level, an EQ or reverb included. See [Meters](#meters).
 
 ### Parametric EQ
 
@@ -146,23 +147,23 @@ Splits the sound into four bands at three crossovers (120 Hz, 1 kHz and 6 kHz to
 
 - Drag the lines on the frequency strip to move the crossovers, or type them.
 - Per band: threshold, ratio, attack, release and makeup gain; **Band n** turns a band's compression off; **S** solos a band, so you hear only the soloed ones while setting them up.
-- Each band's gain reduction shows as a bar and in dB.
+- Each band's gain reduction shows as a bar and in dB; the GR meter on the right shows the deepest band.
 
 With nothing compressing, the four bands add back up to the original sound exactly.
 
 ### Noise gate
 
-Turns the strip down by **Range** when it falls below **Threshold**, so breaths, keyboard and room noise between words don't come through. **Attack**, **Hold** and **Release** set how fast it opens, how long it stays open after you stop, and how fast it closes. The meter shows how much it's cutting.
+Turns the strip down by **Range** when it falls below **Threshold**, so breaths, keyboard and room noise between words don't come through. **Attack**, **Hold** and **Release** set how fast it opens, how long it stays open after you stop, and how fast it closes. The GR meter shows how much it's cutting.
 
 ### Noise suppression
 
-Takes fans, hum and room noise out of a voice with RNNoise, a small neural network. **Amount** blends the cleaned voice with the original; 100 % is fully cleaned. The meter shows how sure it is that it hears a voice. It adds 10 ms of delay and works at 48 kHz (at other sample rates it passes the sound through untouched).
+Takes fans, hum and room noise out of a voice with RNNoise, a small neural network. **Amount** blends the cleaned voice with the original; 100 % is fully cleaned. The **Voice** meter shows how sure it is that it hears a voice. It adds 10 ms of delay and works at 48 kHz (at other sample rates it passes the sound through untouched).
 
 ### Ducker
 
 Turns this strip down by **Depth** while another strip, its **Key**, is above **Threshold**. Use it to dip music or game sound while you talk. Choose the key strip in the effect's panel. **Attack**, **Hold** and **Release** shape the dip.
 
-A strip can't be keyed from a strip it feeds, or from a strip keyed by it: that would be a loop, and Patch Prime refuses it.
+The GR meter shows how far it's dipping. A strip can't be keyed from a strip it feeds, or from a strip keyed by it: that would be a loop, and Patch Prime refuses it.
 
 ### Broadcast leveler
 
@@ -173,11 +174,11 @@ Slowly turns the strip up or down so it sits at a steady loudness, like a radio 
 - **Speed**: how many seconds a change takes.
 - **Freeze below**: when the sound drops below this, it holds still, so silence and room noise aren't turned up.
 
-The meters show the gain it's applying and the loudness it measures.
+The GAIN meter shows the gain it's applying, and **Loudness** what it measures.
 
 ### Safety limiter
 
-Nothing leaves the strip above the **Ceiling** (−1 dB to start). It looks 1.5 ms ahead, so peaks are caught before they arrive instead of being clipped. **Release** sets how fast it recovers. The meter shows how much it's limiting. Put it last on a stream mix or an output.
+Nothing leaves the strip above the **Ceiling** (−1 dB to start). It looks 1.5 ms ahead, so peaks are caught before they arrive instead of being clipped. **Release** sets how fast it recovers. The GR meter shows how much it's limiting. Put it last on a stream mix or an output.
 
 ### Reverb
 
@@ -212,6 +213,12 @@ The colors turn yellow near full scale and red at the top.
 Mix buses and outputs show their **loudness** under the meters: short-term LUFS over the last 3 seconds. Streams usually aim for about −14 to −16, podcasts −16, and broadcast −23.
 
 The light by each strip's name glows whenever sound passes, even sound far too quiet for the meters. It's handy for checking that a route works.
+
+### Effect meters
+
+In a strip's effects window every effect shows its input and output levels (the same solid RMS and lighter peak bars) and, for dynamics, its gain reduction as an amber bar hanging from the top; see [Effects](#effects). The input and output levels are only measured while the effects window is open, so they cost nothing otherwise.
+
+On the mixer, the insert slot of a gate, ducker, multiband compressor, limiter or leveler shows its gain reduction as a thin amber bar along the slot's bottom edge, so you can see an effect working without opening the window.
 
 ## Audio engine settings
 

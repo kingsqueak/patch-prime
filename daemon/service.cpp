@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <array>
+#include <set>
 
 PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *devices,
                                      pp::BusManager *buses, pp::AppRouter *apps,
@@ -52,7 +53,9 @@ PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *
             [this](const QString &service) {
                 m_watcher.removeWatchedService(service);
                 m_levelWatchers.remove(service);
+                m_effectLevelWatchers.remove(service);
                 updateMetering();
+                updateEffectMetering();
             });
 }
 
@@ -503,9 +506,53 @@ void PatchPrimeService::UnwatchLevels()
         return;
     }
     const auto caller = message().service();
-    m_watcher.removeWatchedService(caller);
+    if (!m_effectLevelWatchers.contains(caller)) {
+        m_watcher.removeWatchedService(caller);
+    }
     m_levelWatchers.remove(caller);
     updateMetering();
+}
+
+void PatchPrimeService::WatchEffectLevels(const QString &key)
+{
+    if (!calledFromDBus()) {
+        return;
+    }
+    const auto caller = message().service();
+    if (!m_levelWatchers.contains(caller) && !m_effectLevelWatchers.contains(caller)) {
+        m_watcher.addWatchedService(caller);
+    }
+    m_effectLevelWatchers[caller].insert(key);
+    updateEffectMetering();
+}
+
+void PatchPrimeService::UnwatchEffectLevels(const QString &key)
+{
+    if (!calledFromDBus()) {
+        return;
+    }
+    const auto caller = message().service();
+    if (auto it = m_effectLevelWatchers.find(caller); it != m_effectLevelWatchers.end()) {
+        it->remove(key);
+        if (it->isEmpty()) {
+            m_effectLevelWatchers.erase(it);
+            if (!m_levelWatchers.contains(caller)) {
+                m_watcher.removeWatchedService(caller);
+            }
+        }
+    }
+    updateEffectMetering();
+}
+
+void PatchPrimeService::updateEffectMetering()
+{
+    std::set<std::string> keys;
+    for (const auto &watched : std::as_const(m_effectLevelWatchers)) {
+        for (const auto &key : watched) {
+            keys.insert(key.toStdString());
+        }
+    }
+    m_buses->setEffectMetering(std::move(keys));
 }
 
 void PatchPrimeService::scheduleState()
@@ -548,6 +595,19 @@ void PatchPrimeService::emitLevels()
         QList<double> values(meters.begin(), meters.end());
         levels.insert(QStringLiteral("fx|%1|%2").arg(QString::fromStdString(at.first)).arg(at.second),
                       QVariant::fromValue(values));
+    }
+    for (const auto &[at, io] : m_buses->takeEffectLevels()) {
+        const auto groups = static_cast<qsizetype>(io.groups);
+        QList<double> values;
+        values.reserve(groups * 4);
+        for (const auto *part : {&io.inPeak, &io.inRms, &io.outPeak, &io.outRms}) {
+            for (qsizetype g = 0; g < groups; ++g) {
+                values.append(static_cast<double>(part->at(static_cast<std::size_t>(g))));
+            }
+        }
+        levels.insert(
+            QStringLiteral("fxio|%1|%2").arg(QString::fromStdString(at.first)).arg(at.second),
+            QVariant::fromValue(values));
     }
     if (!levels.isEmpty()) {
         Q_EMIT Levels(levels);

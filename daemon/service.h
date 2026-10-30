@@ -5,6 +5,7 @@
 
 #include <QDBusContext>
 #include <QDBusServiceWatcher>
+#include <QHash>
 #include <QObject>
 #include <QSet>
 #include <QTimer>
@@ -32,7 +33,10 @@ class PipeWireGraph;
 // Also "rms|<device key>" -> RMS per channel (ad, linear, ~300 ms) and
 // "lufs|<device key>" -> [short-term loudness in LUFS, ~3 s, K-weighted].
 // Effects with meters add "fx|<device key>|<effect index>" -> their values
-// (ad; the multiband compressor's gain reduction per band, in dB).
+// (ad; the multiband compressor's gain reduction per band, in dB). Every
+// effect adds "fxio|<device key>|<effect index>" -> [input peaks, input RMS,
+// output peaks, output RMS] (linear, a quarter of the list each: one value
+// for a mono strip, left and right otherwise; peaks ad, RMS ~300 ms).
 class PatchPrimeService : public QObject, protected QDBusContext
 {
     Q_OBJECT
@@ -121,6 +125,10 @@ public Q_SLOTS:
     void DeleteScene(const QString &name);
     void WatchLevels();
     void UnwatchLevels();
+    // While a client shows a strip's effects window: its effects' input and
+    // output levels ("fxio|..." in Levels), which cost CPU only while watched.
+    void WatchEffectLevels(const QString &key);
+    void UnwatchEffectLevels(const QString &key);
 
 Q_SIGNALS:
     void StateChanged(const QString &state);
@@ -131,6 +139,7 @@ private:
     [[nodiscard]] QString clockNow() const;
     void scheduleState();
     void updateMetering();
+    void updateEffectMetering();
     void emitLevels();
 
     pp::PipeWireGraph *m_graph;
@@ -143,4 +152,5 @@ private:
     QTimer m_levelsTimer;
     QDBusServiceWatcher m_watcher;
     QSet<QString> m_levelWatchers;
+    QHash<QString, QSet<QString>> m_effectLevelWatchers; // caller -> strip keys
 };

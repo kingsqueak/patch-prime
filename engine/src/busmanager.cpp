@@ -468,6 +468,30 @@ std::map<std::pair<std::string, std::size_t>, std::vector<float>> BusManager::ta
     return out;
 }
 
+void BusManager::setEffectMetering(std::set<std::string> keys)
+{
+    m_effectMetering = std::move(keys);
+    for (const auto &[name, fx] : m_effects) {
+        fx.processor->setMetering(m_effectMetering.contains(fx.key));
+    }
+}
+
+std::map<std::pair<std::string, std::size_t>, EffectLevels> BusManager::takeEffectLevels()
+{
+    std::map<std::pair<std::string, std::size_t>, EffectLevels> out;
+    for (const auto &[name, fx] : m_effects) {
+        auto *chain = fx.processor->chain(); // only swapped on this thread
+        if (chain == nullptr || !fx.processor->isMetering()) {
+            continue;
+        }
+        const auto levels = chain->takeLevels();
+        for (std::size_t i = 0; i < levels.size(); ++i) {
+            out[{fx.key, i}] = levels[i];
+        }
+    }
+    return out;
+}
+
 void BusManager::removeAllBusesIn(PipeWireGraph &graph)
 {
     for (const auto &[id, node] : graph.nodes()) {
@@ -865,6 +889,7 @@ BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
             created = true;
             auto processor = std::make_shared<Processor>();
             processor->setChain(buildChain(w.settings->effects, rate, channels));
+            processor->setMetering(m_effectMetering.contains(w.key));
             const Properties props{
                 {"media.class", std::string(effectsMediaClass)},
                 {"node.description",

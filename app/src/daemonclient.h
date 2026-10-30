@@ -48,6 +48,9 @@ class DaemonClient : public QAbstractListModel
     // (the multiband compressor's gain reduction per band in dB), each held
     // and let fall slowly so it can be read.
     Q_PROPERTY(QVariantMap effectMeters READ effectMeters NOTIFY effectMetersChanged)
+    // "<strip key>|<effect index>" -> {in, inRms, out, outRms}: meter
+    // fractions (as levels), one per channel group (mono, or left and right).
+    Q_PROPERTY(QVariantMap effectLevels READ effectLevels NOTIFY effectMetersChanged)
     // Where apps can play to / record from: [{name (a node.name), label, kind}].
     Q_PROPERTY(QVariantList playbackTargets READ playbackTargets NOTIFY appsChanged)
     Q_PROPERTY(QVariantList recordTargets READ recordTargets NOTIFY appsChanged)
@@ -79,6 +82,7 @@ public:
     [[nodiscard]] QVariantList effectTypes() const { return m_effectTypes; }
     [[nodiscard]] QString cueOutput() const { return m_cueOutput; }
     [[nodiscard]] QVariantMap effectMeters() const { return m_effectMeters; }
+    [[nodiscard]] QVariantMap effectLevels() const { return m_effectLevels; }
     [[nodiscard]] QVariantList playbackTargets() const { return m_playbackTargets; }
     [[nodiscard]] QVariantList recordTargets() const { return m_recordTargets; }
     static constexpr double minimumVolumeDb() { return -60.0; }
@@ -120,6 +124,9 @@ public:
     Q_INVOKABLE void setEffectEnabled(const QString &key, int index, bool enabled);
     Q_INVOKABLE void setEffectParam(const QString &key, int index, const QString &name,
                                     double value);
+    // While an effects window shows a strip: its effects' input and output
+    // levels (effectLevels). Counted, so two windows on one strip both work.
+    Q_INVOKABLE void watchEffectLevels(const QString &key, bool watch);
     Q_INVOKABLE void setEffectKey(const QString &key, int index, const QString &sourceKey);
     // An EQ's response in dB at each frequency in freqs (Hz), from its
     // parameters (an "effects" entry's params; missing ones take their
@@ -188,6 +195,8 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QVariantList m_effectTypes;
     QString m_cueOutput;
     QVariantMap m_effectMeters;
+    QVariantMap m_effectLevels;
+    QHash<QString, int> m_effectLevelWatches; // strip key -> windows showing it
     QVariantList m_playbackTargets;
     QVariantList m_recordTargets;
 };

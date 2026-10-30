@@ -12,7 +12,8 @@ import org.kingsqueak.patchprime.engine
 // has to be resized for the other): the chain in order, each effect with
 // on/bypass, move, remove and its parameters; and a menu to add one. On a
 // hardware input the effects run before the fader (and the system mic gets
-// them); elsewhere, after it.
+// them); elsewhere, after it. Each effect has a meter bridge (in, gain
+// reduction, out), measured only while the window is open.
 QQC2.ApplicationWindow {
     id: panel
 
@@ -34,7 +35,7 @@ QQC2.ApplicationWindow {
     function open() {
         if (!visible) {
             const wide = panel.effects.some(e => e.type === "eq" || e.type === "multiband");
-            width = Kirigami.Units.gridUnit * (wide ? 56 : 30);
+            width = Kirigami.Units.gridUnit * (wide ? 60 : 36);
             height = Math.min(Screen.desktopAvailableHeight * 0.85, Kirigami.Units.gridUnit * 44);
         }
         show();
@@ -43,7 +44,14 @@ QQC2.ApplicationWindow {
     }
 
     title: qsTr("Effects: %1 — Patch Prime").arg(panel.label)
-    minimumWidth: Kirigami.Units.gridUnit * 24
+    // The effects' input and output levels cost CPU: only while they're seen.
+    onVisibleChanged: Devices.watchEffectLevels(panel.key, visible)
+    Component.onDestruction: {
+        if (visible)
+            Devices.watchEffectLevels(panel.key, false);
+    }
+
+    minimumWidth: Kirigami.Units.gridUnit * 28
     minimumHeight: Kirigami.Units.gridUnit * 16
     color: Kirigami.Theme.backgroundColor
 
@@ -141,184 +149,200 @@ QQC2.ApplicationWindow {
                         }
                     }
 
-                    // The EQ and the multiband compressor have their own
-                    // editors; other effects get a row per parameter.
-                    Loader {
-                        Layout.fillWidth: true
-                        active: slot.modelData.type === "eq"
-                        visible: active
-                        sourceComponent: EqEditor {
-                            key: panel.key
-                            index: slot.index
-                            params: slot.modelData.params
-                        }
-                    }
-
-                    Loader {
-                        Layout.fillWidth: true
-                        active: slot.modelData.type === "multiband"
-                        visible: active
-                        sourceComponent: MultibandEditor {
-                            key: panel.key
-                            index: slot.index
-                            params: slot.modelData.params
-                        }
-                    }
-
-                    Repeater {
-                        model: slot.modelData.type === "eq" || slot.modelData.type === "multiband"
-                               ? [] : slot.info.params
-
-                        delegate: RowLayout {
-                            id: param
-
-                            required property var modelData
-                            readonly property real current: {
-                                const v = slot.modelData.params[modelData.name];
-                                return v === undefined ? modelData.initial : v;
-                            }
-                            readonly property bool log: modelData.kind === "log" && modelData.minimum > 0
-
-                            // Slider position (0-1) <-> value, on a log scale for times and frequencies.
-                            function toPosition(v) {
-                                const lo = modelData.minimum;
-                                const hi = modelData.maximum;
-                                return log ? Math.log(v / lo) / Math.log(hi / lo) : (v - lo) / (hi - lo);
-                            }
-                            function toValue(position) {
-                                const lo = modelData.minimum;
-                                const hi = modelData.maximum;
-                                const v = log ? lo * Math.pow(hi / lo, position) : lo + position * (hi - lo);
-                                return Math.round(v * (Math.abs(v) < 10 ? 10 : 1)) / (Math.abs(v) < 10 ? 10 : 1);
-                            }
-
-                            Layout.fillWidth: true
-
-                            QQC2.Label {
-                                Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-                                text: param.modelData.label
-                                elide: Text.ElideRight
-                            }
-
-                            QQC2.Slider {
-                                id: slider
-
-                                Layout.fillWidth: true
-                                from: 0
-                                to: 1
-                                onMoved: Devices.setEffectParam(panel.key, slot.index,
-                                                                param.modelData.name,
-                                                                param.toValue(value))
-                                Accessible.name: param.modelData.label
-                                // Follow the daemon as VolumeFader does.
-                                Connections {
-                                    target: param
-                                    function onCurrentChanged() {
-                                        if (!slider.pressed)
-                                            slider.value = param.toPosition(param.current);
-                                    }
-                                }
-                                onPressedChanged: {
-                                    if (!pressed)
-                                        value = param.toPosition(param.current);
-                                }
-                                Component.onCompleted: value = param.toPosition(param.current)
-
-                                TapHandler {
-                                    onDoubleTapped: Devices.setEffectParam(panel.key, slot.index,
-                                                                           param.modelData.name,
-                                                                           param.modelData.initial)
-                                }
-                            }
-
-                            ParamField {
-                                unit: param.modelData.unit
-                                value: slider.pressed ? param.toValue(slider.value) : param.current
-                                accessibleName: param.modelData.label
-                                onRequested: v => Devices.setEffectParam(panel.key, slot.index,
-                                                                         param.modelData.name, v)
-                            }
-                        }
-                    }
-
-                    // A ducker's key: the strip whose sound turns this one down.
                     RowLayout {
                         Layout.fillWidth: true
-                        visible: slot.info.takesKey === true
+                        spacing: Kirigami.Units.largeSpacing
 
-                        QQC2.Label {
-                            Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-                            text: qsTr("Key")
-                        }
-                        QQC2.ComboBox {
-                            id: keyChoice
-
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            model: StripFilter {
-                                sourceModel: Devices
-                                stages: ["input", "bus", "output"]
-                            }
-                            textRole: "label"
-                            valueRole: "key"
-                            displayText: (slot.modelData.key || "").length > 0
-                                         ? Devices.labelFor(slot.modelData.key)
-                                         : qsTr("None: choose the strip to listen to")
-                            currentIndex: indexOfValue(slot.modelData.key || "")
-                            onActivated: Devices.setEffectKey(panel.key, slot.index, currentValue)
-                            Accessible.name: qsTr("Key strip")
-                            QQC2.ToolTip.text: qsTr("Turn this strip down while the chosen strip is above the threshold (e.g. music under the mic). A strip that this one feeds can't be chosen: that would be a loop.")
-                            QQC2.ToolTip.visible: hovered
-                            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
-                        }
-                        QQC2.ToolButton {
-                            icon.name: "edit-clear"
-                            enabled: (slot.modelData.key || "").length > 0
-                            onClicked: Devices.setEffectKey(panel.key, slot.index, "")
-                            Accessible.name: qsTr("No key")
-                        }
-                    }
+                            Layout.alignment: Qt.AlignTop
+                            spacing: Kirigami.Units.smallSpacing
 
-                    // Effects with meters: the gate's cut, the ducker's dip, the voice
-                    // level, the leveler's gain and loudness, the limiting.
-                    Repeater {
-                        id: meters
-
-                        readonly property var values: Devices.effectMeters[panel.key + "|" + slot.index] || []
-
-                        model: ({
-                            gate: [{ label: qsTr("Gate cut"), unit: "dB", from: 0, to: 40 }],
-                            ducker: [{ label: qsTr("Ducking"), unit: "dB", from: 0, to: 24 }],
-                            denoise: [{ label: qsTr("Voice"), unit: "%", from: 0, to: 100 }],
-                            leveler: [{ label: qsTr("Gain now"), unit: "dB", from: -24, to: 24 },
-                                      { label: qsTr("Loudness"), unit: "LUFS", from: -60, to: 0 }],
-                            limiter: [{ label: qsTr("Limiting"), unit: "dB", from: 0, to: 12 }]
-                        })[slot.modelData.type] || []
-
-                        delegate: RowLayout {
-                            required property var modelData
-                            required property int index
-                            readonly property real value: index < meters.values.length ? meters.values[index]
-                                                                                       : modelData.from
-
-                            Layout.fillWidth: true
-
-                            QQC2.Label {
-                                Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-                                text: parent.modelData.label
-                            }
-                            QQC2.ProgressBar {
+                            // The EQ and the multiband compressor have their own
+                            // editors; other effects get a row per parameter.
+                            Loader {
                                 Layout.fillWidth: true
-                                from: parent.modelData.from
-                                to: parent.modelData.to
-                                value: parent.value
+                                active: slot.modelData.type === "eq"
+                                visible: active
+                                sourceComponent: EqEditor {
+                                    key: panel.key
+                                    index: slot.index
+                                    params: slot.modelData.params
+                                }
                             }
-                            QQC2.Label {
-                                Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-                                horizontalAlignment: Text.AlignHCenter
-                                font.family: "monospace"
-                                text: parent.value.toFixed(parent.modelData.unit === "%" ? 0 : 1)
-                                      + " " + parent.modelData.unit
+
+                            Loader {
+                                Layout.fillWidth: true
+                                active: slot.modelData.type === "multiband"
+                                visible: active
+                                sourceComponent: MultibandEditor {
+                                    key: panel.key
+                                    index: slot.index
+                                    params: slot.modelData.params
+                                }
                             }
+
+                            Repeater {
+                                model: slot.modelData.type === "eq" || slot.modelData.type === "multiband"
+                                       ? [] : slot.info.params
+
+                                delegate: RowLayout {
+                                    id: param
+
+                                    required property var modelData
+                                    readonly property real current: {
+                                        const v = slot.modelData.params[modelData.name];
+                                        return v === undefined ? modelData.initial : v;
+                                    }
+                                    readonly property bool log: modelData.kind === "log" && modelData.minimum > 0
+
+                                    // Slider position (0-1) <-> value, on a log scale for times and frequencies.
+                                    function toPosition(v) {
+                                        const lo = modelData.minimum;
+                                        const hi = modelData.maximum;
+                                        return log ? Math.log(v / lo) / Math.log(hi / lo) : (v - lo) / (hi - lo);
+                                    }
+                                    function toValue(position) {
+                                        const lo = modelData.minimum;
+                                        const hi = modelData.maximum;
+                                        const v = log ? lo * Math.pow(hi / lo, position) : lo + position * (hi - lo);
+                                        return Math.round(v * (Math.abs(v) < 10 ? 10 : 1)) / (Math.abs(v) < 10 ? 10 : 1);
+                                    }
+
+                                    Layout.fillWidth: true
+
+                                    QQC2.Label {
+                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                        text: param.modelData.label
+                                        elide: Text.ElideRight
+                                    }
+
+                                    QQC2.Slider {
+                                        id: slider
+
+                                        Layout.fillWidth: true
+                                        from: 0
+                                        to: 1
+                                        onMoved: Devices.setEffectParam(panel.key, slot.index,
+                                                                        param.modelData.name,
+                                                                        param.toValue(value))
+                                        Accessible.name: param.modelData.label
+                                        // Follow the daemon as VolumeFader does.
+                                        Connections {
+                                            target: param
+                                            function onCurrentChanged() {
+                                                if (!slider.pressed)
+                                                    slider.value = param.toPosition(param.current);
+                                            }
+                                        }
+                                        onPressedChanged: {
+                                            if (!pressed)
+                                                value = param.toPosition(param.current);
+                                        }
+                                        Component.onCompleted: value = param.toPosition(param.current)
+
+                                        TapHandler {
+                                            onDoubleTapped: Devices.setEffectParam(panel.key, slot.index,
+                                                                                   param.modelData.name,
+                                                                                   param.modelData.initial)
+                                        }
+                                    }
+
+                                    ParamField {
+                                        unit: param.modelData.unit
+                                        value: slider.pressed ? param.toValue(slider.value) : param.current
+                                        accessibleName: param.modelData.label
+                                        onRequested: v => Devices.setEffectParam(panel.key, slot.index,
+                                                                                 param.modelData.name, v)
+                                    }
+                                }
+                            }
+
+                            // A ducker's key: the strip whose sound turns this one down.
+                            RowLayout {
+                                Layout.fillWidth: true
+                                visible: slot.info.takesKey === true
+
+                                QQC2.Label {
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                    text: qsTr("Key")
+                                }
+                                QQC2.ComboBox {
+                                    id: keyChoice
+
+                                    Layout.fillWidth: true
+                                    model: StripFilter {
+                                        sourceModel: Devices
+                                        stages: ["input", "bus", "output"]
+                                    }
+                                    textRole: "label"
+                                    valueRole: "key"
+                                    displayText: (slot.modelData.key || "").length > 0
+                                                 ? Devices.labelFor(slot.modelData.key)
+                                                 : qsTr("None: choose the strip to listen to")
+                                    currentIndex: indexOfValue(slot.modelData.key || "")
+                                    onActivated: Devices.setEffectKey(panel.key, slot.index, currentValue)
+                                    Accessible.name: qsTr("Key strip")
+                                    QQC2.ToolTip.text: qsTr("Turn this strip down while the chosen strip is above the threshold (e.g. music under the mic). A strip that this one feeds can't be chosen: that would be a loop.")
+                                    QQC2.ToolTip.visible: hovered
+                                    QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                                }
+                                QQC2.ToolButton {
+                                    icon.name: "edit-clear"
+                                    enabled: (slot.modelData.key || "").length > 0
+                                    onClicked: Devices.setEffectKey(panel.key, slot.index, "")
+                                    Accessible.name: qsTr("No key")
+                                }
+                            }
+
+                            // Meters beyond the bridge: the voice level, the leveler's loudness.
+                            Repeater {
+                                id: meters
+
+                                readonly property var values: Devices.effectMeters[panel.key + "|" + slot.index] || []
+
+                                model: ({
+                                    denoise: [{ label: qsTr("Voice"), unit: "%", from: 0, to: 100, at: 0 }],
+                                    leveler: [{ label: qsTr("Loudness"), unit: "LUFS", from: -60, to: 0, at: 1 }]
+                                })[slot.modelData.type] || []
+
+                                delegate: RowLayout {
+                                    required property var modelData
+                                    required property int index
+                                    readonly property real value: modelData.at < meters.values.length
+                                                                  ? meters.values[modelData.at] : modelData.from
+
+                                    Layout.fillWidth: true
+
+                                    QQC2.Label {
+                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                        text: parent.modelData.label
+                                    }
+                                    QQC2.ProgressBar {
+                                        Layout.fillWidth: true
+                                        from: parent.modelData.from
+                                        to: parent.modelData.to
+                                        value: parent.value
+                                    }
+                                    QQC2.Label {
+                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                        horizontalAlignment: Text.AlignHCenter
+                                        font.family: "monospace"
+                                        text: parent.value.toFixed(parent.modelData.unit === "%" ? 0 : 1)
+                                              + " " + parent.modelData.unit
+                                    }
+                                }
+                            }
+                        }
+
+                        EffectMeterBridge {
+                            Layout.fillHeight: true
+                            Layout.minimumHeight: Style.fxBridgeHeight
+                            Layout.alignment: Qt.AlignTop
+                            key: panel.key
+                            index: slot.index
+                            type: slot.modelData.type
+                            on: slot.modelData.enabled
                         }
                     }
                 }

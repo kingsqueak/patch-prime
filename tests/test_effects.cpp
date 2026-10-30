@@ -141,6 +141,70 @@ private Q_SLOTS:
         }
     }
 
+    void chainMeasuresEachEffect()
+    {
+        // Two effects: -6 dB, then a bypassed -20 dB.
+        std::vector<std::unique_ptr<Effect>> effects;
+        effects.push_back(makeEffect("gain"));
+        effects.push_back(makeEffect("gain"));
+        effects[0]->setParam("gainDb", -6.0);
+        effects[1]->setParam("gainDb", -20.0);
+        effects[1]->enabled = false;
+        EffectChain chain(std::move(effects), rate, 2);
+        // Two seconds of a sine on the left, half as loud on the right.
+        for (int block = 0; block < 96; ++block) {
+            Buffers b(1000);
+            for (std::size_t i = 0; i < b.left.size(); ++i) {
+                const auto t = static_cast<double>((block * 1000) + static_cast<int>(i)) / rate;
+                b.left[i] = static_cast<float>(0.8 * std::sin(2.0 * M_PI * 1000.0 * t));
+                b.right[i] = b.left[i] / 2.0F;
+            }
+            chain.process(b.planes.data(), 1000, nullptr, true);
+        }
+        const auto levels = chain.takeLevels();
+        QCOMPARE(levels.size(), 2U);
+        const auto &first = levels[0];
+        QCOMPARE(first.groups, 2U);
+        QVERIFY(std::abs(first.inPeak[0] - 0.8F) < 0.01F);
+        QVERIFY(std::abs(first.inPeak[1] - 0.4F) < 0.01F);
+        QVERIFY(std::abs((20.0 * std::log10(first.outPeak[0] / first.inPeak[0])) + 6.0) < 0.1);
+        // RMS of a sine: peak / sqrt(2), settled by now.
+        QVERIFY(std::abs(first.inRms[0] - (0.8F / std::sqrt(2.0F))) < 0.01F);
+        QVERIFY(std::abs((20.0 * std::log10(first.outRms[1] / first.inRms[1])) + 6.0) < 0.1);
+        // The next effect's input is this one's output; bypassed, it's unchanged.
+        QCOMPARE(levels[1].inPeak, first.outPeak);
+        QCOMPARE(levels[1].outPeak, levels[1].inPeak);
+        QCOMPARE(levels[1].outRms, levels[1].inRms);
+
+        // Peaks are since the last take; RMS stays.
+        const auto again = chain.takeLevels();
+        QCOMPARE(again[0].inPeak[0], 0.0F);
+        QCOMPARE(again[0].inRms[0], first.inRms[0]);
+
+        // Mono is one group.
+        std::vector<std::unique_ptr<Effect>> one;
+        one.push_back(makeEffect("gain"));
+        EffectChain mono(std::move(one), rate, 1);
+        std::vector<float> samples(256, -0.5F);
+        std::array<float *, 1> plane{samples.data()};
+        mono.process(plane.data(), 256, nullptr, true);
+        const auto monoLevels = mono.takeLevels();
+        QCOMPARE(monoLevels[0].groups, 1U);
+        QCOMPARE(monoLevels[0].outPeak[0], 0.5F);
+
+        // Nothing is measured unless asked.
+        mono.process(plane.data(), 256);
+        QCOMPARE(mono.takeLevels()[0].outPeak[0], 0.0F);
+        Processor processor;
+        processor.setChain(gainChain(0.0));
+        Buffers b(256, 0.5F);
+        processor.process(b.planes.data(), b.planes.data(), 2, 256);
+        QCOMPARE(processor.chain()->takeLevels()[0].inPeak[0], 0.0F);
+        processor.setMetering(true);
+        processor.process(b.planes.data(), b.planes.data(), 2, 256);
+        QCOMPARE(processor.chain()->takeLevels()[0].inPeak[0], 0.5F);
+    }
+
     void processorPassesAndApplies()
     {
         Processor processor;

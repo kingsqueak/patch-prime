@@ -50,6 +50,15 @@ QtObject {
     readonly property color meterLow: Kirigami.Theme.positiveTextColor
     readonly property color meterWarnColor: Kirigami.Theme.neutralTextColor
     readonly property color meterClipColor: Kirigami.Theme.negativeTextColor
+    // Effect meters (the effects window's meter bridge): gain reduction in
+    // amber, a leveler's boost in green.
+    readonly property real fxMeterWidth: Math.round(Kirigami.Units.smallSpacing * 2)
+    readonly property real fxReadoutWidth: Math.round(Kirigami.Units.gridUnit * 2.6)
+    readonly property real fxBridgeHeight: Kirigami.Units.gridUnit * 6
+    readonly property color grColor: Kirigami.Theme.neutralTextColor
+    readonly property color grBoost: Kirigami.Theme.positiveTextColor
+    // An insert slot's gain-reduction bar, along its bottom edge.
+    readonly property real slotReductionHeight: 3
 
     // Faders: a cap on a slim groove, with a dB scale beside it.
     readonly property real faderCapWidth: Math.round(Kirigami.Units.gridUnit * 1.3)

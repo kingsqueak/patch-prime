@@ -230,6 +230,11 @@ public:
     // Effects' own meters since the last call (see Effect::takeMeters), by
     // endpoint key and effect index; only effects that have meters.
     std::map<std::pair<std::string, std::size_t>, std::vector<float>> takeEffectMeters();
+    // Every effect's input and output levels (see EffectChain::takeLevels),
+    // by endpoint key and effect index; only on the strips set here (those
+    // with an effects window open), since measuring costs CPU.
+    void setEffectMetering(std::set<std::string> keys);
+    std::map<std::pair<std::string, std::size_t>, EffectLevels> takeEffectLevels();
 
     // Removes every Patch Prime bus (and so its links) in the graph. Used by
     // `patchprimed --remove-buses`, which runs without a BusManager.
@@ -322,6 +327,7 @@ private:
     std::string m_owner;
     QTimer m_reconcileTimer;
     bool m_metering = false;
+    std::set<std::string> m_effectMetering; // endpoint keys
 
     // Requests sent but not yet seen in the graph, so a reconcile in between
     // doesn't ask twice. They expire in case PipeWire refused silently.

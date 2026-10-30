@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <map>
@@ -121,13 +122,29 @@ bool effectTakesKey(const std::string &type);
 // Effects one strip may have.
 constexpr std::size_t maxEffectsPerStrip = 8;
 
+// The level going into and coming out of one effect in a chain, for its
+// meters: linear peak since the last take and RMS (~300 ms), per channel
+// group. Mono has one group; otherwise the first and second half of the
+// channels are a group each (left and right).
+struct EffectLevels
+{
+    static constexpr std::size_t maxGroups = 2;
+    std::size_t groups = 0;
+    std::array<float, maxGroups> inPeak{};
+    std::array<float, maxGroups> inRms{};
+    std::array<float, maxGroups> outPeak{};
+    std::array<float, maxGroups> outRms{};
+};
+
 // Effects in order. Each one's bypass crossfades between its dry input and
 // its output over crossfadeSeconds, so switching never clicks; a fully
-// bypassed effect isn't processed at all.
+// bypassed effect isn't processed at all. The level is measured before the
+// first effect and after each one (see takeLevels()).
 class EffectChain
 {
 public:
     static constexpr double crossfadeSeconds = 0.010;
+    static constexpr double rmsSeconds = 0.3;
 
     EffectChain(std::vector<std::unique_ptr<Effect>> effects, double sampleRate, int channels);
 
@@ -136,18 +153,38 @@ public:
     [[nodiscard]] Effect &at(std::size_t index) { return *m_effects.at(index); }
 
     // Realtime. key: the strip's key input (mono, frames long), or null.
-    void process(float *const *channels, int frames, const float *key = nullptr) noexcept;
+    // measure: also measure the levels (only while someone looks at them).
+    void process(float *const *channels, int frames, const float *key = nullptr,
+                 bool measure = false) noexcept;
+
+    // Main thread: each effect's input and output levels, in chain order.
+    // Peaks are since the last call (an effect's output is the next one's
+    // input, so they're all taken together).
+    [[nodiscard]] std::vector<EffectLevels> takeLevels();
 
 private:
     struct Slot
     {
         float mix = 1.0F; // 0 = bypassed, 1 = on; realtime only
     };
+    // Where the level is measured: before the first effect, after each one.
+    struct Point
+    {
+        std::array<std::atomic<float>, EffectLevels::maxGroups> peak{};
+        std::array<std::atomic<float>, EffectLevels::maxGroups> rms{};
+        std::array<double, EffectLevels::maxGroups> meanSquare{}; // realtime only
+    };
+
+    void measureAt(Point &point, std::span<float *const> planes, int frames,
+                   double rmsStep) const noexcept;
 
     std::vector<std::unique_ptr<Effect>> m_effects;
     std::vector<Slot> m_slots;
+    std::vector<Point> m_points; // one more than effects
     std::vector<std::vector<float>> m_dry; // per channel, maxEffectFrames
     int m_channels = 0;
+    std::size_t m_groups = 1;
+    double m_rate = 48000.0;
     float m_step = 1.0F; // crossfade change per sample
 };
 
@@ -171,6 +208,10 @@ public:
     [[nodiscard]] EffectChain *chain() const { return m_chain.load(); }
     // Main thread: deletes chains the realtime thread can no longer be using.
     void collect();
+    // Whether the chain measures its levels (see EffectChain::takeLevels);
+    // off by default, since nothing needs them unless an effects window is open.
+    void setMetering(bool on) { m_metering.store(on, std::memory_order_relaxed); }
+    [[nodiscard]] bool isMetering() const { return m_metering.load(std::memory_order_relaxed); }
 
     // Realtime: in and out are planar, channel by channel; in may equal out.
     // Non-finite input samples are replaced with silence before the chain.
@@ -183,6 +224,7 @@ private:
     std::atomic<EffectChain *> m_chain{nullptr};
     std::atomic<std::uint64_t> m_cycle{0}; // bumped at the end of every process()
     std::atomic<bool> m_inProcess{false};
+    std::atomic<bool> m_metering{false};
     struct Retired
     {
         std::unique_ptr<EffectChain> chain;

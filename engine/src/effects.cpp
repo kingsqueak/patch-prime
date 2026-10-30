@@ -28,6 +28,16 @@ float dbToGain(double db)
     return static_cast<float>(std::pow(10.0, db / 20.0));
 }
 
+// Raises a meter to value; a compare-exchange, so a take on the main thread
+// in between can't lose it.
+void raise(std::atomic<float> &meter, float value)
+{
+    float current = meter.load(std::memory_order_relaxed);
+    while (value > current &&
+           !meter.compare_exchange_weak(current, value, std::memory_order_relaxed)) {
+    }
+}
+
 } // namespace
 
 // --- GainEffect --------------------------------------------------------------
@@ -294,7 +304,9 @@ bool effectTakesKey(const std::string &type)
 
 EffectChain::EffectChain(std::vector<std::unique_ptr<Effect>> effects, double sampleRate,
                          int channels)
-    : m_effects(std::move(effects)), m_channels(std::clamp(channels, 1, maxEffectChannels))
+    : m_effects(std::move(effects)), m_points(m_effects.size() + 1),
+      m_channels(std::clamp(channels, 1, maxEffectChannels)),
+      m_groups(m_channels == 1 ? 1 : EffectLevels::maxGroups), m_rate(sampleRate)
 {
     m_slots.resize(m_effects.size());
     for (std::size_t i = 0; i < m_effects.size(); ++i) {
@@ -306,24 +318,38 @@ EffectChain::EffectChain(std::vector<std::unique_ptr<Effect>> effects, double sa
     m_step = static_cast<float>(1.0 / std::max(1.0, crossfadeSeconds * sampleRate));
 }
 
-void EffectChain::process(float *const *channels, int frames, const float *key) noexcept
+void EffectChain::process(float *const *channels, int frames, const float *key,
+                          bool measure) noexcept
 {
     frames = std::min(frames, maxEffectFrames);
     const auto count = static_cast<std::size_t>(m_channels);
     const std::span<float *const> planes(channels, count);
+    const double rmsStep =
+        measure ? 1.0 - std::exp(-static_cast<double>(frames) / (rmsSeconds * std::max(m_rate, 1.0)))
+                : 0.0;
+    if (measure) {
+        measureAt(m_points.front(), planes, frames, rmsStep);
+    }
     for (std::size_t e = 0; e < m_effects.size(); ++e) {
         Effect &effect = *m_effects[e];
         effect.setKey(key);
         float &mix = m_slots[e].mix;
         const float target = effect.enabled.load(std::memory_order_relaxed) ? 1.0F : 0.0F;
         if (mix == 0.0F && target == 0.0F) {
-            continue; // bypassed: not processed at all
+            // Bypassed: not processed at all, and its output is its input.
+            if (measure) {
+                measureAt(m_points[e + 1], planes, frames, rmsStep);
+            }
+            continue;
         }
         if (mix == 0.0F) {
             effect.resume(); // coming back from bypass
         }
         if (mix == 1.0F && target == 1.0F) {
             effect.process(channels, m_channels, frames);
+            if (measure) {
+                measureAt(m_points[e + 1], planes, frames, rmsStep);
+            }
             continue;
         }
         // Switching: process, then crossfade from the dry signal.
@@ -343,7 +369,62 @@ void EffectChain::process(float *const *channels, int frames, const float *key) 
             }
         }
         mix = m;
+        if (measure) {
+            measureAt(m_points[e + 1], planes, frames, rmsStep);
+        }
     }
+}
+
+void EffectChain::measureAt(Point &point, std::span<float *const> planes, int frames,
+                          double rmsStep) const noexcept
+{
+    if (frames <= 0) {
+        return;
+    }
+    const std::size_t half = m_groups == 1 ? planes.size() : planes.size() / 2;
+    for (std::size_t g = 0; g < m_groups; ++g) {
+        const auto group = g == 0 ? planes.first(half) : planes.subspan(half);
+        float peak = 0.0F;
+        double sum = 0.0;
+        for (float *plane : group) {
+            for (const float sample : std::span(plane, static_cast<std::size_t>(frames))) {
+                const float level = std::abs(sample);
+                peak = std::max(peak, level);
+                sum += static_cast<double>(level) * level;
+            }
+        }
+        const double mean = sum / static_cast<double>(frames * std::ssize(group));
+        double &meanSquare = point.meanSquare.at(g);
+        meanSquare += (mean - meanSquare) * rmsStep;
+        if (meanSquare < 1e-20) {
+            meanSquare = 0.0; // out of denormals in silence
+        }
+        raise(point.peak.at(g), peak);
+        point.rms.at(g).store(static_cast<float>(std::sqrt(meanSquare)), std::memory_order_relaxed);
+    }
+}
+
+std::vector<EffectLevels> EffectChain::takeLevels()
+{
+    std::vector<EffectLevels> out(m_effects.size());
+    std::array<float, EffectLevels::maxGroups> peak{};
+    std::array<float, EffectLevels::maxGroups> rms{};
+    for (std::size_t p = 0; p < m_points.size(); ++p) {
+        for (std::size_t g = 0; g < m_groups; ++g) {
+            peak.at(g) = m_points[p].peak.at(g).exchange(0.0F, std::memory_order_relaxed);
+            rms.at(g) = m_points[p].rms.at(g).load(std::memory_order_relaxed);
+        }
+        if (p < out.size()) {
+            out[p].groups = m_groups;
+            out[p].inPeak = peak;
+            out[p].inRms = rms;
+        }
+        if (p > 0) {
+            out[p - 1].outPeak = peak;
+            out[p - 1].outRms = rms;
+        }
+    }
+    return out;
 }
 
 // --- Processor -----------------------------------------------------------------
@@ -410,7 +491,8 @@ void Processor::process(const float *const *in, float *const *out, int channelCo
             }
             // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
             chain->process(part.data(), std::min(maxEffectFrames, frames - start),
-                           key != nullptr ? key + start : nullptr);
+                           key != nullptr ? key + start : nullptr,
+                           m_metering.load(std::memory_order_relaxed));
         }
     }
     m_cycle.fetch_add(1);

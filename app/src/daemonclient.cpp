@@ -164,6 +164,9 @@ void DaemonClient::setDaemonRunning(bool running)
         setLastError({});
         fetchState();
         call(QStringLiteral("WatchLevels"), {});
+        for (auto it = m_effectLevelWatches.cbegin(); it != m_effectLevelWatches.cend(); ++it) {
+            call(QStringLiteral("WatchEffectLevels"), {it.key()});
+        }
     } else {
         beginResetModel();
         m_rows.clear();
@@ -591,6 +594,33 @@ void DaemonClient::onLevels(const QVariantMap &levels)
             continue;
         }
 
+        // An effect's input and output: peaks fall like the strip meters'.
+        if (it.key().startsWith(QLatin1String("fxio|"))) {
+            const auto at = it.key().mid(5);
+            const auto groups = peaks.size() / 4;
+            const auto old = m_effectLevels.value(at).toMap();
+            QVariantMap shown;
+            const std::array<QString, 4> names{QStringLiteral("in"), QStringLiteral("inRms"),
+                                               QStringLiteral("out"), QStringLiteral("outRms")};
+            for (qsizetype part = 0; part < 4; ++part) {
+                const auto &name = names.at(static_cast<std::size_t>(part));
+                const auto before = old.value(name).toList();
+                const bool isPeak = part % 2 == 0;
+                QVariantList values;
+                for (qsizetype g = 0; g < groups; ++g) {
+                    const double now = meterFraction(peaks[(part * groups) + g]);
+                    const double last = g < before.size() ? before[g].toDouble() : 0.0;
+                    values.append(isPeak ? std::max(now, last - meterFallPerUpdate) : now);
+                }
+                shown.insert(name, values);
+            }
+            if (shown != old) {
+                m_effectLevels.insert(at, shown);
+                metersChanged = true;
+            }
+            continue;
+        }
+
         // An effect's meters: held, falling at about 20 dB a second.
         if (it.key().startsWith(QLatin1String("fx|"))) {
             const auto at = it.key().mid(3);
@@ -644,6 +674,22 @@ void DaemonClient::onLevels(const QVariantMap &levels)
     }
     if (metersChanged) {
         Q_EMIT effectMetersChanged();
+    }
+}
+
+void DaemonClient::watchEffectLevels(const QString &key, bool watch)
+{
+    int &count = m_effectLevelWatches[key];
+    count += watch ? 1 : -1;
+    if (count <= 0) {
+        m_effectLevelWatches.remove(key);
+        m_effectLevels.removeIf([&key](QVariantMap::iterator it) { return it.key().startsWith(key + u'|'); });
+        Q_EMIT effectMetersChanged();
+        if (m_daemonRunning) {
+            call(QStringLiteral("UnwatchEffectLevels"), {key});
+        }
+    } else if (watch && count == 1 && m_daemonRunning) {
+        call(QStringLiteral("WatchEffectLevels"), {key});
     }
 }
 
