@@ -29,6 +29,8 @@ class PipeWireGraph;
 //
 // Levels(a{sv}) maps a device key to its per-channel peaks (ad, linear) about
 // 30 times a second, only while at least one client has called WatchLevels().
+// Effects with meters add "fx|<device key>|<effect index>" -> their values
+// (ad; the multiband compressor's gain reduction per band, in dB).
 class PatchPrimeService : public QObject, protected QDBusContext
 {
     Q_OBJECT

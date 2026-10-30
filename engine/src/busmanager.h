@@ -212,6 +212,9 @@ public:
 
     // Peaks per endpoint key since the last call (linear, per channel).
     std::map<std::string, std::vector<float>> takeLevels();
+    // Effects' own meters since the last call (see Effect::takeMeters), by
+    // endpoint key and effect index; only effects that have meters.
+    std::map<std::pair<std::string, std::size_t>, std::vector<float>> takeEffectMeters();
 
     // Removes every Patch Prime bus (and so its links) in the graph. Used by
     // `patchprimed --remove-buses`, which runs without a BusManager.
@@ -249,6 +252,7 @@ private:
     // A strip's processing node, by effects node name.
     struct Fx
     {
+        std::string key; // the strip's endpoint key
         std::shared_ptr<Processor> processor;
         std::vector<std::string> positions;
         std::vector<EffectSettings> effects; // what the chain was last given

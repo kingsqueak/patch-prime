@@ -6,6 +6,7 @@
 #include "devicestore.h"
 #include "effects.h"
 #include "eq.h"
+#include "multiband.h"
 
 #include <QJsonArray>
 #include <QTemporaryDir>
@@ -46,13 +47,13 @@ std::unique_ptr<EffectChain> gainChain(double db, bool enabled = true)
 }
 
 // The steady-state amplitude of a sine at freq through effect (after 0.5 s).
-float sinePeak(Effect &effect, double freq, double sampleRate = rate)
+float sinePeak(Effect &effect, double freq, double sampleRate = rate, double amplitude = 0.25)
 {
     const int frames = static_cast<int>(sampleRate); // 1 s
     std::vector<float> left(static_cast<std::size_t>(frames));
     for (std::size_t i = 0; i < left.size(); ++i) {
         left[i] = static_cast<float>(
-            0.25 * std::sin(2.0 * M_PI * freq * static_cast<double>(i) / sampleRate));
+            amplitude * std::sin(2.0 * M_PI * freq * static_cast<double>(i) / sampleRate));
     }
     std::vector<float> right = left;
     std::array<float *, 2> planes{left.data(), right.data()};
@@ -267,6 +268,72 @@ private Q_SLOTS:
         QCOMPARE(params[1].options.size(), 5U);
         QCOMPARE(validParam(params[1], 2.6), 3.0);
         QCOMPARE(validParam(params[2], 1e9), EqEffect::maxFreq);
+    }
+
+    void multibandSumsFlat()
+    {
+        // Ratio 1:1 everywhere: nothing compresses, and the four bands add
+        // back up to the input at every frequency, crossovers included.
+        MultibandEffect mb;
+        for (int b = 1; b <= MultibandEffect::bandCount; ++b) {
+            mb.setParam("b" + std::to_string(b) + "Ratio", 1.0);
+        }
+        mb.prepare(rate, 2);
+        for (const double freq : {40.0, 120.0, 400.0, 1000.0, 3000.0, 6000.0, 12000.0}) {
+            QVERIFY2(std::abs(gainDb(sinePeak(mb, freq))) < 0.1, qPrintable(QString::number(freq)));
+        }
+        // Moved crossovers (out of order, even): still flat.
+        mb.setParam("x1", 500.0);
+        mb.setParam("x2", 400.0);
+        mb.setParam("x3", 2000.0);
+        for (const double freq : {400.0, 500.0, 2000.0}) {
+            QVERIFY2(std::abs(gainDb(sinePeak(mb, freq))) < 0.1, qPrintable(QString::number(freq)));
+        }
+    }
+
+    void multibandCompressesOneBand()
+    {
+        MultibandEffect mb;
+        for (int b = 1; b <= MultibandEffect::bandCount; ++b) {
+            mb.setParam("b" + std::to_string(b) + "Ratio", 1.0);
+        }
+        // Band 3: -20 dB threshold, 4:1. A 2 kHz tone peaking at
+        // -6 dBFS is -9 dB RMS, 11 dB over: it comes out 11 x 3/4 = 8.3 dB down.
+        // Band 3 made wide (200 Hz - 16 kHz) so the whole tone is in it.
+        mb.setParam("x2", 200.0);
+        mb.setParam("x3", 16000.0);
+        mb.setParam("b3Threshold", -20.0);
+        mb.setParam("b3Ratio", 4.0);
+        mb.prepare(rate, 2);
+        const double loud = 20.0 * std::log10(sinePeak(mb, 2000.0, rate, 0.5) / 0.5);
+        QVERIFY2(std::abs(loud + 8.27) < 0.5, qPrintable(QString::number(loud)));
+        std::array<float, 4> meters{};
+        QCOMPARE(mb.takeMeters(meters), 4U);
+        QVERIFY2(std::abs(meters[2] - 8.27F) < 0.7F, qPrintable(QString::number(meters[2])));
+        QCOMPARE(meters[0], 0.0F);
+        // Another band's tone is left alone.
+        QVERIFY(std::abs(20.0 * std::log10(sinePeak(mb, 60.0, rate, 0.5) / 0.5)) < 0.3);
+        // Makeup on band 3 brings it back up.
+        mb.setParam("b3Makeup", 8.27);
+        const double made = 20.0 * std::log10(sinePeak(mb, 2000.0, rate, 0.5) / 0.5);
+        QVERIFY2(std::abs(made) < 0.5, qPrintable(QString::number(made)));
+        // Solo band 1: the 2 kHz tone is gone.
+        mb.setParam("b1Solo", 1.0);
+        QVERIFY(gainDb(sinePeak(mb, 2000.0)) < -40.0);
+        QVERIFY(std::abs(gainDb(sinePeak(mb, 30.0))) < 0.3); // two octaves under x1: all band 1
+    }
+
+    void compressorCurve()
+    {
+        // Below the knee: unchanged; above: the ratio; the knee joins them.
+        QCOMPARE(MultibandEffect::staticCurve(-40.0, -20.0, 4.0), -40.0);
+        QCOMPARE(MultibandEffect::staticCurve(-4.0, -20.0, 4.0), -16.0);
+        const double edge = MultibandEffect::kneeDb / 2.0;
+        QVERIFY(std::abs(MultibandEffect::staticCurve(-20.0 - edge, -20.0, 4.0) - (-20.0 - edge)) <
+                1e-9);
+        QVERIFY(std::abs(MultibandEffect::staticCurve(-20.0 + edge, -20.0, 4.0) -
+                         (-20.0 + (edge / 4.0))) < 1e-9);
+        QCOMPARE(effectParams("multiband").size(), 31U);
     }
 
     void settingsRoundTrip()

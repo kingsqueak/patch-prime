@@ -42,6 +42,10 @@ class DaemonClient : public QAbstractListModel
     // Built-in effects on offer: [{type, label, params: [{name, label, unit,
     // minimum, maximum, initial}]}]. A strip's chain is its "effects" role.
     Q_PROPERTY(QVariantList effectTypes READ effectTypes NOTIFY effectTypesChanged)
+    // Effects' meters by "<strip key>|<effect index>": a list of values
+    // (the multiband compressor's gain reduction per band in dB), each held
+    // and let fall slowly so it can be read.
+    Q_PROPERTY(QVariantMap effectMeters READ effectMeters NOTIFY effectMetersChanged)
     // Where apps can play to / record from: [{name (a node.name), label, kind}].
     Q_PROPERTY(QVariantList playbackTargets READ playbackTargets NOTIFY appsChanged)
     Q_PROPERTY(QVariantList recordTargets READ recordTargets NOTIFY appsChanged)
@@ -71,6 +75,7 @@ public:
     [[nodiscard]] int sampleRate() const { return m_sampleRate; }
     [[nodiscard]] int blockSize() const { return m_blockSize; }
     [[nodiscard]] QVariantList effectTypes() const { return m_effectTypes; }
+    [[nodiscard]] QVariantMap effectMeters() const { return m_effectMeters; }
     [[nodiscard]] QVariantList playbackTargets() const { return m_playbackTargets; }
     [[nodiscard]] QVariantList recordTargets() const { return m_recordTargets; }
     static constexpr double minimumVolumeDb() { return -60.0; }
@@ -130,6 +135,7 @@ Q_SIGNALS:
     void clockChanged();
     void scenesChanged();
     void effectTypesChanged();
+    void effectMetersChanged();
 
 private Q_SLOTS:
     void onStateChanged(const QString &state);
@@ -162,6 +168,7 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     int m_sampleRate = 0;
     int m_blockSize = 0;
     QVariantList m_effectTypes;
+    QVariantMap m_effectMeters;
     QVariantList m_playbackTargets;
     QVariantList m_recordTargets;
 };

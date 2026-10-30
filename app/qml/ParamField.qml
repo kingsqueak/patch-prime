@@ -7,13 +7,14 @@ import org.kde.kirigami as Kirigami
 import org.kingsqueak.patchprime.engine
 
 // An effect parameter as text you can type into: shows the value with its
-// unit ("2.50 kHz", "+3.0 dB", "0.71"); click, type, Enter. Frequencies take
-// "2k", "2.5 kHz" or "800". Out-of-range values are clamped by the daemon.
+// unit ("2.50 kHz", "+3.0 dB", "12 ms", "4.0:1", "0.71"); click, type,
+// Enter. Frequencies take "2k", "2.5 kHz" or "800". Out-of-range values are
+// clamped by the daemon.
 QQC2.TextField {
     id: field
 
     property real value: 0
-    property string unit // "Hz", "dB" or ""
+    property string unit // "Hz", "dB", "ms", ":1" or ""
     property string accessibleName
 
     signal requested(real value)
@@ -23,6 +24,10 @@ QQC2.TextField {
             return v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 1 : 2) + " kHz" : Math.round(v) + " Hz";
         if (unit === "dB")
             return (v > 0.05 ? "+" : v < -0.05 ? "−" : "") + Math.abs(v).toFixed(1) + " dB";
+        if (unit === "ms")
+            return (v < 10 ? v.toFixed(1) : Math.round(v)) + " ms";
+        if (unit === ":1")
+            return v.toFixed(1) + ":1";
         return v.toFixed(2);
     }
 
@@ -38,6 +43,10 @@ QQC2.TextField {
             }
         } else if (unit === "dB") {
             t = t.replace(/db$/, "");
+        } else if (unit === "ms") {
+            t = t.replace(/ms$/, "");
+        } else if (unit === ":1") {
+            t = t.replace(/:1$/, "");
         }
         if (!/^[+-]?(\d+(\.\d*)?|\.\d+)$/.test(t))
             return NaN;

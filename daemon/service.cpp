@@ -515,6 +515,11 @@ void PatchPrimeService::emitLevels()
         }
         levels.insert(QString::fromStdString(key), QVariant::fromValue(values));
     }
+    for (const auto &[at, meters] : m_buses->takeEffectMeters()) {
+        QList<double> values(meters.begin(), meters.end());
+        levels.insert(QStringLiteral("fx|%1|%2").arg(QString::fromStdString(at.first)).arg(at.second),
+                      QVariant::fromValue(values));
+    }
     if (!levels.isEmpty()) {
         Q_EMIT Levels(levels);
     }

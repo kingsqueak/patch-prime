@@ -4,6 +4,7 @@
 #include "effects.h"
 
 #include "eq.h"
+#include "multiband.h"
 
 #include <algorithm>
 #include <array>
@@ -60,6 +61,9 @@ std::unique_ptr<Effect> makeEffect(const std::string &type)
     if (type == "eq") {
         return std::make_unique<EqEffect>();
     }
+    if (type == "multiband") {
+        return std::make_unique<MultibandEffect>();
+    }
     return nullptr;
 }
 
@@ -92,7 +96,7 @@ double validParam(const ParamInfo &info, double value)
 
 std::vector<std::string> effectTypes()
 {
-    return {"eq", "gain"};
+    return {"eq", "multiband", "gain"};
 }
 
 std::string effectLabel(const std::string &type)
@@ -102,6 +106,9 @@ std::string effectLabel(const std::string &type)
     }
     if (type == "eq") {
         return "Parametric EQ";
+    }
+    if (type == "multiband") {
+        return "Multiband compressor";
     }
     return type;
 }
@@ -145,6 +152,32 @@ std::vector<ParamInfo> effectParams(const std::string &type)
                                    EqEffect::maxGain, band.gainDb));
             params.push_back(param(prefix + "Q", label + "Q", "", EqEffect::minQ, EqEffect::maxQ,
                                    band.q, ParamKind::Log));
+        }
+        return params;
+    }
+    if (type == "multiband") {
+        std::vector<ParamInfo> params;
+        params.reserve(3 + (7 * MultibandEffect::bandCount));
+        for (std::size_t x = 0; x < MultibandEffect::defaultCrossovers.size(); ++x) {
+            params.push_back(param("x" + std::to_string(x + 1),
+                                   "Crossover " + std::to_string(x + 1), "Hz",
+                                   MultibandEffect::minCrossover, MultibandEffect::maxCrossover,
+                                   MultibandEffect::defaultCrossovers.at(x), ParamKind::Log));
+        }
+        for (int b = 1; b <= MultibandEffect::bandCount; ++b) {
+            const auto prefix = "b" + std::to_string(b);
+            const auto label = "Band " + std::to_string(b) + " ";
+            params.push_back(param(prefix + "On", label + "on", "", 0.0, 1.0, 1.0, ParamKind::Toggle));
+            params.push_back(
+                param(prefix + "Solo", label + "solo", "", 0.0, 1.0, 0.0, ParamKind::Toggle));
+            params.push_back(param(prefix + "Threshold", label + "threshold", "dB", -60.0, 0.0, -20.0));
+            params.push_back(
+                param(prefix + "Ratio", label + "ratio", ":1", 1.0, 20.0, 2.0, ParamKind::Log));
+            params.push_back(
+                param(prefix + "Attack", label + "attack", "ms", 0.1, 200.0, 10.0, ParamKind::Log));
+            params.push_back(param(prefix + "Release", label + "release", "ms", 10.0, 3000.0, 150.0,
+                                   ParamKind::Log));
+            params.push_back(param(prefix + "Makeup", label + "makeup", "dB", -12.0, 24.0, 0.0));
         }
         return params;
     }

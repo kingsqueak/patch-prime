@@ -39,6 +39,8 @@ constexpr std::array fields{
 
 // How far a meter falls per update (about 30 per second): 60 dB in ~1.6 s.
 constexpr double meterFallPerUpdate = 0.02;
+// Effect meters (dB) fall about 20 dB a second.
+constexpr double effectMeterFallPerUpdate = 0.66;
 // "Signal present" lights for anything above -100 dBFS (far below the meter's
 // range, so a path turned down too far still shows it works), and stays lit
 // for about half a second.
@@ -516,6 +518,7 @@ double DaemonClient::meterFraction(double peak)
 
 void DaemonClient::onLevels(const QVariantMap &levels)
 {
+    bool metersChanged = false;
     for (auto it = levels.begin(); it != levels.end(); ++it) {
         QList<double> peaks;
         const auto &value = it.value();
@@ -523,6 +526,22 @@ void DaemonClient::onLevels(const QVariantMap &levels)
             peaks = qdbus_cast<QList<double>>(value.value<QDBusArgument>());
         } else {
             peaks = value.value<QList<double>>();
+        }
+
+        // An effect's meters: held, falling at about 20 dB a second.
+        if (it.key().startsWith(QLatin1String("fx|"))) {
+            const auto at = it.key().mid(3);
+            const auto old = m_effectMeters.value(at).toList();
+            QVariantList shown;
+            for (qsizetype i = 0; i < peaks.size(); ++i) {
+                const double before = i < old.size() ? old[i].toDouble() : 0.0;
+                shown.append(std::max(peaks[i], before - effectMeterFallPerUpdate));
+            }
+            if (shown != old) {
+                m_effectMeters.insert(at, shown);
+                metersChanged = true;
+            }
+            continue;
         }
 
         auto &shown = m_levels[it.key()];
@@ -547,6 +566,9 @@ void DaemonClient::onLevels(const QVariantMap &levels)
                 Q_EMIT dataChanged(i, i, {m_levelsRole});
             }
         }
+    }
+    if (metersChanged) {
+        Q_EMIT effectMetersChanged();
     }
 }
 

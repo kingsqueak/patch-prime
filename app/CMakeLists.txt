@@ -16,7 +16,7 @@ qt_add_qml_module(patchprime
     VERSION 1.0
     QML_FILES qml/Main.qml qml/MixerPage.qml qml/ChannelStrip.qml qml/DevicesPage.qml qml/EngineMessage.qml qml/RoutingPage.qml qml/AppsPage.qml
         qml/Style.qml qml/LevelMeter.qml qml/StripToggle.qml qml/VolumeFader.qml qml/StripGroup.qml qml/SendButton.qml qml/DbField.qml qml/SceneBar.qml qml/EffectsButton.qml
-        qml/EqEditor.qml qml/ParamField.qml
+        qml/EqEditor.qml qml/ParamField.qml qml/MultibandEditor.qml
     NO_IMPORT_SCAN) # the import scan only matters for static Qt builds
 
 target_include_directories(patchprime PRIVATE src)

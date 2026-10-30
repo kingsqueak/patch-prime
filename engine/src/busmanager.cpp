@@ -10,6 +10,7 @@
 #include <QLoggingCategory>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <charconv>
 #include <cmath>
@@ -416,6 +417,25 @@ std::map<std::string, std::vector<float>> BusManager::takeLevels()
     return out;
 }
 
+std::map<std::pair<std::string, std::size_t>, std::vector<float>> BusManager::takeEffectMeters()
+{
+    std::map<std::pair<std::string, std::size_t>, std::vector<float>> out;
+    std::array<float, 16> buffer{};
+    for (const auto &[name, fx] : m_effects) {
+        auto *chain = fx.processor->chain(); // only swapped on this thread
+        if (chain == nullptr) {
+            continue;
+        }
+        for (std::size_t i = 0; i < chain->size(); ++i) {
+            if (const auto n = chain->at(i).takeMeters(buffer); n > 0) {
+                out[{fx.key, i}] = std::vector<float>(buffer.begin(),
+                                                      buffer.begin() + static_cast<std::ptrdiff_t>(n));
+            }
+        }
+    }
+    return out;
+}
+
 void BusManager::removeAllBusesIn(PipeWireGraph &graph)
 {
     for (const auto &[id, node] : graph.nodes()) {
@@ -814,7 +834,8 @@ BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
                 continue;
             }
             fx = m_effects
-                     .emplace(fxName, Fx{.processor = std::move(processor),
+                     .emplace(fxName, Fx{.key = w.key,
+                                         .processor = std::move(processor),
                                          .positions = positions,
                                          .effects = w.settings->effects,
                                          .sampleRate = rate})

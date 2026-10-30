@@ -7,7 +7,9 @@ add_library(patchprime-dsp STATIC
     src/effects.cpp
     src/effects.h
     src/eq.cpp
-    src/eq.h)
+    src/eq.h
+    src/multiband.cpp
+    src/multiband.h)
 target_include_directories(patchprime-dsp PUBLIC src)
 patchprime_set_warnings(patchprime-dsp)
 

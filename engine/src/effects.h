@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -43,6 +44,10 @@ public:
     // while process() may be running on the realtime thread (chains are
     // updated in place), so it must only store into atomics.
     virtual void setParam(const std::string &name, double value) = 0;
+
+    // Main thread: the effect's meters since the last call (gain reduction
+    // per band, say) into out; returns how many it wrote. Most have none.
+    virtual std::size_t takeMeters(std::span<float> /*out*/) { return 0; }
 
     // On or bypassed. A change crossfades (see EffectChain).
     std::atomic<bool> enabled{true};

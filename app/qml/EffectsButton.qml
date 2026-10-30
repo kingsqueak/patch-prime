@@ -55,7 +55,8 @@ StripToggle {
 
         title: qsTr("Effects: %1").arg(button.label)
         standardButtons: Kirigami.Dialog.Close
-        preferredWidth: Kirigami.Units.gridUnit * (button.effects.some(e => e.type === "eq") ? 54 : 24)
+        preferredWidth: Kirigami.Units.gridUnit
+                        * (button.effects.some(e => e.type === "eq" || e.type === "multiband") ? 54 : 24)
         padding: Kirigami.Units.largeSpacing
 
         ColumnLayout {
@@ -123,7 +124,8 @@ StripToggle {
                             }
                         }
 
-                        // The EQ has its own editor; other effects get a row per parameter.
+                        // The EQ and the multiband compressor have their own
+                        // editors; other effects get a row per parameter.
                         Loader {
                             Layout.fillWidth: true
                             active: slot.modelData.type === "eq"
@@ -135,8 +137,20 @@ StripToggle {
                             }
                         }
 
+                        Loader {
+                            Layout.fillWidth: true
+                            active: slot.modelData.type === "multiband"
+                            visible: active
+                            sourceComponent: MultibandEditor {
+                                key: button.key
+                                index: slot.index
+                                params: slot.modelData.params
+                            }
+                        }
+
                         Repeater {
-                            model: slot.modelData.type === "eq" ? [] : slot.info.params
+                            model: slot.modelData.type === "eq" || slot.modelData.type === "multiband"
+                                   ? [] : slot.info.params
 
                             delegate: RowLayout {
                                 id: param
