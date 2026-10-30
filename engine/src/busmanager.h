@@ -94,6 +94,39 @@ std::vector<PortRef> selectPair(const std::vector<PortRef> &ports, int pair);
 std::vector<std::pair<PortRef, PortRef>> pairPorts(const std::vector<PortRef> &outputs,
                                                    const std::vector<PortRef> &inputs);
 
+// How often one node may be created. A node that's asked for again and again
+// without ever appearing (a bug, or PipeWire refusing) would otherwise be
+// created on every reconcile; each costs PipeWire file descriptors, and once
+// it runs out, all audio stops (seen 2026-10-29). At most maxPerWindow
+// attempts per window, counted afresh once the node appears.
+class CreationLimiter
+{
+public:
+    using Clock = std::chrono::steady_clock;
+    static constexpr int maxPerWindow = 5;
+    static constexpr std::chrono::seconds window{60};
+
+    enum class Decision : std::uint8_t
+    {
+        Create,
+        Refuse,      // over the limit
+        RefuseFirst, // over the limit, for the first time this window (worth a warning)
+    };
+
+    // Counts an attempt to create `name` now.
+    Decision attempt(const std::string &name, Clock::time_point now);
+    // The node appeared: count afresh next time.
+    void appeared(const std::string &name) { m_attempts.erase(name); }
+
+private:
+    struct Attempts
+    {
+        Clock::time_point first;
+        int count = 0;
+    };
+    std::map<std::string, Attempts> m_attempts;
+};
+
 // --- BusManager --------------------------------------------------------------
 
 // Keeps the PipeWire graph in line with the saved settings:
@@ -157,6 +190,8 @@ private:
     [[nodiscard]] static std::map<std::string, WantedSend>
     wantedSends(const std::map<std::string, Wanted> &buses);
     void applyVolume(std::uint32_t nodeId, std::size_t channels, double db, bool muted);
+    // Asks the limiter; warns the first time a node is refused.
+    bool mayCreate(const std::string &name, CreationLimiter::Clock::time_point now);
     using LinkMap = std::map<std::pair<std::uint32_t, std::uint32_t>, std::uint32_t>;
     void linkHardware(std::uint32_t busNodeId, const Wanted &wanted, const LinkMap &existingLinks);
     void linkSends(const std::map<std::string, std::uint32_t> &ready,
@@ -178,6 +213,7 @@ private:
     // Requests sent but not yet seen in the graph, so a reconcile in between
     // doesn't ask twice. They expire in case PipeWire refused silently.
     std::map<std::string, Clock::time_point> m_pendingBuses;
+    CreationLimiter m_limiter;
     std::map<std::pair<std::uint32_t, std::uint32_t>, Clock::time_point> m_pendingLinks;
     // Last volume and mute sent to each bus node, so unchanged values aren't resent.
     std::map<std::uint32_t, std::pair<std::vector<float>, bool>> m_applied;

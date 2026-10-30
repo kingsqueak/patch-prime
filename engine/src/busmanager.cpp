@@ -114,6 +114,19 @@ std::vector<PortRef> selectPair(const std::vector<PortRef> &ports, int pair)
     return {begin, begin + 2};
 }
 
+CreationLimiter::Decision CreationLimiter::attempt(const std::string &name, Clock::time_point now)
+{
+    auto &a = m_attempts[name];
+    if (a.count == 0 || now - a.first >= window) {
+        a = Attempts{.first = now, .count = 0};
+    }
+    ++a.count;
+    if (a.count <= maxPerWindow) {
+        return Decision::Create;
+    }
+    return a.count == maxPerWindow + 1 ? Decision::RefuseFirst : Decision::Refuse;
+}
+
 std::string busOwnerFor(const QString &storePath)
 {
     return QCryptographicHash::hash(storePath.toUtf8(), QCryptographicHash::Sha1)
@@ -419,7 +432,7 @@ void BusManager::reconcile()
     for (const auto &[name, w] : wanted) {
         const auto it = existing.find(name);
         if (it == existing.end()) {
-            if (!m_pendingBuses.contains(name)) {
+            if (!m_pendingBuses.contains(name) && mayCreate(name, now)) {
                 qCInfo(lcBus, "creating bus %s for %s", name.c_str(), w.key.c_str());
                 if (m_graph->createNode(busProperties(w.endpoint, *w.settings, m_owner,
                                                       m_devices->store().clock()))) {
@@ -428,6 +441,7 @@ void BusManager::reconcile()
             }
             continue;
         }
+        m_limiter.appeared(name);
         m_pendingBuses.erase(name);
         const std::uint32_t busId = it->second;
         const auto &node = m_graph->nodes().at(busId);
@@ -468,12 +482,13 @@ void BusManager::reconcile()
     for (const auto &[name, s] : sends) {
         const auto it = existing.find(name);
         if (it == existing.end()) {
-            if (!m_pendingBuses.contains(name) &&
+            if (!m_pendingBuses.contains(name) && mayCreate(name, now) &&
                 m_graph->createNode(sendProperties(name, s.positions, s.description, m_owner))) {
                 m_pendingBuses[name] = now;
             }
             continue;
         }
+        m_limiter.appeared(name);
         m_pendingBuses.erase(name);
         if (parseId(prop(m_graph->nodes().at(it->second), "audio.channels")) !=
             s.positions.size()) {
@@ -495,6 +510,24 @@ void BusManager::reconcile()
             ++it;
         }
     }
+}
+
+bool BusManager::mayCreate(const std::string &name, CreationLimiter::Clock::time_point now)
+{
+    switch (m_limiter.attempt(name, now)) {
+    case CreationLimiter::Decision::Create:
+        return true;
+    case CreationLimiter::Decision::RefuseFirst:
+        qCWarning(lcBus,
+                  "%s was created %d times in %lld s but never appeared; not trying again "
+                  "for now",
+                  name.c_str(), CreationLimiter::maxPerWindow,
+                  static_cast<long long>(CreationLimiter::window.count()));
+        return false;
+    case CreationLimiter::Decision::Refuse:
+        break;
+    }
+    return false;
 }
 
 void BusManager::applyVolume(std::uint32_t nodeId, std::size_t channels, double db, bool muted)

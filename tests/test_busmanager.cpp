@@ -125,6 +125,29 @@ private Q_SLOTS:
         QCOMPARE(busNameFor(mix, sink), "patchprime.virtual.22222222");
     }
 
+    void creationLimiter()
+    {
+        using Decision = CreationLimiter::Decision;
+        CreationLimiter limiter;
+        const auto start = CreationLimiter::Clock::time_point{};
+        for (int i = 0; i < CreationLimiter::maxPerWindow; ++i) {
+            QCOMPARE(limiter.attempt("bus", start + std::chrono::milliseconds(50 * i)),
+                     Decision::Create);
+        }
+        // Over the limit: refused, and flagged once for a warning.
+        QCOMPARE(limiter.attempt("bus", start + std::chrono::seconds(1)), Decision::RefuseFirst);
+        QCOMPARE(limiter.attempt("bus", start + std::chrono::seconds(2)), Decision::Refuse);
+        QCOMPARE(limiter.attempt("other", start + std::chrono::seconds(2)), Decision::Create);
+        // A minute after the first attempt, it may try again.
+        QCOMPARE(limiter.attempt("bus", start + CreationLimiter::window), Decision::Create);
+        // Once it appears, counting starts afresh.
+        for (int i = 1; i < CreationLimiter::maxPerWindow; ++i) {
+            QCOMPARE(limiter.attempt("bus", start + CreationLimiter::window), Decision::Create);
+        }
+        limiter.appeared("bus");
+        QCOMPARE(limiter.attempt("bus", start + CreationLimiter::window), Decision::Create);
+    }
+
     void channelPairs()
     {
         const std::vector<PortRef> six{port(1, "AUX0"), port(2, "AUX1"), port(3, "AUX2"),
