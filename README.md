@@ -1,6 +1,6 @@
 # Patch Prime
 
-A virtual audio mixer and router for KDE Plasma, built on PipeWire. Think of it as a small mixing console for your desktop: every input, app and output gets a channel strip, you decide what goes where, and you can process any strip with built-in effects. Inspired by Ginger Audio's CASTER on macOS.
+A virtual audio mixer and router for KDE Plasma, built on PipeWire. Think of it as a small mixing console for your desktop: every input, app and output gets a channel strip, you decide what goes where, and you can process any strip with built-in effects.
 
 ![The Patch Prime mixer: inputs, mix buses and outputs as console strips](docs/images/mixer.png)
 

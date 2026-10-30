@@ -1,6 +1,6 @@
 # Patch Prime
 
-A virtual audio mixer and router for KDE Plasma on PipeWire (Linux). It's inspired by Ginger Audio CASTER on macOS.
+A virtual audio mixer and router for KDE Plasma on PipeWire (Linux).
 
 ## Read first
 - Plan and phases: `~/obsidian/Projects/Patch Prime/Patch Prime - Plan.md`
