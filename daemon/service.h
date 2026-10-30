@@ -51,18 +51,24 @@ public Q_SLOTS:
     // that follow the default play through the mixer. Otherwise make the
     // hardware output itself the default.
     void SetDefaultOutput(const QString &key, bool throughMixer);
+    // The same for the system default input (microphone): an input's bus, so
+    // apps record it with its fader, mute and mono applied, or the hardware
+    // input itself; or a virtual microphone.
+    void SetDefaultInput(const QString &key, bool throughMixer);
     void SetMono(const QString &key, bool mono);
     // Hardware with more than two channels: 0 = all, n = stereo pair 2n-1/2n.
     void SetChannelPair(const QString &key, int pair);
     // Sends an input to an output or virtual device, or stops sending it.
     void SetSend(const QString &inputKey, const QString &destinationKey, bool enabled);
     // What clocks the audio graph: "internal" (Patch Prime's buses; unplugging
-    // an interface doesn't interrupt the rest) or "hardware" (PipeWire picks a
-    // device; lowest latency). In the state as "clock".
+    // an interface doesn't interrupt the rest) or "hardware" (the interface
+    // chosen with SetClockDevice; lowest latency; while it's unplugged, Patch
+    // Prime's buses keep time). In the state as "clock".
     void SetClock(const QString &mode);
-    // Makes a hardware device (by key) the clock; switches to the hardware
+    // Makes an ALSA interface (by key) the clock; switches to the hardware
     // clock. In the state as "clockDevice"; "clockNow" names the clock that
-    // setting gives ("Patch Prime", a device's label, or PipeWire's choice).
+    // setting gives ("Patch Prime", the device's label, or Patch Prime while
+    // the device is unplugged).
     void SetClockDevice(const QString &key);
     // The mixer's sample rate in Hz (48000 by default) and block size in
     // frames (0 = PipeWire picks). In the state as "sampleRate", "blockSize".

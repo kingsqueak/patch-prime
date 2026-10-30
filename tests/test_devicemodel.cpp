@@ -507,6 +507,14 @@ private Q_SLOTS:
         model.setDefaults("other", "");
         QVERIFY(!role(model, 0, DeviceModel::DefaultRole).toBool());
         QVERIFY(!role(model, 1, DeviceModel::DefaultRole).toBool());
+
+        // The mic's bus as the default input marks the mic's strip.
+        model.setEnabled(0, true);
+        const auto bus = busNodeName(Direction::Input, store.find("Audio/Source|mic")->busId);
+        QVERIFY(!role(model, 0, DeviceModel::BusDefaultRole).toBool());
+        model.setDefaults("other", bus);
+        QVERIFY(role(model, 0, DeviceModel::BusDefaultRole).toBool());
+        QVERIFY(!role(model, 1, DeviceModel::BusDefaultRole).toBool());
     }
 
 private:

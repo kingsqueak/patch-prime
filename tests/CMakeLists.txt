@@ -19,6 +19,7 @@ patchprime_add_test(test_devicemodel test_devicemodel.cpp)
 patchprime_add_test(test_busmanager test_busmanager.cpp)
 patchprime_add_test(test_approuter test_approuter.cpp)
 patchprime_add_test(test_audiosetup test_audiosetup.cpp)
+patchprime_add_test(test_hotplugrecovery test_hotplugrecovery.cpp)
 
 # Needs a running PipeWire server; skips itself when there isn't one.
 patchprime_add_test(test_graphsnapshot test_graphsnapshot.cpp)

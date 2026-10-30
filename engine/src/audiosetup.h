@@ -31,8 +31,8 @@ std::map<std::string, std::string> wantedSettings(const DeviceStore &store);
 // audio pulses (found with a Scarlett 8i6 next to a Fast Track).
 //
 // With the hardware clock and a chosen device, that device gets a driver
-// priority above everything else (it becomes the clock), its card keeps
-// interrupt scheduling, and every other device follows on a timer.
+// priority above everything else (it becomes the clock) and keeps interrupt
+// scheduling; every other node follows on a timer.
 std::string wirePlumberRules(const DeviceStore &store);
 
 // The driver priority given to the chosen clock device.

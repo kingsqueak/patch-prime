@@ -50,25 +50,25 @@ int clockDevicePriority()
 
 std::string wirePlumberRules(const DeviceStore &store)
 {
-    // The chosen clock device's card: its nodes keep interrupt scheduling
-    // (they are the clock); every other device follows on a timer.
+    // The chosen master keeps interrupt scheduling (it is the clock); every
+    // other node follows on a timer, its card's other nodes included: they
+    // follow too whenever the master's node is gone but the card stays (an
+    // HDMI port unplugged, say), and a timer follows the same clock fine.
     const auto *clockDevice = store.clock() == ClockMode::Hardware
                                   ? store.find(store.clockDevice())
                                   : nullptr;
-    const auto clockCard = clockDevice != nullptr ? alsaCardOf(clockDevice->nodeName) : std::string{};
 
     std::string rules;
     for (const auto &[key, s] : store.entries()) {
         if (s.kind != EndpointKind::Hardware || !s.nodeName.starts_with("alsa_")) {
             continue;
         }
-        const bool onClockCard = !clockCard.empty() && alsaCardOf(s.nodeName) == clockCard;
+        const bool isMaster = clockDevice != nullptr && key == store.clockDevice();
         std::vector<std::string> props;
-        // Automatic: a timer for anything that follows another clock. With
-        // the hardware clock but no device chosen, PipeWire picks, so the
-        // device's own default stays.
-        const bool follows = store.clock() == ClockMode::Internal ||
-                             (clockDevice != nullptr && !onClockCard);
+        // Automatic: a timer for anything that follows another clock: every
+        // node but the chosen master (Patch Prime's buses clock the graph
+        // otherwise, and while the master is unplugged).
+        const bool follows = !isMaster;
         const bool timer = s.scheduling == Scheduling::Timer ||
                            (s.scheduling == Scheduling::Auto && follows);
         if (timer || s.scheduling == Scheduling::Interrupt) {

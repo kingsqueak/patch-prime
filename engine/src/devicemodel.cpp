@@ -211,9 +211,21 @@ QVariant DeviceModel::data(const QModelIndex &index, int role) const
         return qs(stageName(stageOfRow(row)));
     case BusNameRole:
         return qs(saved != nullptr && saved->enabled ? busNameFor(e, *saved) : std::string{});
-    case BusDefaultRole:
-        return saved != nullptr && saved->enabled && playsInto(e) && !m_defaultSink.empty() &&
-               m_defaultSink == busNameFor(e, *saved);
+    case BusDefaultRole: {
+        // The strip's bus is the system default output (a sink apps play
+        // into) or the system default input (a source apps record from).
+        if (saved == nullptr || !saved->enabled) {
+            return false;
+        }
+        const auto busClass = busMediaClass(e, *saved);
+        const std::string *name = nullptr;
+        if (busClass == "Audio/Sink") {
+            name = &m_defaultSink;
+        } else if (busClass.starts_with("Audio/Source")) {
+            name = &m_defaultSource;
+        }
+        return name != nullptr && !name->empty() && *name == busNameFor(e, *saved);
+    }
     case SectionStartRole:
         return index.row() == 0 ||
                m_rows[static_cast<std::size_t>(index.row()) - 1].endpoint.direction != e.direction;
@@ -376,25 +388,22 @@ void DeviceModel::setClock(ClockMode clock)
     saveStore();
     Q_EMIT clockChanged();
     Q_EMIT audioSettingsChanged(); // Auto scheduling depends on the clock
-    Q_EMIT settingsChanged({});
 }
 
 void DeviceModel::setClockDevice(const std::string &key)
 {
     const auto *saved = m_store->find(key);
+    // Only an ALSA device can be made the clock (through WirePlumber's ALSA rules).
     if (saved == nullptr || saved->kind != EndpointKind::Hardware ||
+        !saved->nodeName.starts_with("alsa_") ||
         (m_store->clock() == ClockMode::Hardware && m_store->clockDevice() == key)) {
         return;
     }
-    const bool modeChanges = m_store->clock() != ClockMode::Hardware;
     m_store->setClock(ClockMode::Hardware);
     m_store->setClockDevice(key);
     saveStore();
     Q_EMIT clockChanged();
     Q_EMIT audioSettingsChanged();
-    if (modeChanges) {
-        Q_EMIT settingsChanged({}); // buses lose their clock priority
-    }
 }
 
 void DeviceModel::setSampleRate(int rate)

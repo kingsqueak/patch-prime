@@ -166,6 +166,42 @@ void PatchPrimeService::SetDefaultOutput(const QString &key, bool throughMixer)
     }
 }
 
+void PatchPrimeService::SetDefaultInput(const QString &key, bool throughMixer)
+{
+    const int row = rowFor(key);
+    if (row < 0) {
+        return;
+    }
+    const auto &endpoint = m_devices->rows()[static_cast<std::size_t>(row)].endpoint;
+    const auto *settings = m_devices->store().find(endpoint.key);
+    auto fail = [this](const QString &why) {
+        if (calledFromDBus()) {
+            sendErrorReply(QDBusError::Failed, why);
+        }
+    };
+    const auto kind = settings != nullptr ? settings->kind : pp::EndpointKind::Hardware;
+    const bool isSource =
+        (endpoint.direction == pp::Direction::Input && kind == pp::EndpointKind::Hardware) ||
+        kind == pp::EndpointKind::VirtualSource;
+    if (!isSource) {
+        fail(QStringLiteral("not something apps record from: ") + key);
+        return;
+    }
+    if (throughMixer && (settings == nullptr || !settings->enabled)) {
+        fail(QStringLiteral("enable the device first: ") + key);
+        return;
+    }
+    if (!throughMixer && kind != pp::EndpointKind::Hardware) {
+        fail(QStringLiteral(
+            "a virtual device has no device to bypass to; make another strip the default"));
+        return;
+    }
+    const auto name = throughMixer ? pp::busNameFor(endpoint, *settings) : endpoint.nodeName;
+    if (!m_graph->setConfiguredDefault(pp::Direction::Input, name)) {
+        fail(QStringLiteral("PipeWire refused the default device change"));
+    }
+}
+
 void PatchPrimeService::SetMono(const QString &key, bool mono)
 {
     if (const int row = rowFor(key); row >= 0) {
@@ -225,13 +261,15 @@ QString PatchPrimeService::clockNow() const
     }
     const int row = m_devices->rowForKey(store.clockDevice());
     if (row < 0) {
-        return QStringLiteral("PipeWire's choice");
+        return QStringLiteral("Patch Prime"); // no master chosen: the buses outrank the hardware
     }
     const auto index = m_devices->index(row);
     const auto label = m_devices->data(index, pp::DeviceModel::LabelRole).toString();
+    // Unplugged: Patch Prime's buses outrank everything left, so they take
+    // over until the master is back.
     return m_devices->data(index, pp::DeviceModel::OnlineRole).toBool()
                ? label
-               : label + QStringLiteral(" (unplugged: PipeWire's choice)");
+               : QStringLiteral("Patch Prime (%1 is unplugged)").arg(label);
 }
 
 void PatchPrimeService::SetSampleRate(int rate)

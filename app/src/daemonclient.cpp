@@ -229,6 +229,11 @@ void DaemonClient::setDefaultOutput(const QString &key, bool throughMixer)
     call(QStringLiteral("SetDefaultOutput"), {key, throughMixer});
 }
 
+void DaemonClient::setDefaultInput(const QString &key, bool throughMixer)
+{
+    call(QStringLiteral("SetDefaultInput"), {key, throughMixer});
+}
+
 void DaemonClient::setMono(const QString &key, bool mono)
 {
     call(QStringLiteral("SetMono"), {key, mono});
@@ -321,8 +326,10 @@ void DaemonClient::onStateChanged(const QString &state)
     QVariantList choices{QVariantMap{{QStringLiteral("value"), QStringLiteral("internal")},
                                      {QStringLiteral("text"), tr("Patch Prime")}}};
     for (const auto &row : std::as_const(rows)) {
+        // Only ALSA interfaces can be the clock (Bluetooth and the like can't).
         if (row.value(QStringLiteral("kind")).toString() == QLatin1String("hardware") &&
-            row.value(QStringLiteral("isEnabled")).toBool()) {
+            row.value(QStringLiteral("isEnabled")).toBool() &&
+            row.value(QStringLiteral("nodeName")).toString().startsWith(QLatin1String("alsa_"))) {
             choices.append(
                 QVariantMap{{QStringLiteral("value"), row.value(QStringLiteral("key"))},
                             {QStringLiteral("text"), row.value(QStringLiteral("label"))}});

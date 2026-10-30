@@ -45,6 +45,10 @@ QQC2.Control {
     // a virtual microphone, and virtual inputs.
     readonly property bool canBeDefault: (!isInput && kind !== "virtual-source")
                                          || kind === "virtual-input"
+    // What apps record from: hardware inputs (through their bus), and a
+    // virtual microphone.
+    readonly property bool canBeDefaultInput: (isInput && kind === "hardware")
+                                              || kind === "virtual-source"
     readonly property bool hasPairs: kind === "hardware" && channels > 2
 
     implicitWidth: Style.stripWidth
@@ -188,7 +192,12 @@ QQC2.Control {
             }
 
             StripToggle {
-                visible: strip.canBeDefault
+                // Default output for what apps play into; default input
+                // (microphone) for what they record from.
+                readonly property string what: strip.canBeDefault ? qsTr("output") : qsTr("input (microphone)")
+                readonly property string verb: strip.canBeDefault ? qsTr("play through") : qsTr("record")
+
+                visible: strip.canBeDefault || strip.canBeDefaultInput
                 icon.name: strip.busIsDefault ? "starred-symbolic" : "non-starred-symbolic"
                 text: qsTr("Default")
                 // A virtual device has no hardware to bypass to, so it stays
@@ -196,12 +205,13 @@ QQC2.Control {
                 checkable: !(strip.ownVirtual && strip.busIsDefault)
                 on: strip.busIsDefault
                 enabled: Devices.daemonRunning && strip.online
-                onRequested: on => Devices.setDefaultOutput(strip.key, on)
+                onRequested: on => strip.canBeDefault ? Devices.setDefaultOutput(strip.key, on)
+                                                      : Devices.setDefaultInput(strip.key, on)
                 tip: strip.busIsDefault && strip.ownVirtual
-                     ? qsTr("The system default output. Make another strip the default to change that.")
+                     ? qsTr("The system default %1. Make another strip the default to change that.").arg(what)
                      : strip.busIsDefault
-                     ? qsTr("The system default output: apps play through this strip. Click to send them straight to the device instead.")
-                     : qsTr("Make this the system default output, so apps play through this strip.")
+                     ? qsTr("The system default %1: apps %2 this strip. Click to use the device directly instead.").arg(what).arg(verb)
+                     : qsTr("Make this the system default %1, so apps %2 this strip.").arg(what).arg(verb)
             }
         }
 

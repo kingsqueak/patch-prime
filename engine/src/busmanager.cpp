@@ -167,13 +167,8 @@ std::string busDescription(const Endpoint &endpoint, const DeviceSettings &setti
            name;
 }
 
-int busDriverPriority(ClockMode clock)
-{
-    return clock == ClockMode::Internal ? 20000 : 0;
-}
-
 Properties busProperties(const Endpoint &endpoint, const DeviceSettings &settings,
-                         const std::string &owner, ClockMode clock)
+                         const std::string &owner)
 {
     const auto positions = busPositions(endpoint);
     return {
@@ -190,7 +185,7 @@ Properties busProperties(const Endpoint &endpoint, const DeviceSettings &setting
         {"object.linger", "true"},
         // Low priority so WirePlumber never picks a bus as the default device.
         {"priority.session", "0"},
-        {"priority.driver", std::to_string(busDriverPriority(clock))},
+        {"priority.driver", std::to_string(busDriverPriority)},
         {"patchprime.key", endpoint.key},
         {"patchprime.owner", owner},
     };
@@ -410,7 +405,14 @@ void BusManager::reconcile()
         if (wanted.contains(name) || sends.contains(name)) {
             continue;
         }
-        if (name == m_graph->defaultSinkName()) {
+        // A bus that is the system default output or input hands the default
+        // back to its hardware first; otherwise WirePlumber picks a device.
+        for (const auto direction : {Direction::Output, Direction::Input}) {
+            const auto &current = direction == Direction::Output ? m_graph->defaultSinkName()
+                                                                 : m_graph->defaultSourceName();
+            if (name != current) {
+                continue;
+            }
             const auto &key = prop(m_graph->nodes().at(id), "patchprime.key");
             const int row = m_devices->rowForKey(key);
             // A virtual device has no hardware to hand back to; WirePlumber then
@@ -418,8 +420,7 @@ void BusManager::reconcile()
             if (row >= 0 && m_devices->rows()[static_cast<std::size_t>(row)].nodeId &&
                 m_devices->rows()[static_cast<std::size_t>(row)].endpoint.nodeName != name) {
                 m_graph->setConfiguredDefault(
-                    Direction::Output,
-                    m_devices->rows()[static_cast<std::size_t>(row)].endpoint.nodeName);
+                    direction, m_devices->rows()[static_cast<std::size_t>(row)].endpoint.nodeName);
             }
         }
         qCInfo(lcBus, "removing bus %s", name.c_str());
@@ -434,8 +435,7 @@ void BusManager::reconcile()
         if (it == existing.end()) {
             if (!m_pendingBuses.contains(name) && mayCreate(name, now)) {
                 qCInfo(lcBus, "creating bus %s for %s", name.c_str(), w.key.c_str());
-                if (m_graph->createNode(busProperties(w.endpoint, *w.settings, m_owner,
-                                                      m_devices->store().clock()))) {
+                if (m_graph->createNode(busProperties(w.endpoint, *w.settings, m_owner))) {
                     m_pendingBuses[name] = now;
                 }
             }
@@ -447,14 +447,13 @@ void BusManager::reconcile()
         const auto &node = m_graph->nodes().at(busId);
 
         // A bus made with different settings (an older version, a changed
-        // channel count, a renamed virtual device, another clock mode) is
+        // channel count, a renamed virtual device, an older driver priority) is
         // replaced. WirePlumber keeps it as the default if it was, since the
         // name stays the same.
         const auto channels = busPositions(w.endpoint).size();
         const bool stale =
             prop(node, "media.class") != busMediaClass(w.endpoint, *w.settings) ||
-            prop(node, "priority.driver") !=
-                std::to_string(busDriverPriority(m_devices->store().clock())) ||
+            prop(node, "priority.driver") != std::to_string(busDriverPriority) ||
             parseId(prop(node, "audio.channels")) != channels ||
             (w.settings->kind != EndpointKind::Hardware &&
              prop(node, "node.description") != busDescription(w.endpoint, *w.settings));

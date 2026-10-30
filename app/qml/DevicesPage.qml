@@ -145,7 +145,7 @@ Kirigami.ScrollablePage {
                     model: Devices.clockChoices
                     currentIndex: Devices.clock === "hardware"
                                   ? model.findIndex(c => c.value === Devices.clockDevice) : 0
-                    displayText: currentIndex >= 0 ? currentText : qsTr("Hardware (PipeWire's choice)")
+                    displayText: currentIndex >= 0 ? currentText : qsTr("Patch Prime")
                     onActivated: {
                         if (currentValue === "internal")
                             Devices.setClock("internal");
@@ -165,7 +165,7 @@ Kirigami.ScrollablePage {
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
                     text: Devices.clock === "hardware"
-                        ? qsTr("That interface is the master clock: the others follow it on timer scheduling. Unplugging it briefly stops all audio, and some apps pause.")
+                        ? qsTr("That interface is the master clock: the others follow it on timer scheduling. If it's unplugged, Patch Prime keeps time until it's back.")
                         : qsTr("Patch Prime keeps time itself, so unplugging any interface doesn't interrupt the others. Interfaces follow it with PipeWire's rate matching.")
                 }
 

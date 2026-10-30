@@ -89,8 +89,7 @@ const GraphObject *nodeNamed(const PipeWireGraph &graph, const std::string &name
     return nullptr;
 }
 
-std::ptrdiff_t linkCount(const PipeWireGraph &graph, const std::string &from,
-                         const std::string &to)
+std::ptrdiff_t linkCount(const PipeWireGraph &graph, const std::string &from, const std::string &to)
 {
     const auto *a = nodeNamed(graph, from);
     const auto *b = nodeNamed(graph, to);
@@ -135,9 +134,13 @@ private Q_SLOTS:
         }
         // The default metadata can arrive after the nodes; without it there'd
         // be nothing to put back in cleanupTestCase().
-        [[maybe_unused]] const bool haveDefault =
-            QTest::qWaitFor([this] { return !m_graph.defaultSinkName().empty(); }, 2000);
+        [[maybe_unused]] const bool haveDefault = QTest::qWaitFor(
+            [this] {
+                return !m_graph.defaultSinkName().empty() && !m_graph.defaultSourceName().empty();
+            },
+            2000);
         m_originalDefault = m_graph.defaultSinkName();
+        m_originalSource = m_graph.defaultSourceName();
 
         m_sinkName = "pp_bus_test_" + std::to_string(QCoreApplication::applicationPid());
         m_module = QString::fromUtf8(
@@ -150,8 +153,15 @@ private Q_SLOTS:
 
     void cleanupTestCase()
     {
-        // Put the user's default output back, whatever happened.
-        if (!m_originalDefault.empty() && m_graph.defaultSinkName() != m_originalDefault) {
+        // Put the user's defaults back, whatever happened. Always written: a
+        // test device that has gone leaves PipeWire's effective default
+        // looking right while the configured one still names it.
+        if (!m_originalSource.empty()) {
+            m_graph.setConfiguredDefault(Direction::Input, m_originalSource);
+            [[maybe_unused]] const bool restored = QTest::qWaitFor(
+                [this] { return m_graph.defaultSourceName() == m_originalSource; }, 3000);
+        }
+        if (!m_originalDefault.empty()) {
             m_graph.setConfiguredDefault(Direction::Output, m_originalDefault);
             [[maybe_unused]] const bool restored = QTest::qWaitFor(
                 [this] { return m_graph.defaultSinkName() == m_originalDefault; }, 3000);
@@ -291,18 +301,19 @@ private Q_SLOTS:
             return node != nullptr ? prop(*node, "priority.driver") : std::string{};
         };
 
-        // The internal clock is the default: the bus outranks any hardware as
-        // the graph driver. The hardware clock rebuilds it without that, and
-        // it's linked to its device again.
+        // The bus outranks any hardware as the graph driver in both clock
+        // modes, so changing the mode doesn't rebuild it: a chosen master
+        // interface outranks it through WirePlumber rules instead, and when
+        // that interface is unplugged the buses take over by themselves.
         QVERIFY(QTest::qWaitFor([&] { return driverPriority() == "20000"; }, 5000));
+        const auto busId = nodeNamed(m_graph, bus)->id;
         devices.setClock(ClockMode::Hardware);
-        QVERIFY(QTest::qWaitFor(
-            [&] {
-                return driverPriority() == "0" &&
-                       linkCount(m_graph, bus, m_sinkName) == 2;
-            },
-            5000));
+        QTest::qWait(300);
         QCOMPARE(store.clock(), ClockMode::Hardware);
+        QVERIFY(nodeNamed(m_graph, bus) != nullptr);
+        QCOMPARE(nodeNamed(m_graph, bus)->id, busId); // same node: not rebuilt
+        QCOMPARE(driverPriority(), "20000");
+        QCOMPARE(linkCount(m_graph, bus, m_sinkName), 2);
 
         devices.setEnabled(devices.rowForKey(key), false);
         QVERIFY(QTest::qWaitFor([&] { return nodeNamed(m_graph, bus) == nullptr; }, 5000));
@@ -470,8 +481,7 @@ private Q_SLOTS:
         // Collects for the whole time: the peak is checked afterwards.
         [[maybe_unused]] const bool never = QTest::qWaitFor(
             [&] {
-                if (const auto levels = buses.takeLevels();
-                    levels.contains(mixKey.toStdString())) {
+                if (const auto levels = buses.takeLevels(); levels.contains(mixKey.toStdString())) {
                     for (const float level : levels.at(mixKey.toStdString())) {
                         mixPeak = std::max(mixPeak, level);
                     }
@@ -502,7 +512,30 @@ private Q_SLOTS:
         devices.setSend(devices.rowForKey(micKey), mixKey, false);
         QVERIFY(QTest::qWaitFor([&] { return nodeNamed(m_graph, send) == nullptr; }, 5000));
         devices.forget(devices.rowForKey(mixKey.toStdString()));
-        devices.setEnabled(devices.rowForKey(micKey), false);
+
+        // The input bus as the system microphone; disabling the strip hands
+        // the default back to the (fake) mic itself. Only when there's a
+        // default microphone to put back afterwards.
+        if (m_originalSource.empty()) {
+            devices.setEnabled(devices.rowForKey(micKey), false);
+        } else {
+            m_graph.setConfiguredDefault(Direction::Input, inBus);
+            QVERIFY(QTest::qWaitFor([&] { return m_graph.defaultSourceName() == inBus; }, 5000));
+            QVERIFY(QTest::qWaitFor(
+                [&] {
+                    return devices
+                        .data(devices.index(devices.rowForKey(micKey)), DeviceModel::BusDefaultRole)
+                        .toBool();
+                },
+                5000));
+            devices.setEnabled(devices.rowForKey(micKey), false);
+            QVERIFY(QTest::qWaitFor([&] { return m_graph.defaultSourceName() == mic; }, 5000));
+            // Put the user's microphone back now: once the fake mic is gone,
+            // PipeWire falls back on its own and the stale setting would linger.
+            m_graph.setConfiguredDefault(Direction::Input, m_originalSource);
+            QVERIFY(QTest::qWaitFor(
+                [this] { return m_graph.defaultSourceName() == m_originalSource; }, 3000));
+        }
         QVERIFY(QTest::qWaitFor(
             [&] { return !nodeNamed(m_graph, inBus) && !nodeNamed(m_graph, mixNode); }, 5000));
     }
@@ -664,6 +697,7 @@ private:
     std::string m_sinkName;
     std::string m_busName;
     std::string m_originalDefault;
+    std::string m_originalSource;
     std::set<std::string> m_owners;
     QString m_module;
 };

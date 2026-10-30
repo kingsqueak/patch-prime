@@ -50,7 +50,7 @@ public:
         VolumeRole,       // fader position in dB; minimumVolumeDb() means silent
         MutedRole,
         BusIdRole,
-        BusDefaultRole,  // this output's bus is the system default output
+        BusDefaultRole,  // the strip's bus is the system default output or input
         KindRole,        // "hardware", "virtual-sink", "virtual-source" or "virtual-input"
         SendsRole,       // inputs: keys of the outputs this input is sent to
         MonoRole,        // inputs: mixed down to one channel

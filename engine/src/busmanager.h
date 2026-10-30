@@ -59,12 +59,15 @@ std::vector<std::string> busPositions(const Endpoint &endpoint);
 // The node props for an endpoint's bus: a null sink that never links itself,
 // lingers after the daemon exits, and applies its volume to its monitor.
 // `owner` tags the bus with the settings it belongs to (see BusManager).
-// With the internal clock, buses get a driver priority above any hardware
-// (ALSA devices use about 1000-2600), so one of them clocks the graph.
-int busDriverPriority(ClockMode clock);
+// Buses have a driver priority above any hardware (ALSA devices use about
+// 1000-2600), so one of them clocks the graph, in both clock modes: a chosen
+// master interface gets more (clockDevicePriority() in audiosetup.h) and
+// wins while it's plugged in; when it's unplugged, the buses take over by
+// themselves, and hand back when it returns.
+constexpr int busDriverPriority = 20000;
 
 Properties busProperties(const Endpoint &endpoint, const DeviceSettings &settings,
-                         const std::string &owner = {}, ClockMode clock = ClockMode::Hardware);
+                         const std::string &owner = {});
 
 // The node that is an endpoint's bus: patchprime.bus.* for hardware,
 // patchprime.virtual.* for a virtual device (which is its own bus).

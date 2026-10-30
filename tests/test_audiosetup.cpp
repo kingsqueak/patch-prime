@@ -58,11 +58,12 @@ private Q_SLOTS:
         QVERIFY(!rules.contains("bluez"));
         QVERIFY(!rules.contains("patchprime.virtual"));
 
-        // A hardware clock: automatic leaves the device's own default.
+        // The hardware clock with no master chosen: Patch Prime's buses still
+        // clock the graph, so everything follows on a timer.
         store.setClock(ClockMode::Hardware);
         rules = wirePlumberRules(store);
-        QVERIFY(!rules.contains("Scarlett"));
-        QVERIFY(rules.contains("alsa_output.pci.pro-output-0"));
+        QVERIFY(rules.contains("node.name = \"alsa_input.usb-Scarlett.pro-input-0\" } ]\n"
+                               "    actions = { update-props = { api.alsa.disable-tsched = false } }"));
     }
 
     void clockDevice()
@@ -83,12 +84,13 @@ private Q_SLOTS:
         store.setClock(ClockMode::Hardware);
         store.setClockDevice(scarlettIn);
 
-        // The Scarlett is the clock: top priority, and its card stays on
-        // interrupts; the Fast Track follows on a timer.
+        // The Scarlett input is the clock: top priority, and it keeps
+        // interrupts; everything else follows on a timer, its own output too.
         const auto rules = wirePlumberRules(store);
         QVERIFY(rules.contains("\"alsa_input.usb-Scarlett-00.pro-input-0\" } ]\n"
                                "    actions = { update-props = { priority.driver = 30000 } }"));
-        QVERIFY(!rules.contains("alsa_output.usb-Scarlett-00.pro-output-0")); // nothing to change
+        QVERIFY(rules.contains("\"alsa_output.usb-Scarlett-00.pro-output-0\" } ]\n"
+                               "    actions = { update-props = { api.alsa.disable-tsched = false } }"));
         QVERIFY(rules.contains("\"alsa_input.usb-FastTrack-00.pro-input-0\" } ]\n"
                                "    actions = { update-props = { api.alsa.disable-tsched = false } }"));
 

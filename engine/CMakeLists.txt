@@ -19,6 +19,8 @@ add_library(patchprime-engine STATIC
     src/graphsnapshot.cpp
     src/graphsnapshot.h
     src/graphtypes.h
+    src/hotplugrecovery.cpp
+    src/hotplugrecovery.h
     src/pipewiregraph.cpp
     src/pipewiregraph.h)
 add_library(PatchPrime::Engine ALIAS patchprime-engine)
