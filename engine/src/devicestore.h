@@ -179,6 +179,10 @@ public:
     // With the hardware clock: the key of the device that is the clock.
     [[nodiscard]] const std::string &clockDevice() const { return m_clockDevice; }
     void setClockDevice(std::string key) { m_clockDevice = std::move(key); }
+    // The output that cue (solo in the headphones) plays to: a hardware
+    // output's key, or empty for none.
+    [[nodiscard]] const std::string &cueOutput() const { return m_cueOutput; }
+    void setCueOutput(std::string key) { m_cueOutput = std::move(key); }
     // The mixer's sample rate (Hz) and block size (frames; 0 = PipeWire picks).
     [[nodiscard]] int sampleRate() const { return m_sampleRate; }
     void setSampleRate(int rate) { m_sampleRate = rate; }
@@ -205,6 +209,7 @@ private:
     QString m_lastError;
     ClockMode m_clock = ClockMode::Internal;
     std::string m_clockDevice;
+    std::string m_cueOutput;
     int m_sampleRate = defaultSampleRate;
     int m_blockSize = 0;
     std::map<std::string, DeviceSettings> m_entries;

@@ -207,6 +207,8 @@ QVariant DeviceModel::data(const QModelIndex &index, int role) const
     }
     case DeviceRateRole:
         return saved != nullptr ? saved->sampleRate : 0;
+    case CuedRole:
+        return m_cued.contains(e.key);
     case EffectsRole:
         return saved != nullptr ? effectsToJson(saved->effects).toVariantList() : QVariantList{};
     case SchedulingRole:
@@ -266,6 +268,7 @@ QHash<int, QByteArray> DeviceModel::roleNames() const
         {DeviceRateRole, "deviceRate"},
         {SchedulingRole, "scheduling"},
         {EffectsRole, "effects"},
+        {CuedRole, "cued"},
         {ChannelPairRole, "channelPair"},
         {SendsRole, "sends"},
         {MonoRole, "mono"},
@@ -350,6 +353,12 @@ void DeviceModel::forget(int row)
     if (!m_store->remove(r.endpoint.key)) {
         return;
     }
+    m_cued.erase(r.endpoint.key);
+    if (m_store->cueOutput() == r.endpoint.key) {
+        m_store->setCueOutput({});
+        m_cued.clear();
+        Q_EMIT cueChanged();
+    }
     saveStore();
     Q_EMIT settingsChanged(key);
     // A virtual device exists only through its entry, so it goes entirely.
@@ -409,6 +418,48 @@ void DeviceModel::setClockDevice(const std::string &key)
     saveStore();
     Q_EMIT clockChanged();
     Q_EMIT audioSettingsChanged();
+}
+
+void DeviceModel::setCueOutput(const std::string &key)
+{
+    if (!key.empty()) {
+        const auto *saved = m_store->find(key);
+        if (saved == nullptr || saved->kind != EndpointKind::Hardware ||
+            saved->direction != Direction::Output) {
+            return; // cue plays to a hardware output's device directly
+        }
+    }
+    if (key == m_store->cueOutput()) {
+        return;
+    }
+    m_store->setCueOutput(key);
+    saveStore();
+    if (key.empty() && !m_cued.empty()) {
+        m_cued.clear();
+        if (!m_rows.empty()) {
+            Q_EMIT dataChanged(index(0), index(rowCount() - 1), {CuedRole});
+        }
+    }
+    Q_EMIT cueChanged();
+}
+
+void DeviceModel::setCue(int row, bool cued)
+{
+    if (row < 0 || row >= rowCount() || m_store->cueOutput().empty()) {
+        return;
+    }
+    const auto &key = m_rows[static_cast<std::size_t>(row)].endpoint.key;
+    if (key == m_store->cueOutput() || m_cued.contains(key) == cued) {
+        return;
+    }
+    if (cued) {
+        m_cued.insert(key);
+    } else {
+        m_cued.erase(key);
+    }
+    const auto i = index(row);
+    Q_EMIT dataChanged(i, i, {CuedRole});
+    Q_EMIT cueChanged();
 }
 
 void DeviceModel::setSampleRate(int rate)

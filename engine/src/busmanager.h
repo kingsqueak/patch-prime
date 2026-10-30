@@ -177,6 +177,8 @@ private:
 //   mix bus  sends ──► [virtual sink] ──monitor──► sends
 //   output   sends ──► [bus] ──monitor──links──► hardware sink
 //   send     [bus] ──monitor──► [send node] ──monitor──► [bus]
+//   cue      (any strip's output) ──links──► the cue output's hardware,
+//            while that output's own bus is muted
 //   effects  hardware source ──► [fx filter] ──► [bus]           (inputs)
 //            [bus] ──monitor──► [fx filter] ──► hardware, sends  (the rest)
 //
@@ -218,6 +220,13 @@ public:
 
     // Peaks per endpoint key since the last call (linear, per channel).
     std::map<std::string, std::vector<float>> takeLevels();
+    // RMS per channel (linear) and short-term loudness (LUFS) now, per key.
+    struct Loudness
+    {
+        std::vector<float> rms;
+        float lufs = -70.0F;
+    };
+    [[nodiscard]] std::map<std::string, Loudness> loudness() const;
     // Effects' own meters since the last call (see Effect::takeMeters), by
     // endpoint key and effect index; only effects that have meters.
     std::map<std::pair<std::string, std::size_t>, std::vector<float>> takeEffectMeters();
@@ -284,6 +293,12 @@ private:
                       const LinkMap &existingLinks);
     void link(const std::vector<PortRef> &outputs, const std::vector<PortRef> &inputs,
               const LinkMap &existingLinks);
+    // Cue: links each cued strip's output straight to the cue output's
+    // hardware (its bus is muted meanwhile, see reconcile()), and removes
+    // cue links that no longer apply.
+    void linkCue(const std::map<std::string, Wanted> &wanted,
+                 const std::map<std::string, std::vector<PortRef>> &stripOuts,
+                 const LinkMap &existingLinks);
     // Feeds each effects node's key input from the strips its duckers
     // listen to (their outputs, summed), and removes other links into it.
     void linkKeys(const std::map<std::string, FxPorts> &fx,
@@ -318,6 +333,9 @@ private:
     // Meter per bus node name, and the endpoint key it reports for.
     std::map<std::string, std::pair<std::string, std::shared_ptr<MeterLevels>>> m_meters;
     std::map<std::string, Fx> m_effects;
+    // The hardware node cue last played to, so its links can be cleaned up
+    // when cue moves elsewhere or is turned off.
+    std::optional<std::uint32_t> m_cueHardware;
 };
 
 } // namespace pp

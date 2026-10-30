@@ -62,6 +62,42 @@ RowLayout {
         Layout.fillWidth: true
     }
 
+    // Cue: which hardware output the strips' C buttons play to.
+    QQC2.Label {
+        text: qsTr("Cue:")
+    }
+    QQC2.ComboBox {
+        id: cueChoice
+
+        readonly property var outputs: {
+            const list = [{ key: "", label: qsTr("Off") }];
+            for (let i = 0; i < cueOutputs.count; ++i) {
+                const strip = cueOutputs.get(i);
+                if (strip.kind === "hardware")
+                    list.push({ key: strip.key, label: strip.label });
+            }
+            return list;
+        }
+
+        Layout.preferredWidth: Kirigami.Units.gridUnit * 9
+        enabled: Devices.daemonRunning
+        model: outputs
+        textRole: "label"
+        valueRole: "key"
+        currentIndex: Math.max(0, outputs.findIndex(o => o.key === Devices.cueOutput))
+        onActivated: Devices.setCueOutput(currentValue)
+        Accessible.name: qsTr("Cue output")
+        QQC2.ToolTip.text: qsTr("Where cue plays: usually your headphones. Then a strip's C button lets you hear it there alone, without changing the mix.")
+        QQC2.ToolTip.visible: hovered
+        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+
+        StripFilter {
+            id: cueOutputs
+            sourceModel: Devices
+            stages: ["output"]
+        }
+    }
+
     QQC2.Label {
         visible: Devices.currentScene.length > 0
         text: qsTr("Current: %1").arg(Devices.currentScene)

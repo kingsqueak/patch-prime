@@ -38,6 +38,7 @@ PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *
     connect(devices, &pp::DeviceModel::connectedChanged, this, &PatchPrimeService::scheduleState);
     connect(apps, &pp::AppRouter::changed, this, &PatchPrimeService::scheduleState);
     connect(devices, &pp::DeviceModel::clockChanged, this, &PatchPrimeService::scheduleState);
+    connect(devices, &pp::DeviceModel::cueChanged, this, &PatchPrimeService::scheduleState);
     connect(devices, &pp::DeviceModel::audioSettingsChanged, this,
             &PatchPrimeService::scheduleState);
 
@@ -116,6 +117,7 @@ QString PatchPrimeService::GetState() const
         {QStringLiteral("clock"),
          QString::fromStdString(pp::clockModeName(m_devices->store().clock()))},
         {QStringLiteral("clockDevice"), QString::fromStdString(m_devices->store().clockDevice())},
+        {QStringLiteral("cueOutput"), QString::fromStdString(m_devices->store().cueOutput())},
         {QStringLiteral("clockNow"), clockNow()},
         {QStringLiteral("sampleRate"), m_devices->store().sampleRate()},
         {QStringLiteral("scenes"), QJsonArray::fromStringList(m_scenes->names())},
@@ -389,6 +391,18 @@ void PatchPrimeService::SetEffectParam(const QString &key, int index, const QStr
     }
 }
 
+void PatchPrimeService::SetCueOutput(const QString &key)
+{
+    m_devices->setCueOutput(key.toStdString());
+}
+
+void PatchPrimeService::SetCue(const QString &key, bool cued)
+{
+    if (const int row = rowFor(key); row >= 0) {
+        m_devices->setCue(row, cued);
+    }
+}
+
 void PatchPrimeService::SetEffectKey(const QString &key, int index, const QString &sourceKey)
 {
     if (const int row = rowFor(key); row >= 0) {
@@ -522,6 +536,13 @@ void PatchPrimeService::emitLevels()
             values.append(static_cast<double>(peak));
         }
         levels.insert(QString::fromStdString(key), QVariant::fromValue(values));
+    }
+    for (const auto &[key, values] : m_buses->loudness()) {
+        const auto name = QString::fromStdString(key);
+        levels.insert(QStringLiteral("rms|") + name,
+                      QVariant::fromValue(QList<double>(values.rms.begin(), values.rms.end())));
+        levels.insert(QStringLiteral("lufs|") + name,
+                      QVariant::fromValue(QList<double>{static_cast<double>(values.lufs)}));
     }
     for (const auto &[at, meters] : m_buses->takeEffectMeters()) {
         QList<double> values(meters.begin(), meters.end());

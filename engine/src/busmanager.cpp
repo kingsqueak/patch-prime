@@ -337,6 +337,7 @@ BusManager::BusManager(PipeWireGraph *graph, DeviceModel *devices, QObject *pare
     });
     connect(graph, &PipeWireGraph::connectedChanged, this, &BusManager::onConnectedChanged);
     connect(devices, &DeviceModel::settingsChanged, this, &BusManager::scheduleReconcile);
+    connect(devices, &DeviceModel::cueChanged, this, &BusManager::scheduleReconcile);
     scheduleReconcile();
 }
 
@@ -434,6 +435,16 @@ std::map<std::string, std::vector<float>> BusManager::takeLevels()
     std::map<std::string, std::vector<float>> out;
     for (const auto &[name, meter] : m_meters) {
         out[meter.first] = meter.second->take();
+    }
+    return out;
+}
+
+std::map<std::string, BusManager::Loudness> BusManager::loudness() const
+{
+    std::map<std::string, Loudness> out;
+    for (const auto &[name, meter] : m_meters) {
+        out[meter.first] = {.rms = meter.second->rmsNow(),
+                            .lufs = meter.second->loudness.load(std::memory_order_relaxed)};
     }
     return out;
 }
@@ -668,7 +679,10 @@ void BusManager::reconcile()
         }
         ready[name] = busId;
 
-        applyVolume(busId, channels, w.settings->volumeDb, w.settings->muted); // fader and mute
+        // Fader and mute; the cue output is muted while something is cued
+        // (the headphones then hear only the cue).
+        const bool cueing = !m_devices->cued().empty() && w.key == m_devices->store().cueOutput();
+        applyVolume(busId, channels, w.settings->volumeDb, w.settings->muted || cueing);
 
         if (m_metering && !m_meters.contains(name)) {
             const bool sink = busMediaClass(w.endpoint, *w.settings) == "Audio/Sink";
@@ -715,6 +729,7 @@ void BusManager::reconcile()
 
     linkSends(ready, stripOuts, wanted, sends, readySends, existingLinks);
     linkKeys(fx, wanted, stripOuts, existingLinks);
+    linkCue(wanted, stripOuts, existingLinks);
 
     // Meters whose bus is gone or no longer wanted.
     for (auto it = m_meters.begin(); it != m_meters.end();) {
@@ -909,6 +924,73 @@ BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
         }
     }
     return up;
+}
+
+void BusManager::linkCue(const std::map<std::string, Wanted> &wanted,
+                         const std::map<std::string, std::vector<PortRef>> &stripOuts,
+                         const LinkMap &existingLinks)
+{
+    const auto &cueKey = m_devices->store().cueOutput();
+    const auto cue = std::ranges::find_if(
+        wanted, [&cueKey](const auto &entry) { return entry.second.key == cueKey; });
+    const bool usable = !cueKey.empty() && cue != wanted.end() && cue->second.hardwareNodeId &&
+                        cue->second.settings->kind == EndpointKind::Hardware;
+    const std::optional<std::uint32_t> hardwareNode =
+        usable ? cue->second.hardwareNodeId : std::nullopt;
+
+    // Every strip's output port except the cue output's own (its path to its
+    // hardware is linkHardware()'s), and the ones that should be heard.
+    std::set<std::uint32_t> stripPorts;
+    std::set<std::uint32_t> desired;
+    for (const auto &[name, ports] : stripOuts) {
+        if (usable && name == cue->first) {
+            continue;
+        }
+        const bool cued = usable && m_devices->cued().contains(wanted.at(name).key);
+        for (const auto &p : ports) {
+            stripPorts.insert(p.portId);
+            if (cued) {
+                desired.insert(p.portId);
+            }
+        }
+        if (cued && hardwareNode) {
+            link(ports,
+                 selectPair(portsOf(*hardwareNode, "in", false), cue->second.settings->channelPair),
+                 existingLinks);
+        }
+    }
+
+    // Links from strips into the cue hardware (now or before) that nobody cues.
+    std::set<std::uint32_t> cleanNodes;
+    if (hardwareNode) {
+        cleanNodes.insert(*hardwareNode);
+    }
+    if (m_cueHardware && m_cueHardware != hardwareNode) {
+        cleanNodes.insert(*m_cueHardware);
+    }
+    for (const auto node : cleanNodes) {
+        std::set<std::uint32_t> inputs;
+        for (const auto &p : portsOf(node, "in", false)) {
+            inputs.insert(p.portId);
+        }
+        // The strip that owns this device keeps its own path to it.
+        std::set<std::uint32_t> own;
+        for (const auto &[name, w] : wanted) {
+            if (w.hardwareNodeId == node && stripOuts.contains(name)) {
+                for (const auto &p : stripOuts.at(name)) {
+                    own.insert(p.portId);
+                }
+            }
+        }
+        for (const auto &[pair, linkId] : existingLinks) {
+            if (inputs.contains(pair.second) && stripPorts.contains(pair.first) &&
+                !own.contains(pair.first) &&
+                (node != hardwareNode || !desired.contains(pair.first))) {
+                m_graph->destroyObject(linkId);
+            }
+        }
+    }
+    m_cueHardware = hardwareNode;
 }
 
 void BusManager::linkKeys(const std::map<std::string, FxPorts> &fx,

@@ -5,6 +5,7 @@
 #include "devicemodel.h"
 #include "devicestore.h"
 #include "effects.h"
+#include "delay.h"
 #include "dynamics.h"
 #ifdef PATCHPRIME_HAVE_RNNOISE
 #include "denoise.h"
@@ -617,6 +618,47 @@ private Q_SLOTS:
         QVERIFY2(peak < 8.0F, qPrintable(QString::number(peak)));
     }
 
+    void delayLinesUp()
+    {
+        // 0 ms: untouched.
+        DelayEffect none;
+        none.prepare(rate, 2);
+        Buffers same(1000, 0.3F);
+        none.process(same.planes.data(), 2, 1000);
+        QVERIFY(std::ranges::all_of(same.left, [](float v) { return v == 0.3F; }));
+        // 10 ms: an impulse comes out 480 samples later.
+        DelayEffect late;
+        late.setParam("time", 10.0);
+        late.prepare(rate, 2);
+        Buffers impulse(2000, 0.0F);
+        impulse.left[5] = 1.0F;
+        late.process(impulse.planes.data(), 2, 2000);
+        QCOMPARE(impulse.left[485], 1.0F);
+        QCOMPARE(std::ranges::count_if(impulse.left, [](float v) { return v != 0.0F; }), 1);
+        // Changing the time on a running tone: a crossfade, not a jump.
+        DelayEffect moving;
+        moving.prepare(rate, 1);
+        std::vector<float> tone(48000);
+        for (std::size_t i = 0; i < tone.size(); ++i) {
+            tone[i] = static_cast<float>(0.5 * std::sin(2.0 * M_PI * 100.0 * static_cast<double>(i) / rate));
+        }
+        float previous = 0.0F;
+        float worst = 0.0F;
+        for (std::size_t start = 0; start < tone.size(); start += 480) {
+            if (start == 9600) {
+                moving.setParam("time", 3.3);
+            }
+            float *plane = tone.data() + start; // NOLINT
+            moving.process(&plane, 1, 480);
+            for (std::size_t i = start; i < start + 480; ++i) {
+                worst = std::max(worst, std::abs(tone[i] - previous));
+                previous = tone[i];
+            }
+        }
+        // A 100 Hz tone at 0.5 moves at most ~0.0066 per sample.
+        QVERIFY2(worst < 0.02F, qPrintable(QString::number(worst)));
+    }
+
     void keyLoopsAreFound()
     {
         const std::map<std::string, std::vector<std::string>> sends{
@@ -678,6 +720,47 @@ private Q_SLOTS:
         QVERIFY(!updateChain(*chain, effects));
         QCOMPARE(effectsNodeName("patchprime.out.maudio-1"), "patchprime.fx.out.maudio-1");
         QCOMPARE(effectsNodeName("patchprime.desktop"), "patchprime.fx.desktop");
+    }
+
+    void cueChoices()
+    {
+        QTemporaryDir dir;
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel model(&store);
+        const auto node = [](std::uint32_t id, const std::string &cls, const std::string &name) {
+            return GraphObject{.id = id,
+                               .type = "PipeWire:Interface:Node",
+                               .version = 3,
+                               .props = {{"media.class", cls},
+                                         {"node.name", name},
+                                         {"node.description", name},
+                                         {"audio.channels", "2"}}};
+        };
+        model.upsertNode(node(10, "Audio/Sink", "phones"), nullptr);
+        model.upsertNode(node(11, "Audio/Source", "mic"), nullptr);
+        const auto mic = [&] { return model.rowForKey("Audio/Source|mic"); };
+        model.setEnabled(mic(), true);
+        model.setEnabled(model.rowForKey("Audio/Sink|phones"), true);
+        // No cue output yet: nothing can be cued.
+        model.setCue(mic(), true);
+        QVERIFY(model.cued().empty());
+        // Only a hardware output can be the cue output.
+        model.setCueOutput("Audio/Source|mic");
+        QVERIFY(store.cueOutput().empty());
+        model.setCueOutput("Audio/Sink|phones");
+        QCOMPARE(store.cueOutput(), "Audio/Sink|phones");
+        model.setCue(mic(), true);
+        model.setCue(model.rowForKey("Audio/Sink|phones"), true); // not itself
+        QCOMPARE(model.cued(), std::set<std::string>{"Audio/Source|mic"});
+        QVERIFY(model.data(model.index(mic()), DeviceModel::CuedRole).toBool());
+        // Saved: the output, not what's cued.
+        QVERIFY(store.save());
+        DeviceStore again(store.path());
+        QVERIFY(again.load());
+        QCOMPARE(again.cueOutput(), "Audio/Sink|phones");
+        // Cue off: every cue cleared.
+        model.setCueOutput({});
+        QVERIFY(model.cued().empty());
     }
 
     void modelEditsChain()

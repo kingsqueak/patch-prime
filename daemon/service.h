@@ -29,6 +29,8 @@ class PipeWireGraph;
 //
 // Levels(a{sv}) maps a device key to its per-channel peaks (ad, linear) about
 // 30 times a second, only while at least one client has called WatchLevels().
+// Also "rms|<device key>" -> RMS per channel (ad, linear, ~300 ms) and
+// "lufs|<device key>" -> [short-term loudness in LUFS, ~3 s, K-weighted].
 // Effects with meters add "fx|<device key>|<effect index>" -> their values
 // (ad; the multiband compressor's gain reduction per band, in dB).
 class PatchPrimeService : public QObject, protected QDBusContext
@@ -94,6 +96,12 @@ public Q_SLOTS:
     void SetEffectParam(const QString &key, int index, const QString &name, double value);
     // The strip an effect listens to (a ducker's key): its key, or "" for none.
     void SetEffectKey(const QString &key, int index, const QString &sourceKey);
+    // Cue (solo in the headphones): the hardware output it plays to (a key,
+    // "" for none; in the state as "cueOutput"), and whether a strip is cued
+    // (per device as "cued"). While anything is cued, the cue output plays
+    // only the cued strips. Not saved for strips, not part of scenes.
+    void SetCueOutput(const QString &key);
+    void SetCue(const QString &key, bool cued);
     // kind: "sink" (apps play into it; record its monitor, e.g. "Stream Mix"),
     // "source" (apps record from it like a microphone, e.g. "Chat Mic") or
     // "input" (apps play into it, and it's routed like an input, e.g. "Desktop").

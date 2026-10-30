@@ -11,6 +11,7 @@
 
 #include <functional>
 #include <optional>
+#include <set>
 #include <vector>
 
 namespace pp {
@@ -62,6 +63,7 @@ public:
         DeviceRateRole,  // hardware: its own sample rate, 0 = the mixer's
         SchedulingRole,  // hardware: "auto", "timer" or "interrupt"
         EffectsRole,     // [{type, enabled, params: {name: value}}] in order
+        CuedRole,        // heard on the cue output now
     };
     Q_ENUM(Role)
 
@@ -107,6 +109,12 @@ public:
     // The strip an effect listens to (a ducker's key): another strip's key,
     // or empty for none. Ignored for effects that don't take one.
     Q_INVOKABLE void setEffectKey(int row, int index, const QString &key);
+    // Cue: the hardware output it plays to (a key, or empty to turn cue off
+    // and clear every cued strip), and whether a strip is cued. Cued strips
+    // are temporary: not saved, not part of scenes.
+    void setCueOutput(const std::string &key);
+    Q_INVOKABLE void setCue(int row, bool cued);
+    [[nodiscard]] const std::set<std::string> &cued() const { return m_cued; }
     // Sets a strip's mix from a scene (see mixFromJson), keeping only what
     // still applies: the level clamped, mono on inputs only, sends to strips
     // that exist in a later stage. False when there's no such strip.
@@ -153,6 +161,8 @@ Q_SIGNALS:
     // A saved endpoint was recognised under a new node.name.
     void reattached(const QString &label, const QString &oldNodeName, const QString &newNodeName);
     void clockChanged();
+    // The cue output or the set of cued strips changed.
+    void cueChanged();
     // The mixer's rate or block size, or a device's rate or scheduling.
     void audioSettingsChanged();
 
@@ -172,6 +182,7 @@ private:
     // Runs edit on a strip's effects (making its entry if needed); when it
     // returns true, saves and announces the change.
     bool editEffects(int row, const std::function<bool(std::vector<EffectSettings> &)> &edit);
+    std::set<std::string> m_cued;
 
     DeviceStore *m_store;
     PipeWireGraph *m_graph = nullptr;

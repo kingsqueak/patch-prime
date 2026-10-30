@@ -23,11 +23,19 @@ namespace pp {
 // (and reset) on the main thread. Linear amplitude, 1.0 = 0 dBFS.
 struct MeterLevels
 {
-    explicit MeterLevels(std::size_t channels) : peaks(channels) {}
+    explicit MeterLevels(std::size_t channels) : peaks(channels), rms(channels) {}
     std::vector<std::atomic<float>> peaks;
+    // RMS per channel now (linear, ~300 ms), and the short-term loudness
+    // (K-weighted over ~3 s, LUFS) of all channels together.
+    std::vector<std::atomic<float>> rms;
+    std::atomic<float> loudness{-70.0F};
+    // The stream's sample rate once negotiated (0 until then).
+    std::atomic<int> rate{0};
 
     // Returns the peaks since the last call and resets them.
     std::vector<float> take();
+    // The RMS values now.
+    [[nodiscard]] std::vector<float> rmsNow() const;
 };
 
 // A live mirror of the PipeWire graph: nodes, devices, ports, links and the

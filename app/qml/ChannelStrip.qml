@@ -11,9 +11,10 @@ import org.kingsqueak.patchprime.engine
 // a fixed height except the body, so strips line up side by side:
 //
 //   header   name, and a status line (offline, virtual, ...)
-//   body     meters + fader (fills the height)
+//   body     meters (RMS, peak, peak hold; loudness under them on mix
+//            buses and outputs) + fader (fills the height)
 //   readout  fader level in dB (click to type one)
-//   toggles  mute, mono, default
+//   toggles  mute, cue, mono, default
 //   sends    where it goes (inputs and mix buses), and the effects button
 //   options  the channel pair choice (blank when there's none)
 //
@@ -33,12 +34,16 @@ QQC2.Control {
     readonly property bool mono: model.mono
     readonly property real volumeDb: model.volumeDb
     readonly property var levels: model.levels
+    readonly property var rms: model.rms || []
+    readonly property var peakHold: model.peakHold || []
+    readonly property real lufs: model.lufs === undefined ? -70 : model.lufs
     readonly property bool signal: model.signal
     readonly property int channels: Math.max(1, model.channels)
     readonly property int channelPair: model.channelPair
     readonly property string stage: model.stage
     readonly property var sends: model.sends
     readonly property var effects: model.effects
+    readonly property bool cued: model.cued === true
 
     readonly property bool ownVirtual: kind !== "hardware"
     readonly property bool isInput: direction === "input"
@@ -124,19 +129,40 @@ QQC2.Control {
 
             Item { Layout.fillWidth: true }
 
-            Row {
+            ColumnLayout {
                 Layout.fillHeight: true
-                spacing: Style.meterGap
+                spacing: Style.gap
 
-                Repeater {
-                    model: strip.levels.length > 0 ? strip.levels.length : strip.channels
+                Row {
+                    Layout.fillHeight: true
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: Style.meterGap
 
-                    delegate: LevelMeter {
-                        required property int index
-                        height: parent.height
-                        level: index < strip.levels.length ? strip.levels[index] : 0
-                        dimmed: strip.muted
+                    Repeater {
+                        model: strip.levels.length > 0 ? strip.levels.length : strip.channels
+
+                        delegate: LevelMeter {
+                            required property int index
+                            height: parent.height
+                            level: index < strip.levels.length ? strip.levels[index] : 0
+                            rms: index < strip.rms.length ? strip.rms[index] : 0
+                            hold: index < strip.peakHold.length ? strip.peakHold[index] : 0
+                            dimmed: strip.muted
+                        }
                     }
+                }
+
+                // Short-term loudness, for streaming targets.
+                QQC2.Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    visible: strip.stage !== "input"
+                    text: strip.lufs > -69 ? strip.lufs.toFixed(0) : "–"
+                    font: Kirigami.Theme.smallFont
+                    color: Style.dimText
+                    QQC2.ToolTip.text: qsTr("Short-term loudness (LUFS, last 3 s). Streams usually aim for −14 to −16, podcasts −16, broadcast −23.")
+                    QQC2.ToolTip.visible: lufsHover.hovered
+                    QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                    HoverHandler { id: lufsHover }
                 }
             }
 
@@ -180,6 +206,18 @@ QQC2.Control {
                 on: strip.muted
                 enabled: Devices.daemonRunning
                 onRequested: on => Devices.setMuted(strip.key, on)
+            }
+
+            StripToggle {
+                // Cue: hear this strip alone in the headphones.
+                visible: Devices.cueOutput.length > 0 && Devices.cueOutput !== strip.key
+                letter: qsTr("C", "cue button")
+                onColor: Kirigami.Theme.neutralTextColor
+                text: qsTr("Cue")
+                tip: qsTr("Cue: hear this strip on %1 without changing the mix. While anything is cued, %1 plays only the cued strips.").arg(Devices.labelFor(Devices.cueOutput))
+                on: strip.cued
+                enabled: Devices.daemonRunning
+                onRequested: on => Devices.setCue(strip.key, on)
             }
 
             StripToggle {

@@ -4,6 +4,7 @@
 #include "pipewiregraph.h"
 
 #include "graphsnapshot.h"
+#include "loudness.h"
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -57,6 +58,15 @@ pw_properties *toPwProperties(const Properties &props)
 }
 
 // Lock-free "store the larger value", for peaks written on the data thread.
+// One biquad step (transposed direct form II), for the meters' K-weighting.
+double kStep(const EqEffect::Coefficients &c, std::array<double, 2> &z, double x) noexcept
+{
+    const double y = (c.b0 * x) + z[0];
+    z[0] = (c.b1 * x) - (c.a1 * y) + z[1];
+    z[1] = (c.b2 * x) - (c.a2 * y);
+    return y;
+}
+
 void atomicMax(std::atomic<float> &target, float value)
 {
     float current = target.load(std::memory_order_relaxed);
@@ -66,6 +76,16 @@ void atomicMax(std::atomic<float> &target, float value)
 }
 
 } // namespace
+
+std::vector<float> MeterLevels::rmsNow() const
+{
+    std::vector<float> out;
+    out.reserve(rms.size());
+    for (const auto &value : rms) {
+        out.push_back(value.load(std::memory_order_relaxed));
+    }
+    return out;
+}
 
 std::vector<float> MeterLevels::take()
 {
@@ -122,9 +142,19 @@ struct PipeWireGraph::Session
     // A capture stream measuring peaks on a sink's monitor.
     struct Meter
     {
+        static constexpr std::size_t maxChannels = 64;
         pw_stream *stream = nullptr;
         spa_hook listener{};
         std::shared_ptr<MeterLevels> levels;
+        // Realtime only: the loudness and RMS measurement.
+        int rate = 0;
+        KWeighting weighting;
+        std::array<std::array<double, 2>, maxChannels> shelf{};
+        std::array<std::array<double, 2>, maxChannels> highPass{};
+        std::array<double, maxChannels> meanSquare{};
+        double shortTerm = 0.0;
+        double rmsStep = 0.0;
+        double shortTermStep = 0.0;
     };
 
     // A strip's processing node: a filter with an input and an output port
@@ -153,6 +183,7 @@ struct PipeWireGraph::Session
     static void onCreatedRemoved(void *data);
     static void onCreatedDestroy(void *data);
     static void onMeterProcess(void *data);
+    static void onMeterParamChanged(void *data, std::uint32_t id, const spa_pod *param);
     static void onFilterProcess(void *data, spa_io_position *position);
 
     void announce(Bound &bound, const spa_dict *props, bool propsChanged);
@@ -238,6 +269,7 @@ const pw_stream_events meterEvents = [] {
     pw_stream_events e{};
     e.version = PW_VERSION_STREAM_EVENTS;
     e.process = &PipeWireGraph::Session::onMeterProcess;
+    e.param_changed = &PipeWireGraph::Session::onMeterParamChanged;
     return e;
 }();
 
@@ -523,6 +555,18 @@ void PipeWireGraph::Session::onFilterProcess(void *data, spa_io_position *positi
                           static_cast<int>(frames), key);
 }
 
+void PipeWireGraph::Session::onMeterParamChanged(void *data, std::uint32_t id,
+                                                const spa_pod *param)
+{
+    if (param == nullptr || id != SPA_PARAM_Format) {
+        return;
+    }
+    spa_audio_info_raw info{};
+    if (spa_format_audio_raw_parse(param, &info) >= 0 && info.rate > 0) {
+        static_cast<Meter *>(data)->levels->rate.store(static_cast<int>(info.rate));
+    }
+}
+
 void PipeWireGraph::Session::onMeterProcess(void *data)
 {
     auto *meter = static_cast<Meter *>(data);
@@ -550,6 +594,35 @@ void PipeWireGraph::Session::onMeterProcess(void *data)
         for (std::size_t c = 0; c < tracked; ++c) {
             atomicMax(peaks[c],
                       local[c]); // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
+        }
+
+        // RMS and loudness, once the rate is known.
+        if (const int rate = meter->levels->rate.load(std::memory_order_relaxed);
+            rate > 0 && rate != meter->rate) {
+            meter->rate = rate;
+            meter->weighting = KWeighting::forRate(rate);
+            meter->rmsStep = 1.0 - std::exp(-1.0 / (0.3 * rate));
+            meter->shortTermStep = 1.0 - std::exp(-1.0 / (3.0 * rate));
+        }
+        if (meter->rate > 0) {
+            const auto measured = std::min(tracked, Meter::maxChannels);
+            for (std::size_t i = 0; i + channels <= count; i += channels) {
+                double sum = 0.0;
+                for (std::size_t c = 0; c < measured; ++c) {
+                    const double x = samples[i + c];
+                    meter->meanSquare.at(c) += ((x * x) - meter->meanSquare.at(c)) * meter->rmsStep;
+                    const double y = kStep(meter->weighting.highPass, meter->highPass.at(c),
+                                           kStep(meter->weighting.shelf, meter->shelf.at(c), x));
+                    sum += y * y;
+                }
+                meter->shortTerm += (sum - meter->shortTerm) * meter->shortTermStep;
+            }
+            for (std::size_t c = 0; c < measured && c < meter->levels->rms.size(); ++c) {
+                meter->levels->rms[c].store(static_cast<float>(std::sqrt(meter->meanSquare.at(c))),
+                                            std::memory_order_relaxed);
+            }
+            meter->levels->loudness.store(static_cast<float>(lufsFromMeanSquare(meter->shortTerm)),
+                                          std::memory_order_relaxed);
         }
     }
     pw_stream_queue_buffer(meter->stream, buffer);

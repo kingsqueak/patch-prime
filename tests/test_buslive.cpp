@@ -735,6 +735,63 @@ private Q_SLOTS:
         m_busName.clear();
     }
 
+    void cuesToHeadphones()
+    {
+        // The test sink as headphones; a fake mic cued to them.
+        const auto pid = std::to_string(QCoreApplication::applicationPid());
+        const auto feed = "pp_cuefeed_" + pid;
+        const auto mic = "pp_cuesrc_" + pid;
+        QProcess loopback;
+        loopback.start(QStringLiteral("pw-loopback"),
+                       {QString::fromStdString("--capture-props=media.class=Audio/Sink node.name=" +
+                                               feed + " audio.position=[FL,FR]"),
+                        QString::fromStdString("--playback-props=media.class=Audio/Source "
+                                               "node.name=" +
+                                               mic + " audio.position=[FL,FR]")});
+        auto stopLoopback = qScopeGuard([&loopback] {
+            loopback.terminate();
+            loopback.waitForFinished(2000);
+        });
+        QTemporaryDir dir;
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel devices(&store);
+        devices.attach(&m_graph);
+        BusManager buses(&m_graph, &devices);
+        m_owners.insert(busOwnerFor(store.path()));
+        const auto micKey = makeEndpointKey("Audio/Source", mic);
+        const auto sinkKey = makeEndpointKey("Audio/Sink", m_sinkName);
+        QVERIFY(QTest::qWaitFor(
+            [&] { return devices.rowForKey(micKey) >= 0 && devices.rowForKey(sinkKey) >= 0; },
+            5000));
+        devices.setEnabled(devices.rowForKey(micKey), true);
+        devices.setEnabled(devices.rowForKey(sinkKey), true);
+        const auto inBus = store.find(micKey)->busName;
+        const auto outBus = store.find(sinkKey)->busName;
+        m_busName = outBus;
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, outBus, m_sinkName) == 2; }, 5000));
+
+        devices.setCueOutput(sinkKey);
+        devices.setCue(devices.rowForKey(micKey), true);
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, inBus, m_sinkName) == 2; }, 5000));
+        QCOMPARE(linkCount(m_graph, outBus, m_sinkName), 2); // its own path stays (muted)
+        // Uncued: the cue link goes, the output's own path stays.
+        devices.setCue(devices.rowForKey(micKey), false);
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, inBus, m_sinkName) == 0; }, 5000));
+        QCOMPARE(linkCount(m_graph, outBus, m_sinkName), 2);
+        // Cued again, then cue turned off: gone too.
+        devices.setCue(devices.rowForKey(micKey), true);
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, inBus, m_sinkName) == 2; }, 5000));
+        devices.setCueOutput({});
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, inBus, m_sinkName) == 0; }, 5000));
+        QCOMPARE(linkCount(m_graph, outBus, m_sinkName), 2);
+
+        devices.setEnabled(devices.rowForKey(micKey), false);
+        devices.setEnabled(devices.rowForKey(sinkKey), false);
+        QVERIFY(QTest::qWaitFor(
+            [&] { return !nodeNamed(m_graph, inBus) && !nodeNamed(m_graph, outBus); }, 5000));
+        m_busName.clear();
+    }
+
     void usesOneChannelPair()
     {
         // A 6-channel card, like an onboard card in pro-audio mode.

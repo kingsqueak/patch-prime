@@ -4,6 +4,8 @@
 # The built-in effects: plain C++ (no Qt, no PipeWire), shared by the engine
 # (which runs them) and the GUI (which draws their curves).
 add_library(patchprime-dsp STATIC
+    src/delay.cpp
+    src/delay.h
     src/dynamics.cpp
     src/dynamics.h
     src/effects.cpp

@@ -34,11 +34,13 @@ constexpr std::array fields{
     "isVirtual",  "online",       "isEnabled",   "channels",    "positions",   "isDefault",
     "saved",      "sectionStart", "volumeDb",    "muted",       "busId",       "busIsDefault",
     "kind",       "sends",        "mono",        "busName",     "channelPair", "stage",
-    "sendLevels", "deviceRate",   "scheduling",  "effects",
+    "sendLevels", "deviceRate",   "scheduling",  "effects",     "cued",
 };
 
 // How far a meter falls per update (about 30 per second): 60 dB in ~1.6 s.
 constexpr double meterFallPerUpdate = 0.02;
+// A peak's hold mark stays put for about 1.5 s.
+constexpr int peakHoldUpdates = 45;
 // Effect meters (dB) fall about 20 dB a second.
 constexpr double effectMeterFallPerUpdate = 0.66;
 // "Signal present" lights for anything above -100 dBFS (far below the meter's
@@ -61,6 +63,14 @@ DaemonClient::DaemonClient(QObject *parent) : QAbstractListModel(parent)
     m_roles.insert(m_levelsRole, QByteArrayLiteral("levels"));
     m_signalRole = role + 1;
     m_roles.insert(m_signalRole, QByteArrayLiteral("signal"));
+    // Per channel: the held peak and the RMS (meter fractions); and the
+    // short-term loudness in LUFS.
+    m_holdRole = role + 2;
+    m_roles.insert(m_holdRole, QByteArrayLiteral("peakHold"));
+    m_rmsRole = role + 3;
+    m_roles.insert(m_rmsRole, QByteArrayLiteral("rms"));
+    m_lufsRole = role + 4;
+    m_roles.insert(m_lufsRole, QByteArrayLiteral("lufs"));
 
     auto bus = QDBusConnection::sessionBus();
     bus.connect(service, path, interface, QStringLiteral("StateChanged"), this,
@@ -114,6 +124,23 @@ QVariant DaemonClient::data(const QModelIndex &index, int role) const
     }
     if (role == m_signalRole) {
         return m_signalHold.value(row.value(QStringLiteral("key")).toString()) > 0;
+    }
+    if (role == m_holdRole) {
+        QVariantList out;
+        for (const auto &hold : m_peakHold.value(row.value(QStringLiteral("key")).toString())) {
+            out.append(hold.level);
+        }
+        return out;
+    }
+    if (role == m_rmsRole) {
+        QVariantList out;
+        for (const double level : m_rms.value(row.value(QStringLiteral("key")).toString())) {
+            out.append(level);
+        }
+        return out;
+    }
+    if (role == m_lufsRole) {
+        return m_lufs.value(row.value(QStringLiteral("key")).toString(), -70.0);
     }
     if (role == Qt::DisplayRole) {
         role = m_roleIds.value("label");
@@ -250,6 +277,16 @@ void DaemonClient::setMono(const QString &key, bool mono)
 void DaemonClient::setSendLevel(const QString &inputKey, const QString &destinationKey, double db)
 {
     call(QStringLiteral("SetSendLevel"), {inputKey, destinationKey, db});
+}
+
+void DaemonClient::setCueOutput(const QString &key)
+{
+    call(QStringLiteral("SetCueOutput"), {key});
+}
+
+void DaemonClient::setCue(const QString &key, bool cued)
+{
+    call(QStringLiteral("SetCue"), {key, cued});
 }
 
 void DaemonClient::addEffect(const QString &key, const QString &type)
@@ -419,6 +456,11 @@ void DaemonClient::onStateChanged(const QString &state)
         Q_EMIT scenesChanged();
     }
 
+    if (const auto cue = root.value(QLatin1String("cueOutput")).toString(); cue != m_cueOutput) {
+        m_cueOutput = cue;
+        Q_EMIT cueOutputChanged();
+    }
+
     if (const auto types = root.value(QLatin1String("effectTypes")).toArray().toVariantList();
         types != m_effectTypes) {
         m_effectTypes = types;
@@ -533,6 +575,22 @@ void DaemonClient::onLevels(const QVariantMap &levels)
             peaks = value.value<QList<double>>();
         }
 
+        // RMS and loudness: shown as they are.
+        if (it.key().startsWith(QLatin1String("rms|"))) {
+            auto &shown = m_rms[it.key().mid(4)];
+            shown.clear();
+            for (const double r : peaks) {
+                shown.append(meterFraction(r));
+            }
+            continue;
+        }
+        if (it.key().startsWith(QLatin1String("lufs|"))) {
+            if (!peaks.isEmpty()) {
+                m_lufs[it.key().mid(5)] = peaks.front();
+            }
+            continue;
+        }
+
         // An effect's meters: held, falling at about 20 dB a second.
         if (it.key().startsWith(QLatin1String("fx|"))) {
             const auto at = it.key().mid(3);
@@ -551,8 +609,20 @@ void DaemonClient::onLevels(const QVariantMap &levels)
 
         auto &shown = m_levels[it.key()];
         shown.resize(peaks.size());
+        auto &holds = m_peakHold[it.key()];
+        holds.resize(peaks.size());
         for (qsizetype c = 0; c < peaks.size(); ++c) {
-            shown[c] = std::max(meterFraction(peaks[c]), shown[c] - meterFallPerUpdate);
+            const double now = meterFraction(peaks[c]);
+            shown[c] = std::max(now, shown[c] - meterFallPerUpdate);
+            // The highest peak stays marked for a while, then falls slowly.
+            auto &hold = holds[c];
+            if (now >= hold.level) {
+                hold = {.level = now, .updates = peakHoldUpdates};
+            } else if (hold.updates > 0) {
+                --hold.updates;
+            } else {
+                hold.level = std::max(now, hold.level - (meterFallPerUpdate / 2));
+            }
         }
         auto &hold = m_signalHold[it.key()];
         const bool wasLit = hold > 0;
@@ -566,9 +636,9 @@ void DaemonClient::onLevels(const QVariantMap &levels)
         if (row != m_rows.end()) {
             const auto i = index(static_cast<int>(row - m_rows.begin()));
             if (wasLit != (hold > 0)) {
-                Q_EMIT dataChanged(i, i, {m_levelsRole, m_signalRole});
+                Q_EMIT dataChanged(i, i, {m_levelsRole, m_signalRole, m_holdRole, m_rmsRole, m_lufsRole});
             } else {
-                Q_EMIT dataChanged(i, i, {m_levelsRole});
+                Q_EMIT dataChanged(i, i, {m_levelsRole, m_holdRole, m_rmsRole, m_lufsRole});
             }
         }
     }
@@ -605,6 +675,20 @@ bool StripFilter::lessThan(const QModelIndex &left, const QModelIndex &right) co
     const auto a = rank(left);
     const auto b = rank(right);
     return a != b ? a < b : left.row() < right.row();
+}
+
+QVariantMap StripFilter::get(int row) const
+{
+    QVariantMap out;
+    if (row < 0 || row >= rowCount()) {
+        return out;
+    }
+    const auto at = index(row, 0);
+    const auto roles = roleNames();
+    for (auto it = roles.begin(); it != roles.end(); ++it) {
+        out.insert(QString::fromUtf8(it.value()), data(at, it.key()));
+    }
+    return out;
 }
 
 void StripFilter::setStages(const QStringList &stages)

@@ -39,6 +39,8 @@ class DaemonClient : public QAbstractListModel
     // The mixer's sample rate (Hz) and block size (frames, 0 = automatic).
     Q_PROPERTY(int sampleRate READ sampleRate NOTIFY clockChanged)
     Q_PROPERTY(int blockSize READ blockSize NOTIFY clockChanged)
+    // The hardware output cue plays to (a strip key; empty: cue is off).
+    Q_PROPERTY(QString cueOutput READ cueOutput NOTIFY cueOutputChanged)
     // Built-in effects on offer: [{type, label, params: [{name, label, unit,
     // minimum, maximum, initial}]}]. A strip's chain is its "effects" role.
     Q_PROPERTY(QVariantList effectTypes READ effectTypes NOTIFY effectTypesChanged)
@@ -75,6 +77,7 @@ public:
     [[nodiscard]] int sampleRate() const { return m_sampleRate; }
     [[nodiscard]] int blockSize() const { return m_blockSize; }
     [[nodiscard]] QVariantList effectTypes() const { return m_effectTypes; }
+    [[nodiscard]] QString cueOutput() const { return m_cueOutput; }
     [[nodiscard]] QVariantMap effectMeters() const { return m_effectMeters; }
     [[nodiscard]] QVariantList playbackTargets() const { return m_playbackTargets; }
     [[nodiscard]] QVariantList recordTargets() const { return m_recordTargets; }
@@ -109,6 +112,8 @@ public:
     Q_INVOKABLE void setBlockSize(int frames);
     Q_INVOKABLE void setDeviceSampleRate(const QString &key, int rate);
     Q_INVOKABLE void setDeviceScheduling(const QString &key, const QString &scheduling);
+    Q_INVOKABLE void setCueOutput(const QString &key);
+    Q_INVOKABLE void setCue(const QString &key, bool cued);
     Q_INVOKABLE void addEffect(const QString &key, const QString &type);
     Q_INVOKABLE void removeEffect(const QString &key, int index);
     Q_INVOKABLE void moveEffect(const QString &key, int from, int to);
@@ -136,6 +141,7 @@ Q_SIGNALS:
     void clockChanged();
     void scenesChanged();
     void effectTypesChanged();
+    void cueOutputChanged();
     void effectMetersChanged();
 
 private Q_SLOTS:
@@ -155,6 +161,17 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QList<QVariantMap> m_rows;
     QHash<QString, QList<double>> m_levels; // key -> displayed meter fractions
     QHash<QString, int> m_signalHold;       // key -> updates left showing "signal present"
+    struct Hold
+    {
+        double level = 0.0; // meter fraction
+        int updates = 0;    // left before it starts falling
+    };
+    QHash<QString, QList<Hold>> m_peakHold; // key -> per channel
+    QHash<QString, QList<double>> m_rms;    // key -> meter fractions
+    QHash<QString, double> m_lufs;          // key -> short-term loudness
+    int m_holdRole = 0;
+    int m_rmsRole = 0;
+    int m_lufsRole = 0;
     QDBusServiceWatcher m_watcher;
     bool m_daemonRunning = false;
     bool m_connected = false;
@@ -169,6 +186,7 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     int m_sampleRate = 0;
     int m_blockSize = 0;
     QVariantList m_effectTypes;
+    QString m_cueOutput;
     QVariantMap m_effectMeters;
     QVariantList m_playbackTargets;
     QVariantList m_recordTargets;
@@ -187,6 +205,8 @@ public:
     explicit StripFilter(QObject *parent = nullptr);
 
     [[nodiscard]] int count() const { return rowCount(); }
+    // A row's roles by name ({key, label, kind, ...}), for QML lists.
+    [[nodiscard]] Q_INVOKABLE QVariantMap get(int row) const;
 
     [[nodiscard]] QStringList stages() const { return m_stages; }
     void setStages(const QStringList &stages);
