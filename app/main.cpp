@@ -38,12 +38,26 @@ int main(int argc, char *argv[])
         [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.loadFromModule("org.kingsqueak.patchprime", "Main");
 
+    // Developer aid: PATCHPRIME_WINDOW_SIZE=<width>x<height> sizes the window
+    // (for screenshots at a given size).
+    if (const auto size = qEnvironmentVariable("PATCHPRIME_WINDOW_SIZE").split(QLatin1Char('x'));
+        size.size() == 2 && !engine.rootObjects().isEmpty()) {
+        if (auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first())) {
+            window->resize(size[0].toInt(), size[1].toInt());
+        }
+    }
+
     // Developer aid: PATCHPRIME_SCREENSHOT=<file.png> saves the window once the
     // state has arrived, then quits. Works with QT_QPA_PLATFORM=offscreen.
     // PATCHPRIME_PAGE=devices opens the Devices page first;
-    // PATCHPRIME_EFFECTS=<strip label> opens that strip's effects.
+    // PATCHPRIME_EFFECTS=<strip label> opens that strip's effects;
+    // PATCHPRIME_WINDOW_SIZE=<w>x<h> sizes the window (see above).
     if (const auto shot = qEnvironmentVariable("PATCHPRIME_SCREENSHOT"); !shot.isEmpty()) {
-        QTimer::singleShot(2000, &app, [&engine, shot] {
+        // PATCHPRIME_SCREENSHOT_DELAY=<ms> waits longer (meters settle).
+        const int delay = qEnvironmentVariableIsSet("PATCHPRIME_SCREENSHOT_DELAY")
+                              ? qEnvironmentVariableIntValue("PATCHPRIME_SCREENSHOT_DELAY")
+                              : 2000;
+        QTimer::singleShot(delay, &app, [&engine, shot] {
             const auto roots = engine.rootObjects();
             auto *window = roots.isEmpty() ? nullptr : qobject_cast<QQuickWindow *>(roots.first());
             bool saved = window != nullptr && window->grabWindow().save(shot);
