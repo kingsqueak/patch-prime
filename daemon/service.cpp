@@ -160,7 +160,8 @@ QString PatchPrimeService::GetState() const
              const auto p = m_recordings->player();
              return QJsonObject{{QStringLiteral("path"), p.path},
                                 {QStringLiteral("paused"), p.paused},
-                                {QStringLiteral("duration"), p.duration}};
+                                {QStringLiteral("duration"), p.duration},
+                                {QStringLiteral("loop"), m_recordings->isLooping()}};
          }()},
         {QStringLiteral("playerTarget"), QString::fromStdString(m_recordings->playerTarget())},
     };
@@ -490,6 +491,11 @@ void PatchPrimeService::SeekPlayback(double seconds)
 void PatchPrimeService::SetPlayerTarget(const QString &key)
 {
     m_recordings->setPlayerTarget(key.toStdString());
+}
+
+void PatchPrimeService::SetPlaybackLoop(bool loop)
+{
+    m_recordings->setLoop(loop);
 }
 
 void PatchPrimeService::SetCueOutput(const QString &key)

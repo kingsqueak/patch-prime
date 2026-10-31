@@ -21,17 +21,21 @@ Kirigami.ScrollablePage {
     readonly property bool paused: Devices.player.paused === true
     readonly property real duration: Devices.player.duration || 0
 
-    // Where the player can play: mix buses, routed inputs and hardware outputs.
+    // Where the player can play: hardware inputs (in place of the device),
+    // mix buses, routed inputs and hardware outputs, in console order.
     readonly property var targets: {
         const list = [];
         for (let row = 0; row < strips.count; ++row) {
             const s = strips.get(row);
-            if (s.kind === "virtual-sink" || s.kind === "virtual-input"
-                    || (s.kind === "hardware" && s.direction === "output"))
-                list.push({ key: s.key, label: s.label });
+            if (s.kind === "hardware" && s.direction === "input")
+                list.push({ key: s.key, label: qsTr("%1 (instead of the device)").arg(s.label),
+                            name: s.label, input: true });
+            else if (s.kind === "virtual-sink" || s.kind === "virtual-input" || s.kind === "hardware")
+                list.push({ key: s.key, label: s.label, name: s.label, input: false });
         }
         return list;
     }
+    readonly property var targetInfo: targets.find(t => t.key === target) || ({})
     readonly property string target: {
         if (targets.some(t => t.key === Devices.playerTarget))
             return Devices.playerTarget;
@@ -104,6 +108,17 @@ Kirigami.ScrollablePage {
                         QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
                     }
                     QQC2.ToolButton {
+                        icon.name: "media-playlist-repeat"
+                        text: qsTr("Loop")
+                        display: QQC2.AbstractButton.IconOnly
+                        checkable: true
+                        checked: Devices.player.loop === true
+                        onToggled: Devices.setPlaybackLoop(checked)
+                        QQC2.ToolTip.text: qsTr("Loop: play the recording over and over, for example while you set up effects")
+                        QQC2.ToolTip.visible: hovered
+                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                    }
+                    QQC2.ToolButton {
                         icon.name: "media-playback-stop"
                         text: qsTr("Stop")
                         display: QQC2.AbstractButton.IconOnly
@@ -125,11 +140,11 @@ Kirigami.ScrollablePage {
                     }
                     QQC2.ComboBox {
                         id: targetBox
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 11
                         model: page.targets
                         textRole: "label"
                         valueRole: "key"
                         enabled: page.targets.length > 0
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 15
                         currentIndex: page.targets.findIndex(t => t.key === page.target)
                         onActivated: Devices.setPlayerTarget(currentValue)
                         Accessible.name: qsTr("Play into")
@@ -168,6 +183,15 @@ Kirigami.ScrollablePage {
                     }
                 }
             }
+        }
+
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: page.targetInfo.input === true
+            type: Kirigami.MessageType.Information
+            text: page.playing.length > 0
+                  ? qsTr("%1 hears this recording instead of its device, through its effects, until playback stops. The device is cut off meanwhile.").arg(page.targetInfo.name)
+                  : qsTr("While playing, %1 hears the recording instead of its device, through its effects. Record a raw sample with the input's Record button, then loop it here while you set up the effects.").arg(page.targetInfo.name)
         }
 
         // --- settings

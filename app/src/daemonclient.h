@@ -68,7 +68,7 @@ class DaemonClient : public QAbstractListModel
     Q_PROPERTY(QString recordingError READ recordingError NOTIFY recordingChanged)
     // Goes up when the folder's files change (call recordings() again).
     Q_PROPERTY(int recordingsRevision READ recordingsRevision NOTIFY recordingChanged)
-    // The player: {path (empty when stopped), paused, duration}, where it
+    // The player: {path (empty when stopped), paused, duration, loop}, where it
     // is (seconds), and the strip it plays into (a key).
     Q_PROPERTY(QVariantMap player READ player NOTIFY recordingChanged)
     Q_PROPERTY(double playerPosition READ playerPosition NOTIFY recordingTimesChanged)
@@ -171,6 +171,7 @@ public:
     Q_INVOKABLE void stopPlayback();
     Q_INVOKABLE void seekPlayback(double seconds);
     Q_INVOKABLE void setPlayerTarget(const QString &key);
+    Q_INVOKABLE void setPlaybackLoop(bool loop);
     // Moves a file to the desktop's trash; false when it can't.
     Q_INVOKABLE bool trashFile(const QString &file);
     // An EQ's response in dB at each frequency in freqs (Hz), from its

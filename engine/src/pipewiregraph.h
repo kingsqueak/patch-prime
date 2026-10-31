@@ -155,12 +155,14 @@ public:
     [[nodiscard]] bool hasFilter(const std::string &name) const;
 
     // A node named name that never links itself (the caller links it),
-    // running io on the realtime thread, stereo: capture (a recorder: a
-    // filter with input_FL and input_FR, at the graph's rate) or playback (a
-    // player: a stream at rate, which PipeWire converts). Like filters, they
-    // belong to the current connection.
+    // running io on the realtime thread, which always sees stereo: capture
+    // (a recorder: a filter with an input port per position, "FL" "FR" or
+    // just "MONO", heard in both channels; at the graph's rate) or playback
+    // (a player: a stereo stream at rate, which PipeWire converts). Like
+    // filters, they belong to the current connection.
     bool addStream(const std::string &name, bool capture, int rate, const Properties &extraProps,
-                   const std::shared_ptr<StreamIo> &io);
+                   const std::shared_ptr<StreamIo> &io,
+                   const std::vector<std::string> &positions = {"FL", "FR"});
     void removeStream(const std::string &name);
 
 Q_SIGNALS:

@@ -20,15 +20,16 @@ Q_LOGGING_CATEGORY(lcRecorder, "patchprime.recorder")
 
 namespace pp {
 
-bool canRecord(EndpointKind kind)
-{
-    return kind == EndpointKind::VirtualSink || kind == EndpointKind::VirtualInput;
-}
-
-bool canPlayInto(EndpointKind kind, Direction direction)
+bool canRecord(EndpointKind kind, Direction direction)
 {
     return kind == EndpointKind::VirtualSink || kind == EndpointKind::VirtualInput ||
-           (kind == EndpointKind::Hardware && direction == Direction::Output);
+           (kind == EndpointKind::Hardware && direction == Direction::Input);
+}
+
+bool canPlayInto(EndpointKind kind)
+{
+    return kind == EndpointKind::VirtualSink || kind == EndpointKind::VirtualInput ||
+           kind == EndpointKind::Hardware;
 }
 
 RecordingManager::RecordingManager(PipeWireGraph *graph, DeviceModel *devices, BusManager *buses,
@@ -93,8 +94,12 @@ bool RecordingManager::start(const std::string &key, QString *error)
     const auto kind =
         kindFromName(m_devices->data(index, DeviceModel::KindRole).toString().toStdString());
     const auto busName = m_devices->data(index, DeviceModel::BusNameRole).toString().toStdString();
-    if (!canRecord(kind)) {
-        return fail(QStringLiteral("only mix buses and routed inputs can be recorded"));
+    const auto direction =
+        m_devices->data(index, DeviceModel::DirectionRole).toString() == QLatin1String("input")
+            ? Direction::Input
+            : Direction::Output;
+    if (!canRecord(kind, direction)) {
+        return fail(QStringLiteral("only inputs, mix buses and routed inputs can be recorded"));
     }
     if (busName.empty() || !m_graph->isConnected()) {
         return fail(QStringLiteral("the strip isn't running"));
@@ -111,7 +116,11 @@ bool RecordingManager::start(const std::string &key, QString *error)
         // Its own class, so Plasma and WirePlumber leave it alone (like sends).
         {"media.class", "Audio/Patchprime/Recorder"},
     };
-    if (!m_graph->addStream(node, true, 0, props, recorder)) {
+    // A mono input records as it's mixed: one channel, in both of the file's.
+    const auto positions = m_buses->stripPositions(key).size() == 1
+                               ? std::vector<std::string>{"MONO"}
+                               : std::vector<std::string>{"FL", "FR"};
+    if (!m_graph->addStream(node, true, 0, props, recorder, positions)) {
         recorder->stop();
         return fail(QStringLiteral("PipeWire refused the recording stream"));
     }
@@ -191,6 +200,7 @@ bool RecordingManager::play(const QString &path, QString *error)
         }
         return false;
     }
+    player->setLoop(m_loop);
     m_player = std::move(player);
     updateTaps();
     m_poll.start();
@@ -228,6 +238,18 @@ void RecordingManager::setPlayerTarget(const std::string &key)
 {
     m_devices->setPlayerTarget(key);
     updateTaps();
+}
+
+void RecordingManager::setLoop(bool loop)
+{
+    if (loop == m_loop) {
+        return;
+    }
+    m_loop = loop;
+    if (m_player) {
+        m_player->setLoop(loop);
+    }
+    Q_EMIT changed();
 }
 
 std::string RecordingManager::playerTarget() const

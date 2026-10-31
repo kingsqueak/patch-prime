@@ -236,14 +236,22 @@ public:
     void setEffectMetering(std::set<std::string> keys);
     std::map<std::pair<std::string, std::size_t>, EffectLevels> takeEffectLevels();
 
-    // Recording and playback streams (see RecordingManager), linked here
-    // since only the manager knows each strip's output: recorders, by node
-    // name, record the strip with that endpoint key (after its effects and
-    // fader); the player node plays into the strip playerTarget. Nodes are
-    // found by name and patchprime.tap.owner (= owner()).
+    // Recording and playback nodes (see RecordingManager), linked here
+    // since only the manager knows each strip's ports. Recorders, by node
+    // name, record the strip with that endpoint key: a hardware input raw
+    // (straight from the device, before effects and fader), any other strip
+    // after its effects and fader. The player node plays into the strip
+    // playerTarget: where apps play into it, or, on a hardware input, where
+    // the device comes in (in front of the effects), standing in for the
+    // device, which is unlinked meanwhile. Nodes are found by name and
+    // patchprime.tap.owner (= owner()).
     void setTaps(std::map<std::string, std::string> recorders, std::string playerNode,
                  std::string playerTarget);
     [[nodiscard]] const std::string &owner() const { return m_owner; }
+    // The channel positions of the strip with this key as it's mixed
+    // ("MONO" for a mono input; "FL" "FR" for a stereo pair); empty when
+    // it isn't enabled.
+    [[nodiscard]] std::vector<std::string> stripPositions(const std::string &key) const;
 
     // Removes every Patch Prime bus (and so its links) in the graph. Used by
     // `patchprimed --remove-buses`, which runs without a BusManager.
@@ -330,8 +338,12 @@ private:
                                                bool monitor) const;
     void linkTaps(const std::map<std::string, std::uint32_t> &ready,
                   const std::map<std::string, Wanted> &wanted,
+                  const std::map<std::string, FxPorts> &fx,
                   const std::map<std::string, std::vector<PortRef>> &stripOuts,
                   const LinkMap &existingLinks);
+    [[nodiscard]] std::optional<std::uint32_t> tapNode(const std::string &nodeName) const;
+    // A hardware strip's device ports in use (its channel pair), or none.
+    [[nodiscard]] std::vector<PortRef> hardwarePortsOf(const Wanted &wanted) const;
 
     using Clock = std::chrono::steady_clock;
 
@@ -359,6 +371,8 @@ private:
     std::map<std::string, std::string> m_recorders; // node name -> endpoint key
     std::string m_playerNode;
     std::string m_playerTarget; // endpoint key
+    // The hardware input the player stands in for now (its key), or empty.
+    std::string m_substitute;
 };
 
 } // namespace pp

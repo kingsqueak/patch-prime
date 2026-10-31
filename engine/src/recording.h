@@ -148,6 +148,9 @@ public:
     void setPaused(bool paused) { m_paused.store(paused); }
     [[nodiscard]] bool isPaused() const { return m_paused.load(); }
     void seek(double seconds);
+    // Looping: starts again from the beginning at the end, without a gap.
+    void setLoop(bool loop) { m_loop.store(loop); }
+    [[nodiscard]] bool isLooping() const { return m_loop.load(); }
     // Played to the end.
     [[nodiscard]] bool finished() const { return m_finished.load(); }
 
@@ -162,6 +165,7 @@ private:
     std::int64_t m_frames = 0;
     SampleRing m_ring;
     std::atomic<bool> m_paused{false};
+    std::atomic<bool> m_loop{false};
     std::atomic<bool> m_eof{false};
     std::atomic<bool> m_finished{false};
     // Seeking: the decoding thread asks the realtime thread to drop what's

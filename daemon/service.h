@@ -146,14 +146,16 @@ public Q_SLOTS:
     // seconds, bytes, modified (ISO date)}]. "recordingsRevision" in the
     // state goes up when they change.
     QString GetRecordings();
-    // The player (state: "player" = {path, paused, duration}, "playerTarget"
-    // = the key of the strip it plays into). Play returns an error message,
-    // or "" on success.
+    // The player (state: "player" = {path, paused, duration, loop},
+    // "playerTarget" = the key of the strip it plays into; a hardware input
+    // takes it in place of its device). Play returns an error message, or
+    // "" on success.
     QString PlayRecording(const QString &path);
     void PausePlayback(bool paused);
     void StopPlayback();
     void SeekPlayback(double seconds);
     void SetPlayerTarget(const QString &key);
+    void SetPlaybackLoop(bool loop);
 
 Q_SIGNALS:
     void StateChanged(const QString &state);

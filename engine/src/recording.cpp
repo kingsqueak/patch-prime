@@ -343,7 +343,10 @@ double Player::duration() const
 
 double Player::position() const
 {
-    const auto frame = std::min(m_base.load() + m_played.load(), m_frames);
+    auto frame = m_base.load() + m_played.load();
+    if (frame > m_frames && m_frames > 0) {
+        frame %= m_frames; // looped round
+    }
     return static_cast<double>(frame) / m_fileRate;
 }
 
@@ -418,7 +421,11 @@ void Player::run(const std::stop_token &stop)
         const auto got = sf_readf_float(file.file.get(), decoded.data(),
                                         static_cast<sf_count_t>(chunkFrames));
         if (got <= 0) {
-            m_eof.store(true, std::memory_order_release);
+            if (m_loop.load() && m_frames > 0) {
+                sf_seek(file.file.get(), 0, SEEK_SET); // round again, straight on
+            } else {
+                m_eof.store(true, std::memory_order_release);
+            }
             continue;
         }
         const auto frames = static_cast<std::size_t>(got);

@@ -671,7 +671,10 @@ void PipeWireGraph::Session::onTapProcess(void *data, spa_io_position *position)
     const auto frames =
         std::min(static_cast<std::uint32_t>(position->clock.duration), IoStream::maxFrames);
     const auto *left = static_cast<const float *>(pw_filter_get_dsp_buffer(s->ports[0], frames));
-    const auto *right = static_cast<const float *>(pw_filter_get_dsp_buffer(s->ports[1], frames));
+    // One port (MONO): heard in both channels.
+    const auto *right = s->ports[1] != nullptr
+                            ? static_cast<const float *>(pw_filter_get_dsp_buffer(s->ports[1], frames))
+                            : left;
     auto &out = s->interleaved;
     for (std::uint32_t i = 0; i < frames; ++i) {
         // Bounds: frames <= maxFrames, the array holds two per frame.
@@ -1134,9 +1137,10 @@ bool PipeWireGraph::hasFilter(const std::string &name) const
 }
 
 bool PipeWireGraph::addStream(const std::string &name, bool capture, int rate,
-                              const Properties &extraProps, const std::shared_ptr<StreamIo> &io)
+                              const Properties &extraProps, const std::shared_ptr<StreamIo> &io,
+                              const std::vector<std::string> &positions)
 {
-    if (!m_session || !io) {
+    if (!m_session || !io || positions.empty() || positions.size() > 2) {
         return false;
     }
     auto &session = *m_session;
@@ -1160,7 +1164,6 @@ bool PipeWireGraph::addStream(const std::string &name, bool capture, int rate,
         ok = s->filter != nullptr;
         if (ok) {
             pw_filter_add_listener(s->filter, &s->listener, &tapEvents, s.get());
-            const std::array<std::string, 2> positions{"FL", "FR"};
             for (std::size_t c = 0; c < positions.size(); ++c) {
                 s->ports.at(c) = pw_filter_add_port(
                     s->filter, PW_DIRECTION_INPUT, PW_FILTER_PORT_FLAG_MAP_BUFFERS, 0,

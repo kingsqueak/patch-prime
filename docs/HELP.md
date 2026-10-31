@@ -60,7 +60,7 @@ From top to bottom:
 | Microphone | Inputs only. **Mono**: mixes all of this input's channels into one, heard in both ears. Use it for a mic on one input of a stereo interface. |
 | Star | Make this strip the system default output (for strips apps play into) or default microphone (for inputs). |
 | Channel pair | On multichannel interfaces: use every channel, or only one stereo pair (for example "Ch 3–4"). |
-| **Record** | Mix buses and Desktop (routed inputs): record this strip to a file. While recording, the button turns red and shows the time; click it to stop. See [Recording and playback](#recording-and-playback). |
+| **Record** | Inputs, mix buses and Desktop: record this strip to a file. While recording, the button turns red and shows the time; click it to stop. Next to a channel pair menu it's just a dot. See [Recording and playback](#recording-and-playback). |
 
 On a hardware **input**, effects run *before* the fader, as on a console, so apps recording your mic get the processed sound. On mix buses and outputs they run *after* the fader, which is what a limiter wants.
 
@@ -121,17 +121,26 @@ Devices, labels and engine settings are not part of scenes.
 
 ## Recording and playback
 
-Any mix bus (Stream Mix, for example) and any routed input (Desktop) can be recorded to a file. Press **Record** at the bottom of the strip, and press it again to stop. Several strips can record at once.
+Inputs, mix buses (Stream Mix, for example) and routed inputs (Desktop) can be recorded to a file. Press **Record** at the bottom of the strip, and press it again to stop. Several strips can record at once.
 
-- **What's recorded** is what the strip sends on, after its effects and its fader. So it's what the rest of the mix hears from that strip, and what OBS would capture.
+- **What's recorded** on a mix bus or Desktop is what the strip sends on, after its effects and its fader: what the rest of the mix hears from it, and what OBS would capture. On a hardware **input** (a microphone) it's the raw sound, as the device sends it, before the strip's effects and fader. A mono input records in mono (the same sound in both channels).
 - **Where:** files go to `~/Music/Patch Prime`, named after the strip and the time, for example `Stream Mix 2026-10-31 11-42-07.flac`.
 - **Format:** choose it on the Recordings page. **FLAC** is lossless at about half the size of WAV. **WAV** is uncompressed. **MP3** is small and plays everywhere, but only up to 48 kHz: at a higher mixer rate an MP3 recording stops at once with a message. FLAC and WAV are 24-bit. The format applies to the next recording.
 - Recording runs in the engine, so it carries on with the window closed. It stops if you change the mixer's sample rate or the audio server restarts; what was recorded until then is kept.
 
 The **Recordings** page (View menu, Ctrl+5, or the Recordings button above the mixer) lists the files, newest first, with their length, size and date.
 
-- **Play** (or double-click a file) plays it through the player. **Play into** chooses the strip it plays into: a mix bus, Desktop or a hardware output. Play into Stream Mix to let your stream hear it, or into your headphones' output to listen alone.
-- The player bar has play/pause, stop and a position slider (drag it to jump).
+- **Play** (or double-click a file) plays it through the player. **Play into** chooses the strip it plays into: an input, a mix bus, Desktop or a hardware output. Play into Stream Mix to let your stream hear it, or into your headphones' output to listen alone.
+- The player bar has play/pause, **loop** (play the file over and over), stop and a position slider (drag it to jump).
+
+### Setting up a mic's effects on a recording
+
+You can't really hear your own voice while you talk, so tuning a gate or a compressor live is guesswork. Instead:
+
+1. Press **Record** on the mic's strip and talk for half a minute the way you normally do, then stop. This records the mic raw, before its effects.
+2. On the Recordings page, choose the mic in **Play into** (it reads "MAMic1 (instead of the device)", for example), turn on **loop**, and play the recording.
+3. While it plays, the mic's strip hears the recording *instead of* the microphone: the device is cut off, and the strip's status line reads **▶ Playback**. The recording goes through the strip's whole effects chain, its fader and its sends, exactly as your voice would.
+4. Open the strip's effects and adjust them while you listen (cue the strip, or listen on the output it's sent to). Stop the player when you're done: the microphone is connected again at once.
 - **Move to Trash** puts a file in the desktop's trash, from which you can still restore it.
 - **Open Folder** opens the recordings folder in the file manager.
 

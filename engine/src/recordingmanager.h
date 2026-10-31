@@ -22,11 +22,13 @@ class BusManager;
 class DeviceModel;
 class PipeWireGraph;
 
-// Strips that can be recorded: mix buses and routed inputs (Desktop).
-bool canRecord(EndpointKind kind);
+// Strips that can be recorded: mix buses, routed inputs (Desktop), and
+// hardware inputs (recorded raw, before their effects).
+bool canRecord(EndpointKind kind, Direction direction);
 // Strips the player can play into: anything apps play into (mix buses,
-// routed inputs, hardware outputs).
-bool canPlayInto(EndpointKind kind, Direction direction);
+// routed inputs, hardware outputs), and hardware inputs (standing in for
+// the device, so its effects can be set up on a recording).
+bool canPlayInto(EndpointKind kind);
 
 // A file in the recordings folder.
 struct RecordingFile
@@ -78,6 +80,9 @@ public:
     void stopPlayback();
     void seek(double seconds);
     void setPlayerTarget(const std::string &key);
+    // Plays the file over and over (for this and later files).
+    void setLoop(bool loop);
+    [[nodiscard]] bool isLooping() const { return m_loop; }
     [[nodiscard]] std::string playerTarget() const;
     struct PlayerState
     {
@@ -118,6 +123,7 @@ private:
     QString m_lastError;
     std::map<std::string, Recording> m_recordings; // by strip key
     std::shared_ptr<Player> m_player;
+    bool m_loop = false;
     QTimer m_poll;
 };
 

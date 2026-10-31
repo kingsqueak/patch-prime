@@ -533,6 +533,120 @@ private Q_SLOTS:
             [&] { return !nodeNamed(m_graph, mixNode) && !nodeNamed(m_graph, desktopNode); }, 5000));
     }
 
+    // A raw sample of a mic, played back into that mic's strip (looping)
+    // in place of the device, through its effects.
+    void playsIntoAnInput()
+    {
+        const auto pid = std::to_string(QCoreApplication::applicationPid());
+        const auto feed = "pp_rfeed_" + pid;
+        const auto mic = "pp_rsrc_" + pid;
+        QProcess loopback;
+        loopback.start(QStringLiteral("pw-loopback"),
+                       {QString::fromStdString("--capture-props=media.class=Audio/Sink node.name=" +
+                                               feed + " audio.position=[FL,FR]"),
+                        QString::fromStdString("--playback-props=media.class=Audio/Source "
+                                               "node.name=" +
+                                               mic + " audio.position=[FL,FR]")});
+        auto stopLoopback = qScopeGuard([&loopback] {
+            loopback.terminate();
+            loopback.waitForFinished(2000);
+        });
+
+        QTemporaryDir dir;
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel devices(&store);
+        devices.attach(&m_graph);
+        BusManager buses(&m_graph, &devices);
+        m_owners.insert(busOwnerFor(store.path()));
+        RecordingManager recordings(&m_graph, &devices, &buses, dir.filePath(QStringLiteral("rec")));
+
+        const auto micKey = makeEndpointKey("Audio/Source", mic);
+        QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(micKey) >= 0; }, 5000));
+        devices.setEnabled(devices.rowForKey(micKey), true);
+        const auto mixKey =
+            devices.createVirtual(QStringLiteral("Test Mix"), EndpointKind::VirtualSink);
+        devices.setSend(devices.rowForKey(micKey), mixKey, true);
+        devices.addEffect(devices.rowForKey(micKey), QStringLiteral("gain"));
+        devices.setEffectParam(devices.rowForKey(micKey), 0, QStringLiteral("gainDb"), -20.0);
+        const auto inBus = store.find(micKey)->busName;
+        const auto micFx = effectsNodeName(inBus);
+        const auto mixNode = store.find(mixKey.toStdString())->busName;
+        QVERIFY(QTest::qWaitFor(
+            [&] { return linkCount(m_graph, mic, micFx) == 2 && nodeNamed(m_graph, mixNode); },
+            5000));
+
+        // Record the mic raw: straight from the device, before the -20 dB.
+        QString error;
+        QVERIFY2(recordings.start(micKey, &error), qPrintable(error));
+        const auto recorderNode = std::string(RecordingManager::recorderPrefix) + inBus.substr(11);
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, mic, recorderNode) == 2; }, 5000));
+        QTemporaryDir toneDir;
+        const auto tone = toneDir.filePath(QStringLiteral("tone.wav"));
+        QVERIFY(writeTone(tone));
+        QProcess tonePlayer;
+        tonePlayer.start(QStringLiteral("pw-play"),
+                         {QStringLiteral("-P"),
+                          QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                          QStringLiteral("--target"), QString::fromStdString(feed), tone});
+        QVERIFY(QTest::qWaitFor([&] { return recordings.recordedSeconds()[micKey] > 1.5; }, 8000));
+        tonePlayer.kill();
+        tonePlayer.waitForFinished();
+        const auto path = recordings.recording().at(micKey);
+        recordings.stop(micKey);
+        {
+            const auto file = Player::open(path, &error);
+            QVERIFY2(file, qPrintable(error));
+            std::vector<float> buffer(512);
+            float peak = 0.0F;
+            for (int i = 0; i < 2000 && !file->finished(); ++i) {
+                file->process(buffer.data(), 256, 2);
+                for (const float x : buffer) {
+                    peak = std::max(peak, std::abs(x));
+                }
+                QTest::qWait(0);
+            }
+            QVERIFY2(std::abs(peak - 0.5F) < 0.05F, qPrintable(QString::number(peak))); // raw
+        }
+
+        // Played back into the mic's strip: the device is cut off, the
+        // recording goes through the effects (-20 dB) into the mix.
+        buses.setMetering(true);
+        recordings.setLoop(true);
+        recordings.setPlayerTarget(micKey);
+        QVERIFY2(recordings.play(path, &error), qPrintable(error));
+        const auto player = std::string(RecordingManager::playerName);
+        QVERIFY(QTest::qWaitFor(
+            [&] { return linkCount(m_graph, player, micFx) == 2 && linkCount(m_graph, mic, micFx) == 0; },
+            5000));
+        float mixPeak = 0.0F;
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                const auto levels = buses.takeLevels();
+                if (const auto it = levels.find(mixKey.toStdString()); it != levels.end()) {
+                    for (const float level : it->second) {
+                        mixPeak = std::max(mixPeak, level);
+                    }
+                }
+                return mixPeak > 0.04F;
+            },
+            5000));
+        QVERIFY2(mixPeak < 0.07F, qPrintable(QString::number(mixPeak)));
+        // It loops: still playing well past its length.
+        const auto length = recordings.player().duration;
+        QTest::qWait(static_cast<int>((length + 1.0) * 1000));
+        QVERIFY(!recordings.player().path.isEmpty());
+
+        // Stopped, the mic comes back.
+        recordings.stopPlayback();
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, mic, micFx) == 2; }, 5000));
+        QCOMPARE(linkCount(m_graph, player, micFx), 0);
+        buses.setMetering(false);
+
+        devices.forget(devices.rowForKey(mixKey.toStdString()));
+        devices.setEnabled(devices.rowForKey(micKey), false);
+        QVERIFY(QTest::qWaitFor([&] { return !nodeNamed(m_graph, inBus); }, 5000));
+    }
+
     void routesInputToVirtualSink()
     {
         // A fake microphone: pw-loopback turns what plays into pp_feed_<pid>

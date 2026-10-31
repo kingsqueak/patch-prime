@@ -740,6 +740,16 @@ void BusManager::reconcile()
 
     // What each strip feeds the next stage from: its effects node, or its
     // bus (also when the effects come before the bus).
+    // The player standing in for a hardware input: that input's device is
+    // unlinked while the player is up (see linkHardware).
+    m_substitute.clear();
+    if (!m_playerNode.empty() && tapNode(m_playerNode)) {
+        for (const auto &[name, w] : wanted) {
+            if (w.key == m_playerTarget && effectsBeforeBus(w)) {
+                m_substitute = w.key;
+            }
+        }
+    }
     const auto fx = reconcileEffects(ready, wanted, existingLinks);
     std::map<std::string, std::vector<PortRef>> stripOuts;
     for (const auto &[name, busId] : ready) {
@@ -754,7 +764,7 @@ void BusManager::reconcile()
     linkSends(ready, stripOuts, wanted, sends, readySends, existingLinks);
     linkKeys(fx, wanted, stripOuts, existingLinks);
     linkCue(ready, wanted, stripOuts, existingLinks);
-    linkTaps(ready, wanted, stripOuts, existingLinks);
+    linkTaps(ready, wanted, fx, stripOuts, existingLinks);
 
     // Meters whose bus is gone or no longer wanted.
     for (auto it = m_meters.begin(); it != m_meters.end();) {
@@ -1092,8 +1102,41 @@ void BusManager::setTaps(std::map<std::string, std::string> recorders, std::stri
     scheduleReconcile();
 }
 
+std::vector<std::string> BusManager::stripPositions(const std::string &key) const
+{
+    for (const auto &[name, w] : wantedBuses()) {
+        if (w.key == key) {
+            return busPositions(w.endpoint);
+        }
+    }
+    return {};
+}
+
+std::optional<std::uint32_t> BusManager::tapNode(const std::string &nodeName) const
+{
+    for (const auto &[id, node] : m_graph->nodes()) {
+        if (prop(node, "node.name") == nodeName && prop(node, "patchprime.tap.owner") == m_owner) {
+            return id;
+        }
+    }
+    return std::nullopt;
+}
+
+std::vector<PortRef> BusManager::hardwarePortsOf(const Wanted &wanted) const
+{
+    if (!wanted.hardwareNodeId || wanted.settings->kind != EndpointKind::Hardware) {
+        return {};
+    }
+    auto ports = portsOf(*wanted.hardwareNodeId, "out", false);
+    if (ports.empty()) {
+        ports = portsOf(*wanted.hardwareNodeId, "out", true); // a virtual source's
+    }
+    return selectPair(ports, wanted.settings->channelPair);
+}
+
 void BusManager::linkTaps(const std::map<std::string, std::uint32_t> &ready,
                           const std::map<std::string, Wanted> &wanted,
+                          const std::map<std::string, FxPorts> &fx,
                           const std::map<std::string, std::vector<PortRef>> &stripOuts,
                           const LinkMap &existingLinks)
 {
@@ -1104,43 +1147,57 @@ void BusManager::linkTaps(const std::map<std::string, std::uint32_t> &ready,
     for (const auto &[name, w] : wanted) {
         nameOf[w.key] = name;
     }
-    const auto findNode = [this](const std::string &nodeName) -> std::optional<std::uint32_t> {
-        for (const auto &[id, node] : m_graph->nodes()) {
-            if (prop(node, "node.name") == nodeName && prop(node, "patchprime.tap.owner") == m_owner) {
-                return id;
-            }
-        }
-        return std::nullopt;
-    };
     for (const auto &[nodeName, key] : m_recorders) {
-        const auto node = findNode(nodeName);
+        const auto node = tapNode(nodeName);
         const auto bus = nameOf.find(key);
         if (!node || bus == nameOf.end()) {
             continue;
         }
-        if (const auto out = stripOuts.find(bus->second); out != stripOuts.end()) {
+        const auto &w = wanted.at(bus->second);
+        // A hardware input raw, as it comes in (summed to mono like the strip).
+        if (effectsBeforeBus(w)) {
+            link(hardwarePortsOf(w), portsOf(*node, "in", false), existingLinks);
+        } else if (const auto out = stripOuts.find(bus->second); out != stripOuts.end()) {
             link(out->second, portsOf(*node, "in", false), existingLinks);
         }
     }
     if (m_playerNode.empty()) {
         return;
     }
-    const auto player = findNode(m_playerNode);
+    const auto player = tapNode(m_playerNode);
     if (!player) {
         return;
     }
-    // Into the target strip's bus (where apps play), and nowhere else: the
-    // target may have just changed.
-    std::optional<std::uint32_t> target;
+    // Into the target strip, and nowhere else: the target may have just
+    // changed. A hardware input takes it where the device comes in: its
+    // effects node, or its bus.
+    std::vector<PortRef> into;
     if (const auto bus = nameOf.find(m_playerTarget); bus != nameOf.end()) {
-        if (const auto it = ready.find(bus->second); it != ready.end()) {
-            target = it->second;
-            link(portsOf(*player, "out", false), portsOf(it->second, "in", false), existingLinks);
+        const auto &w = wanted.at(bus->second);
+        if (const auto f = fx.find(bus->second); f != fx.end() && effectsBeforeBus(w)) {
+            into = f->second.in;
+        } else if (const auto it = ready.find(bus->second); it != ready.end()) {
+            into = portsOf(it->second, "in", false);
         }
     }
+    auto from = portsOf(*player, "out", false);
+    if (into.size() == 1 && !from.empty()) {
+        from.resize(1); // a mono strip: one channel, not both summed (6 dB louder)
+    }
+    link(from, into, existingLinks);
+    const std::optional<std::uint32_t> target =
+        into.empty() ? std::nullopt : std::optional(into.front().nodeId);
+    std::set<std::pair<std::uint32_t, std::uint32_t>> desired;
+    for (const auto &[out, in] : pairPorts(from, into)) {
+        desired.emplace(out.portId, in.portId);
+    }
     for (const auto &[id, l] : m_graph->links()) {
-        if (parseId(prop(l, "link.output.node")) == *player &&
-            (!target || parseId(prop(l, "link.input.node")) != *target)) {
+        if (parseId(prop(l, "link.output.node")) != *player) {
+            continue;
+        }
+        const std::pair ports{parseId(prop(l, "link.output.port")),
+                              parseId(prop(l, "link.input.port"))};
+        if (!target || !desired.contains(ports)) {
             m_graph->destroyObject(id);
         }
     }
@@ -1234,7 +1291,10 @@ void BusManager::linkHardware(std::uint32_t busNodeId, const FxPorts *fx, const 
         busPorts = input ? fx->in : fx->out;
     }
     const auto used = selectPair(hardwarePorts, wanted.settings->channelPair);
-    const auto pairs = input ? pairPorts(used, busPorts) : pairPorts(busPorts, used);
+    auto pairs = input ? pairPorts(used, busPorts) : pairPorts(busPorts, used);
+    if (input && wanted.key == m_substitute) {
+        pairs.clear(); // the player stands in for the device: its links go below
+    }
 
     const auto now = Clock::now();
     std::set<std::pair<std::uint32_t, std::uint32_t>> desired;

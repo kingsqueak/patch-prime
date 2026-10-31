@@ -79,13 +79,14 @@ private Q_SLOTS:
     {
         using pp::Direction;
         using pp::EndpointKind;
-        QVERIFY(pp::canRecord(EndpointKind::VirtualSink));
-        QVERIFY(pp::canRecord(EndpointKind::VirtualInput));
-        QVERIFY(!pp::canRecord(EndpointKind::Hardware));
-        QVERIFY(!pp::canRecord(EndpointKind::VirtualSource));
-        QVERIFY(pp::canPlayInto(EndpointKind::Hardware, Direction::Output));
-        QVERIFY(!pp::canPlayInto(EndpointKind::Hardware, Direction::Input));
-        QVERIFY(pp::canPlayInto(EndpointKind::VirtualInput, Direction::Output));
+        QVERIFY(pp::canRecord(EndpointKind::VirtualSink, Direction::Output));
+        QVERIFY(pp::canRecord(EndpointKind::VirtualInput, Direction::Output));
+        QVERIFY(pp::canRecord(EndpointKind::Hardware, Direction::Input));
+        QVERIFY(!pp::canRecord(EndpointKind::Hardware, Direction::Output));
+        QVERIFY(!pp::canRecord(EndpointKind::VirtualSource, Direction::Input));
+        QVERIFY(pp::canPlayInto(EndpointKind::Hardware));
+        QVERIFY(pp::canPlayInto(EndpointKind::VirtualInput));
+        QVERIFY(!pp::canPlayInto(EndpointKind::VirtualSource));
     }
 
     // Records a second of a 1 kHz tone at -6 dBFS through the realtime
@@ -163,6 +164,37 @@ private Q_SLOTS:
         QVERIFY2(player->position() >= 0.5 && player->position() < 0.6,
                  qPrintable(QString::number(player->position())));
         QVERIFY(!player->finished());
+    }
+
+    // Looping plays on past the end, without finishing.
+    void loops()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("short.wav"));
+        {
+            pp::Recorder recorder(path, pp::RecordingFormat::Wav);
+            recorder.setRate(48000);
+            std::vector<float> buffer(std::size_t{4800} * 2, 0.25F); // 0.1 s
+            recorder.process(buffer.data(), 4800, 2);
+            recorder.stop();
+        }
+        QString error;
+        const auto player = pp::Player::open(path, &error);
+        QVERIFY2(player, qPrintable(error));
+        player->setLoop(true);
+        std::vector<float> buffer(std::size_t{480} * 2);
+        std::size_t played = 0;
+        for (int i = 0; i < 2000 && played < std::size_t{48000} * 3 / 10; ++i) {
+            buffer.assign(buffer.size(), 0.0F);
+            player->process(buffer.data(), 480, 2);
+            if (buffer.back() == 0.25F) {
+                played += 480;
+            }
+            std::this_thread::sleep_for(1ms);
+        }
+        QVERIFY(played >= std::size_t{48000} * 3 / 10); // three times round
+        QVERIFY(!player->finished());
+        QVERIFY(player->position() < 0.1);
     }
 
     void stoppedBeforeTheRateLeavesNoFile()

@@ -308,6 +308,11 @@ void DaemonClient::setPlayerTarget(const QString &key)
     call(QStringLiteral("SetPlayerTarget"), {key});
 }
 
+void DaemonClient::setPlaybackLoop(bool loop)
+{
+    call(QStringLiteral("SetPlaybackLoop"), {loop});
+}
+
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static): QML calls it on the instance
 bool DaemonClient::trashFile(const QString &file)
 {

@@ -48,9 +48,15 @@ QQC2.Control {
     readonly property var sends: model.sends
     readonly property var effects: model.effects || []
     readonly property bool cued: model.cued === true
-    // Mix buses and routed inputs (Desktop) can be recorded.
+    // Mix buses and routed inputs (Desktop) can be recorded, and hardware
+    // inputs (raw, as the device sends them).
     readonly property bool canRecord: kind === "virtual-sink" || kind === "virtual-input"
+                                      || (kind === "hardware" && isInput)
     readonly property bool recording: Devices.recording[key] !== undefined
+    // A hardware input hearing the player instead of its device.
+    readonly property bool hearingPlayer: kind === "hardware" && isInput
+                                          && Devices.playerTarget === key
+                                          && (Devices.player.path || "").length > 0
 
     readonly property bool ownVirtual: kind !== "hardware"
     readonly property bool isInput: direction === "input"
@@ -132,8 +138,10 @@ QQC2.Control {
                 Layout.fillWidth: true
                 font: Kirigami.Theme.smallFont
                 elide: Text.ElideRight
-                color: strip.online ? Style.dimText : Style.offlineText
-                text: !strip.online ? qsTr("Offline")
+                color: strip.hearingPlayer ? Style.recordOn
+                     : strip.online ? Style.dimText : Style.offlineText
+                text: strip.hearingPlayer ? qsTr("▶ Playback")
+                    : !strip.online ? qsTr("Offline")
                     : strip.kind === "virtual-input" ? qsTr("Virtual input")
                     : strip.kind === "virtual-source" ? qsTr("Virtual mic")
                     : strip.kind === "virtual-sink" ? qsTr("Mix bus")
@@ -301,17 +309,45 @@ QQC2.Control {
             }
         }
 
-        // --- options
-        Item {
+        // --- options: the channel pair and record share the row; while
+        // recording, the time takes all of it.
+        RowLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: Style.controlHeight
+            Layout.maximumHeight: Style.controlHeight
+            spacing: Style.gap
 
-            // Record (mix buses and Desktop): the time while recording.
+            QQC2.ComboBox {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: strip.hasPairs && !strip.recording
+                enabled: Devices.daemonRunning
+                font: Kirigami.Theme.smallFont
+                model: {
+                    const list = [qsTr("All %1 ch").arg(strip.channels)];
+                    for (let pair = 1; pair * 2 <= strip.channels; ++pair)
+                        list.push(qsTr("Ch %1–%2").arg(pair * 2 - 1).arg(pair * 2));
+                    return list;
+                }
+                currentIndex: strip.channelPair
+                onActivated: index => Devices.setChannelPair(strip.key, index)
+                Accessible.name: qsTr("Channels of %1").arg(strip.label)
+                QQC2.ToolTip.text: qsTr("Use every channel of this device, or only one stereo pair (for example the front headphone jack of a card in pro-audio mode).")
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+            }
+
+            // Record: the time while recording. Only the dot next to the
+            // channel pair.
             QQC2.ToolButton {
                 id: recordButton
 
-                anchors.fill: parent
-                anchors.margins: 1
+                readonly property bool compact: strip.hasPairs && !strip.recording
+
+                Layout.fillWidth: !compact
+                Layout.preferredWidth: compact ? Style.controlHeight : -1
+                Layout.fillHeight: true
+                Layout.margins: 1
                 visible: strip.canRecord
                 enabled: Devices.daemonRunning && strip.online
                 checkable: true
@@ -337,6 +373,7 @@ QQC2.Control {
                             color: strip.recording ? Style.toggleOnText : Style.recordOn
                         }
                         QQC2.Label {
+                            visible: !recordButton.compact
                             text: recordButton.text
                             font.family: strip.recording ? "monospace" : Kirigami.Theme.smallFont.family
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
@@ -354,29 +391,18 @@ QQC2.Control {
                                                  : qsTr("Record %1").arg(strip.label)
                 QQC2.ToolTip.text: strip.recording
                      ? qsTr("Recording to %1. Click to stop.").arg(Devices.recording[strip.key])
+                     : strip.kind === "hardware"
+                     ? qsTr("Record this input raw, as the device sends it (before its effects and fader), to a %1 file in %2. Play it back into this input on the Recordings page to set up its effects.")
+                       .arg(Devices.recordingFormat.toUpperCase()).arg(Devices.recordingFolder)
                      : qsTr("Record what this strip sends on (after its effects and fader) to a %1 file in %2.")
                        .arg(Devices.recordingFormat.toUpperCase()).arg(Devices.recordingFolder)
                 QQC2.ToolTip.visible: hovered
                 QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
             }
 
-            QQC2.ComboBox {
-                anchors.fill: parent
-                visible: strip.hasPairs
-                enabled: Devices.daemonRunning
-                font: Kirigami.Theme.smallFont
-                model: {
-                    const list = [qsTr("All %1 ch").arg(strip.channels)];
-                    for (let pair = 1; pair * 2 <= strip.channels; ++pair)
-                        list.push(qsTr("Ch %1–%2").arg(pair * 2 - 1).arg(pair * 2));
-                    return list;
-                }
-                currentIndex: strip.channelPair
-                onActivated: index => Devices.setChannelPair(strip.key, index)
-                Accessible.name: qsTr("Channels of %1").arg(strip.label)
-                QQC2.ToolTip.text: qsTr("Use every channel of this device, or only one stereo pair (for example the front headphone jack of a card in pro-audio mode).")
-                QQC2.ToolTip.visible: hovered
-                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+            Item {
+                Layout.fillWidth: true
+                visible: !strip.hasPairs && !strip.canRecord
             }
         }
     }
