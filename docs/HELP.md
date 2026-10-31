@@ -69,6 +69,12 @@ The mixer scrolls sideways when there are more strips than fit.
 - **Scene**: save and load the whole mix. See [Scenes](#scenes).
 - **Cue**: choose your headphones for cue. See [Cue](#cue-headphones).
 
+### Menus and shortcuts
+
+- **File → Quit** (Ctrl+Q) closes the window. The engine keeps running, so your audio doesn't stop.
+- **View** switches pages: **Mixer** (Ctrl+1), **Apps** (Ctrl+2), **Routing** (Ctrl+3), **Devices** (Ctrl+4).
+- **Help → Patch Prime User Guide** (F1) opens this guide in a window of its own, built into the app so it works offline; **User Guide Online** opens it on GitHub; **Report a Bug…** opens the issue tracker; **About Patch Prime** shows the version and license.
+
 ## Mix buses and virtual devices
 
 On the **Devices** page, **Add Virtual Device…** makes one of three kinds:

@@ -3,6 +3,7 @@
 
 #include "daemonclient.h"
 
+#include <QFile>
 #include <QGuiApplication>
 #include <QImage>
 #include <QQmlApplicationEngine>
@@ -18,6 +19,7 @@ int main(int argc, char *argv[])
     QGuiApplication::setApplicationDisplayName(QStringLiteral("Patch Prime"));
     QGuiApplication::setOrganizationDomain(QStringLiteral("kingsqueak.org"));
     QGuiApplication::setDesktopFileName(QStringLiteral("org.kingsqueak.patchprime"));
+    QGuiApplication::setApplicationVersion(QStringLiteral(PATCHPRIME_VERSION));
 
     // Use the Plasma style unless the user picked one.
     if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
@@ -29,10 +31,16 @@ int main(int argc, char *argv[])
     qmlRegisterSingletonInstance("org.kingsqueak.patchprime.engine", 1, 0, "Devices", &devices);
     qmlRegisterType<StripFilter>("org.kingsqueak.patchprime.engine", 1, 0, "StripFilter");
 
+    // The user guide (docs/HELP.md, built in), for Help > User Guide.
+    QFile guide(QStringLiteral(":/docs/HELP.md"));
+    const QString guideText =
+        guide.open(QIODevice::ReadOnly) ? QString::fromUtf8(guide.readAll()) : QString();
+
     QQmlApplicationEngine engine;
     engine.setInitialProperties(
         {{QStringLiteral("startPage"), qEnvironmentVariable("PATCHPRIME_PAGE")},
-         {QStringLiteral("openEffects"), qEnvironmentVariable("PATCHPRIME_EFFECTS")}});
+         {QStringLiteral("openEffects"), qEnvironmentVariable("PATCHPRIME_EFFECTS")},
+         {QStringLiteral("guideText"), guideText}});
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
         [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
@@ -49,7 +57,8 @@ int main(int argc, char *argv[])
 
     // Developer aid: PATCHPRIME_SCREENSHOT=<file.png> saves the window once the
     // state has arrived, then quits. Works with QT_QPA_PLATFORM=offscreen.
-    // PATCHPRIME_PAGE=devices opens the Devices page first;
+    // PATCHPRIME_PAGE=devices opens the Devices page first (also routing,
+    // apps, about, guide: the user guide's window, saved as <file>-2.png);
     // PATCHPRIME_EFFECTS=<strip label> opens that strip's effects;
     // PATCHPRIME_WINDOW_SIZE=<w>x<h> sizes the window (see above).
     if (const auto shot = qEnvironmentVariable("PATCHPRIME_SCREENSHOT"); !shot.isEmpty()) {
