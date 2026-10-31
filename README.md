@@ -28,7 +28,7 @@ See the **[user guide](docs/HELP.md)** for how to use it.
 
 ## Status
 
-Under active development and in daily use on the author's machine. Phases 1–6 (devices, mixer, routing, apps, scenes, effects, monitoring) are done. Next: packaging, then plugin hosting (LV2 first) and hardware control.
+Version 0.10: under active development and in daily use on the author's machine. Phases 1–6 (devices, mixer, routing, apps, scenes, effects, monitoring) are done, with packages for Ubuntu 26.04. Next: plugin hosting (LV2 first) and hardware control.
 
 ## Requirements
 
@@ -54,6 +54,18 @@ ctest --preset gcc-debug
 The noise suppression uses [RNNoise](https://github.com/xiph/rnnoise) (BSD-3-Clause), which CMake downloads at configure time, checks against a fixed checksum, and builds in. To build without network access, configure with `-DPATCHPRIME_RNNOISE=OFF`; you then don't get noise suppression.
 
 ## Installing
+
+### From a package
+
+Each release has `.deb` packages for Ubuntu 26.04 on amd64 and arm64 (64-bit ARM), built by GitHub Actions; download the one for your machine from the [Releases](https://github.com/kingsqueak/patch-prime/releases) page and install it:
+
+```sh
+sudo apt install ./patchprime_0.10-1_amd64.deb
+```
+
+The engine starts at your next login (or right away when you open **Patch Prime** from the application menu). To build the packages yourself: configure with `-DCMAKE_INSTALL_PREFIX=/usr`, build, then `cpack -G DEB` in the build directory.
+
+### From source
 
 ```sh
 cmake --preset gcc-release -DCMAKE_INSTALL_PREFIX=$HOME/.local

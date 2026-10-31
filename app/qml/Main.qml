@@ -18,7 +18,7 @@ Kirigami.ApplicationWindow {
 
     readonly property string repository: "https://github.com/kingsqueak/patch-prime"
 
-    title: "Patch Prime"
+    title: "Patch Prime " + Qt.application.version
     width: Kirigami.Units.gridUnit * 52
     height: Kirigami.Units.gridUnit * 34
 

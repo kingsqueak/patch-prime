@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 project(PatchPrime
-    VERSION 0.0.1
+    VERSION 0.10
     DESCRIPTION "Virtual audio mixer and router for KDE Plasma on PipeWire"
     LANGUAGES C CXX)
 
@@ -52,3 +52,5 @@ if(PATCHPRIME_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+include(cmake/Packaging.cmake)

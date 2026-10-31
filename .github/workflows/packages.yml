@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 KC2RGW Chris
+
+# Builds the .deb packages for Ubuntu 26.04 on amd64 and arm64, in an
+# ubuntu:26.04 container on GitHub's runners. Runs by hand (Actions > Packages
+# > Run workflow) and on a version tag (v*), which also attaches the packages
+# to that tag's GitHub release.
+name: Packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    name: Ubuntu 26.04 ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    container: ubuntu:26.04
+    steps:
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config git ca-certificates file dpkg-dev \
+            qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools libpipewire-0.3-dev
+
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_INSTALL_PREFIX=/usr
+          -DPATCHPRIME_WERROR=ON
+
+      - name: Build
+        run: cmake --build build
+
+      # The live tests need a running PipeWire server, which CI hasn't got.
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -LE pipewire
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QTEST_DISABLE_STACK_DUMP: "1"
+
+      - name: Package
+        run: |
+          cd build
+          cpack -G DEB
+          dpkg-deb --info patchprime_*.deb
+          dpkg-deb --contents patchprime_*.deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patchprime-ubuntu26.04-${{ matrix.arch }}
+          path: build/patchprime_*.deb
+          if-no-files-found: error
+
+  release:
+    name: Attach to the release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: deb
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: debs
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: debs/*.deb

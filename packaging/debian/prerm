@@ -1,0 +1,8 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 KC2RGW Chris
+set -e
+if [ "$1" = "remove" ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl --global disable patchprimed.service || true
+fi
+exit 0

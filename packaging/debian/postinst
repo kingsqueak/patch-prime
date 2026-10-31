@@ -1,0 +1,9 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 KC2RGW Chris
+set -e
+# The engine starts at every user's login (from the next one on).
+if [ "$1" = "configure" ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl --global enable patchprimed.service || true
+fi
+exit 0
