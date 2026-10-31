@@ -111,7 +111,10 @@ RowLayout {
         title: qsTr("Save Scene")
         standardButtons: Kirigami.Dialog.Save | Kirigami.Dialog.Cancel
         onOpened: {
-            nameField.text = Devices.currentScene;
+            // The scene last saved or loaded; failing that, the one chosen
+            // in the scene menu (empty when there are none yet).
+            nameField.text = Devices.currentScene.length > 0 ? Devices.currentScene
+                                                             : Devices.scenes.length > 0 ? choice.currentText : "";
             nameField.forceActiveFocus();
             nameField.selectAll();
         }

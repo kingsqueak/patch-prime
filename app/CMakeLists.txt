@@ -14,7 +14,7 @@ set_source_files_properties(qml/Style.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 qt_add_qml_module(patchprime
     URI org.kingsqueak.patchprime
     VERSION 1.0
-    QML_FILES qml/Main.qml qml/MixerPage.qml qml/ChannelStrip.qml qml/DevicesPage.qml qml/EngineMessage.qml qml/RoutingPage.qml qml/AppsPage.qml qml/RecordingsPage.qml
+    QML_FILES qml/Main.qml qml/MixerPage.qml qml/ChannelStrip.qml qml/DevicesPage.qml qml/EngineMessage.qml qml/RoutingPage.qml qml/AppsPage.qml qml/RecordingsPage.qml qml/RecordingsPanel.qml qml/RecordingsState.qml qml/RecordingRow.qml qml/PlayerControls.qml
         qml/Style.qml qml/LevelMeter.qml qml/StripToggle.qml qml/VolumeFader.qml qml/StripGroup.qml qml/SendButton.qml qml/DbField.qml qml/SceneBar.qml qml/EffectsWindow.qml qml/InsertSlots.qml qml/ConsoleFader.qml
         qml/EqEditor.qml qml/ParamField.qml qml/MultibandEditor.qml
         qml/EffectMeterBridge.qml qml/GainReductionMeter.qml qml/effectmeters.js qml/UserGuide.qml

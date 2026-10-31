@@ -64,7 +64,7 @@ From top to bottom:
 
 On a hardware **input**, effects run *before* the fader, as on a console, so apps recording your mic get the processed sound. On mix buses and outputs they run *after* the fader, which is what a limiter wants.
 
-The mixer scrolls sideways when there are more strips than fit.
+The mixer scrolls sideways when there are more strips than fit. The window opens at the size you last left it (made smaller if it wouldn't fit on the screen).
 
 ### The top row
 
@@ -115,7 +115,7 @@ A scene is the whole mix saved under a name:
 
 Devices, labels and engine settings are not part of scenes.
 
-- **Save…** stores the current mix. Typing an existing name replaces that scene.
+- **Save…** stores the current mix. The name starts as the scene last saved or loaded (or the one chosen in the menu), so saving again updates it; type a new name for a new scene. Typing an existing name replaces that scene.
 - **Load** sets the mix to the chosen scene, without restarting anything.
 - **✕** deletes the chosen scene. The mix stays as it is.
 
@@ -128,7 +128,7 @@ Inputs, mix buses (Stream Mix, for example) and routed inputs (Desktop) can be r
 - **Format:** choose it on the Recordings page. **FLAC** is lossless at about half the size of WAV. **WAV** is uncompressed. **MP3** is small and plays everywhere, but only up to 48 kHz: at a higher mixer rate an MP3 recording stops at once with a message. FLAC and WAV are 24-bit. The format applies to the next recording.
 - Recording runs in the engine, so it carries on with the window closed. It stops if you change the mixer's sample rate or the audio server restarts; what was recorded until then is kept.
 
-The **Recordings** page (View menu, Ctrl+5, or the Recordings button above the mixer) lists the files, newest first, with their length, size and date.
+The **Recordings panel**, to the right of the outputs in the mixer, has the player at the top (play/pause, loop, stop, position, **Play into**), the recording format and the folder button, and the files below it in a scrolling list. The **Recordings** page (View menu, Ctrl+5, or the Recordings button above the mixer) has the same with more room. Both list the files newest first, with their length, size and date.
 
 - **Play** (or double-click a file) plays it through the player. **Play into** chooses the strip it plays into: an input, a mix bus, Desktop or a hardware output. Play into Stream Mix to let your stream hear it, or into your headphones' output to listen alone.
 - The player bar has play/pause, **loop** (play the file over and over), stop and a position slider (drag it to jump).
@@ -180,7 +180,8 @@ Splits the sound into four bands at three crossovers (120 Hz, 1 kHz and 6 kHz to
 
 - Drag the lines on the frequency strip to move the crossovers, or type them.
 - Per band: threshold, ratio, attack, release and makeup gain; **Band n** turns a band's compression off; **S** solos a band, so you hear only the soloed ones while setting them up.
-- Each band's gain reduction shows as a bar and in dB; the GR meter on the right shows the deepest band.
+- Each band's window shows its **level** rising from the bottom (on a −60 to 0 dB scale), its **threshold** as a line across it (with its value), and its **gain reduction** as a bar hanging from the top (and in dB). The part of the level above the threshold is drawn brighter: that's what the band compresses. Side by side, the four windows show how the sound is balanced across the bands.
+- The GR meter on the right shows the deepest band.
 
 With nothing compressing, the four bands add back up to the original sound exactly.
 

@@ -97,6 +97,9 @@ private Q_SLOTS:
             store.setBlockSize(512);
             store.upsert("phones").sampleRate = 44100;
             store.upsert("phones").scheduling = Scheduling::Timer;
+            store.setCurrentScene("Show");
+            store.setRecordingFormat("mp3");
+            store.setPlayerTarget("mic");
             QVERIFY(store.save());
         }
         DeviceStore store(path);
@@ -116,6 +119,9 @@ private Q_SLOTS:
         QCOMPARE(store.find("phones")->scheduling, Scheduling::Timer);
         QCOMPARE(store.find("mic")->scheduling, Scheduling::Auto);
         QCOMPARE(store.find("mic")->channelPair, 0);
+        QCOMPARE(store.currentScene(), "Show");
+        QCOMPARE(store.recordingFormat(), "mp3");
+        QCOMPARE(store.playerTarget(), "mic");
 
         // A re-attached destination keeps its sends; a removed one drops them.
         QVERIFY(store.rekey("phones", "phones2"));

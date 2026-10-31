@@ -440,6 +440,14 @@ void DeviceModel::setPlayerTarget(const std::string &key)
     Q_EMIT recordingSettingsChanged();
 }
 
+void DeviceModel::setCurrentScene(const std::string &name)
+{
+    if (name != m_store->currentScene()) {
+        m_store->setCurrentScene(name);
+        saveStore();
+    }
+}
+
 void DeviceModel::setCueOutput(const std::string &key)
 {
     if (!key.empty()) {

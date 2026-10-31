@@ -176,7 +176,6 @@ private:
     pp::RecordingManager *m_recordings;
     int m_recordingsRevision = 0;
     pp::SceneStore *m_scenes;
-    QString m_currentScene;
     QTimer m_stateTimer;
     QTimer m_levelsTimer;
     QDBusServiceWatcher m_watcher;

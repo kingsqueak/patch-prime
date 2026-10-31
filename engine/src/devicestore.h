@@ -194,6 +194,10 @@ public:
     void setRecordingFormat(std::string format) { m_recordingFormat = std::move(format); }
     [[nodiscard]] const std::string &playerTarget() const { return m_playerTarget; }
     void setPlayerTarget(std::string key) { m_playerTarget = std::move(key); }
+    // The scene last saved or loaded (empty for none), so it's still known
+    // after a restart.
+    [[nodiscard]] const std::string &currentScene() const { return m_currentScene; }
+    void setCurrentScene(std::string name) { m_currentScene = std::move(name); }
 
     [[nodiscard]] const std::map<std::string, DeviceSettings> &entries() const { return m_entries; }
     [[nodiscard]] const DeviceSettings *find(const std::string &key) const;
@@ -220,6 +224,7 @@ private:
     int m_blockSize = 0;
     std::string m_recordingFormat = "flac";
     std::string m_playerTarget;
+    std::string m_currentScene;
     std::map<std::string, DeviceSettings> m_entries;
 };
 

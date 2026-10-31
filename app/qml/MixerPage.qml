@@ -20,14 +20,14 @@ Kirigami.Page {
 
     actions: [
         Kirigami.Action {
-            text: qsTr("Apps")
-            icon.name: "applications-multimedia"
-            onTriggered: page.openApps()
-        },
-        Kirigami.Action {
             text: qsTr("Recordings")
             icon.name: "media-record"
             onTriggered: page.openRecordings()
+        },
+        Kirigami.Action {
+            text: qsTr("Apps")
+            icon.name: "applications-multimedia"
+            onTriggered: page.openApps()
         },
         Kirigami.Action {
             text: qsTr("Routing")
@@ -82,7 +82,8 @@ Kirigami.Page {
         visible: inputs.count > 0 || buses.count > 0 || outputs.count > 0
     }
 
-    // Inputs, mix buses and outputs side by side, like a console; scrolls
+    // Inputs, mix buses and outputs side by side, like a console, then the
+    // recordings; scrolls
     // sideways when there are more strips than fit. The scroll bar has its
     // own row under the strips, so it never covers them.
     Flickable {
@@ -140,6 +141,14 @@ Kirigami.Page {
                 title: qsTr("Outputs")
                 stage: "output"
                 strips: outputs
+            }
+
+            Kirigami.Separator {
+                Layout.fillHeight: true
+            }
+
+            RecordingsPanel {
+                Layout.fillHeight: true
             }
         }
     }

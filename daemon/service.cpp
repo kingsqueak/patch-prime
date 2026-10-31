@@ -132,7 +132,7 @@ QString PatchPrimeService::GetState() const
         {QStringLiteral("clockNow"), clockNow()},
         {QStringLiteral("sampleRate"), m_devices->store().sampleRate()},
         {QStringLiteral("scenes"), QJsonArray::fromStringList(m_scenes->names())},
-        {QStringLiteral("currentScene"), m_currentScene},
+        {QStringLiteral("currentScene"), QString::fromStdString(m_devices->store().currentScene())},
         {QStringLiteral("blockSize"), m_devices->store().blockSize()},
         {QStringLiteral("recordingFolder"), m_recordings->folder()},
         {QStringLiteral("recordingFormat"),
@@ -559,7 +559,7 @@ void PatchPrimeService::SaveScene(const QString &name)
         }
         return;
     }
-    m_currentScene = trimmed;
+    m_devices->setCurrentScene(trimmed.toStdString());
     scheduleState();
 }
 
@@ -573,7 +573,7 @@ void PatchPrimeService::LoadScene(const QString &name)
         return;
     }
     pp::applyScene(scene, *m_devices, m_apps, m_graph);
-    m_currentScene = name.trimmed();
+    m_devices->setCurrentScene(name.trimmed().toStdString());
     scheduleState();
 }
 
@@ -585,8 +585,8 @@ void PatchPrimeService::DeleteScene(const QString &name)
         }
         return;
     }
-    if (m_currentScene == name.trimmed()) {
-        m_currentScene.clear();
+    if (m_devices->store().currentScene() == name.trimmed().toStdString()) {
+        m_devices->setCurrentScene({});
     }
     scheduleState();
 }

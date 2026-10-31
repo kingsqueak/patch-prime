@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 KC2RGW Chris
 
+import QtCore
 import QtQuick
 import QtQuick.Controls as QQC2
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 Kirigami.ApplicationWindow {
@@ -21,6 +23,25 @@ Kirigami.ApplicationWindow {
     title: Qt.application.displayName // alone: Qt adds it only to other titles
     width: Kirigami.Units.gridUnit * 52
     height: Kirigami.Units.gridUnit * 34
+
+    // The size it was last left at (not maximized or full screen), in
+    // ~/.config/kingsqueak.org/patchprime.conf; opened at that size again, but never larger
+    // than the screen's free area.
+    Settings {
+        id: saved
+        category: "MainWindow"
+        property int width: 0
+        property int height: 0
+    }
+    property bool sizeRestored: false
+    function rememberSize() {
+        if (sizeRestored && visibility === Window.Windowed) {
+            saved.width = width;
+            saved.height = height;
+        }
+    }
+    onWidthChanged: rememberSize()
+    onHeightChanged: rememberSize()
 
     // One page at a time, full width, with a back button. Side-by-side
     // columns put the wide mixer under the page next to it.
@@ -189,6 +210,11 @@ Kirigami.ApplicationWindow {
     }
 
     Component.onCompleted: {
+        if (saved.width > 0 && saved.height > 0) {
+            width = Math.min(Math.max(saved.width, minimumWidth), Screen.desktopAvailableWidth);
+            height = Math.min(Math.max(saved.height, minimumHeight), Screen.desktopAvailableHeight);
+        }
+        sizeRestored = true;
         if (startPage === "devices")
             open(devicesPage);
         else if (startPage === "routing")

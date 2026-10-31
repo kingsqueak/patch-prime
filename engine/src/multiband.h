@@ -49,8 +49,12 @@ public:
     void prepare(double sampleRate, int channels) override;
     void process(float *const *channels, int channelCount, int frames) noexcept override;
     void setParam(const std::string &name, double value) override;
-    // Each band's largest gain reduction (dB, positive) since the last call.
+    // Since the last call: each band's largest gain reduction (dB,
+    // positive), then each band's loudest detector level (what the
+    // threshold is compared with) as dB above meterFloorDb (0 = at or
+    // below it): 2 x bandCount values.
     std::size_t takeMeters(std::span<float> out) override;
+    static constexpr double meterFloorDb = -80.0;
     // Back from bypass: filter memory and gain reduction are from before.
     void resume() noexcept override;
 
@@ -74,7 +78,8 @@ private:
         std::atomic<float> makeupDb{0.0F};
         std::atomic<bool> on{true};
         std::atomic<bool> solo{false};
-        std::atomic<float> meter{0.0F}; // realtime writes, main thread takes
+        std::atomic<float> meter{0.0F};      // realtime writes, main thread takes
+        std::atomic<float> levelMeter{0.0F}; // the same, dB above meterFloorDb
     };
     struct BandState // realtime only
     {

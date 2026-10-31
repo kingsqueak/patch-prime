@@ -355,7 +355,7 @@ private Q_SLOTS:
         mb.setParam("b1On", 0.0);
         Buffers settle(2400, 0.0F); // 50 ms
         mb.process(settle.planes.data(), 2, 2400);
-        std::array<float, 4> meters{};
+        std::array<float, 8> meters{};
         mb.takeMeters(meters);
         mb.takeMeters(meters); // only what's new
         Buffers probe(480, 0.0F);
@@ -448,10 +448,14 @@ private Q_SLOTS:
         mb.prepare(rate, 2);
         const double loud = 20.0 * std::log10(sinePeak(mb, 2000.0, rate, 0.5) / 0.5);
         QVERIFY2(std::abs(loud + 8.27) < 0.5, qPrintable(QString::number(loud)));
-        std::array<float, 4> meters{};
-        QCOMPARE(mb.takeMeters(meters), 4U);
+        std::array<float, 8> meters{};
+        QCOMPARE(mb.takeMeters(meters), 8U);
         QVERIFY2(std::abs(meters[2] - 8.27F) < 0.7F, qPrintable(QString::number(meters[2])));
         QCOMPARE(meters[0], 0.0F);
+        // Band 3's level: the tone's -9 dB RMS, as dB above the -80 dB floor;
+        // band 1 only gets the onset's leakage through the filters, far down.
+        QVERIFY2(std::abs(meters[6] - 71.0F) < 1.5F, qPrintable(QString::number(meters[6])));
+        QVERIFY2(meters[4] < 40.0F, qPrintable(QString::number(meters[4])));
         // Another band's tone is left alone.
         QVERIFY(std::abs(20.0 * std::log10(sinePeak(mb, 60.0, rate, 0.5) / 0.5)) < 0.3);
         // Makeup on band 3 brings it back up.

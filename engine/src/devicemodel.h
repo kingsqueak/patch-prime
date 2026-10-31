@@ -116,6 +116,8 @@ public:
     // Recording settings (see DeviceStore); emit recordingSettingsChanged.
     void setRecordingFormat(const std::string &format);
     void setPlayerTarget(const std::string &key);
+    // The scene last saved or loaded (see DeviceStore); saved, no signal.
+    void setCurrentScene(const std::string &name);
     Q_INVOKABLE void setCue(int row, bool cued);
     [[nodiscard]] const std::set<std::string> &cued() const { return m_cued; }
     // Sets a strip's mix from a scene (see mixFromJson), keeping only what

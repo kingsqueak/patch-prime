@@ -8,8 +8,11 @@ import org.kde.kirigami as Kirigami
 import org.kingsqueak.patchprime.engine
 
 // The 4-band compressor: the bands as spans on a frequency scale, each
-// showing its gain reduction, with the three crossovers as lines to drag;
-// below, the crossovers and each band's settings as typed values.
+// showing its level (rising from the bottom, brighter above the threshold),
+// its threshold as a line, and its gain reduction (hanging from the top),
+// so the balance across the bands shows at a glance; the three crossovers
+// are lines to drag. Below, the crossovers and each band's settings as
+// typed values.
 //
 // While a crossover is dragged it follows the pointer at once (`live`) and
 // the daemon is told as it goes; on release the daemon's value takes over.
@@ -29,8 +32,20 @@ ColumnLayout {
     readonly property real maxCrossover: 16000
     readonly property real crossoverGap: 1.25 // crossovers stay this far apart (ratio)
     readonly property real meterRangeDb: 24
-    // Gain reduction per band in dB, from the engine.
-    readonly property var reduction: Devices.effectMeters[key + "|" + index] || []
+    // The level scale: levelFloorDb at the bottom of a span, 0 dB at the top.
+    readonly property real levelFloorDb: -60
+    // From the engine: gain reduction per band in dB, then each band's level
+    // as dB above -80.
+    readonly property var meters: Devices.effectMeters[key + "|" + index] || []
+    readonly property var reduction: meters.slice(0, bandCount)
+    function levelDb(band) { // 0-3
+        const v = meters[bandCount + band];
+        return v === undefined ? -80 : v - 80;
+    }
+    // Height fraction (from the bottom) for a level in dB.
+    function levelFraction(db) {
+        return Math.min(Math.max((db - levelFloorDb) / -levelFloorDb, 0), 1);
+    }
 
     function param(name, fallback) {
         if (live[name] !== undefined)
@@ -70,7 +85,7 @@ ColumnLayout {
         }
 
         Layout.fillWidth: true
-        Layout.preferredHeight: Style.graphHeight * 0.6
+        Layout.preferredHeight: Style.graphHeight * 0.8
         Layout.minimumWidth: Kirigami.Units.gridUnit * 30
         color: Style.graphBackground
         radius: Kirigami.Units.cornerRadius
@@ -109,6 +124,8 @@ ColumnLayout {
                 readonly property bool on: editor.bandParam(band, "On") >= 0.5
                 readonly property bool solo: editor.bandParam(band, "Solo") >= 0.5
                 readonly property real reduction: index < editor.reduction.length ? editor.reduction[index] : 0
+                readonly property real level: editor.levelFraction(editor.levelDb(index))
+                readonly property real threshold: editor.levelFraction(editor.bandParam(band, "Threshold"))
 
                 x: spans.xFor(editor.edge(index))
                 width: spans.xFor(editor.edge(index + 1)) - x
@@ -126,6 +143,45 @@ ColumnLayout {
                     border.color: Style.bandColors[span.index]
                     border.width: 2
                     visible: span.solo
+                }
+                // The level: dim up to the threshold, bright above it.
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.margins: 2
+                    height: (parent.height - 4) * Math.min(span.level, span.threshold)
+                    color: Style.bandColors[span.index]
+                    opacity: span.on ? 0.3 : 0.12
+                }
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.margins: 2
+                    y: 2 + (parent.height - 4) * (1 - span.level)
+                    height: (parent.height - 4) * Math.max(span.level - span.threshold, 0)
+                    visible: span.level > span.threshold
+                    color: Style.bandColors[span.index]
+                    opacity: span.on ? 0.65 : 0.12
+                }
+                // The threshold: a line across the band, with its value.
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    y: 2 + (parent.height - 4) * (1 - span.threshold) - height / 2
+                    height: 2
+                    color: Style.bandColors[span.index]
+                    opacity: span.on ? 1 : 0.3
+
+                    QQC2.Label {
+                        anchors.right: parent.right
+                        anchors.rightMargin: Kirigami.Units.smallSpacing
+                        anchors.bottom: parent.top
+                        text: Math.round(editor.bandParam(span.band, "Threshold")) + " dB"
+                        font: Kirigami.Theme.smallFont
+                        color: Style.graphLabel
+                        visible: span.width > Kirigami.Units.gridUnit * 3
+                    }
                 }
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter

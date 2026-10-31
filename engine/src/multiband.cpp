@@ -144,11 +144,15 @@ void MultibandEffect::setParam(const std::string &name, double value)
 
 std::size_t MultibandEffect::takeMeters(std::span<float> out)
 {
-    const std::size_t n = std::min(out.size(), static_cast<std::size_t>(bandCount));
-    for (std::size_t b = 0; b < n; ++b) {
-        out[b] = m_target.at(b).meter.exchange(0.0F);
+    constexpr auto bands = static_cast<std::size_t>(bandCount);
+    if (out.size() < 2 * bands) {
+        return 0;
     }
-    return n;
+    for (std::size_t b = 0; b < bands; ++b) {
+        out[b] = m_target.at(b).meter.exchange(0.0F);
+        out[bands + b] = m_target.at(b).levelMeter.exchange(0.0F);
+    }
+    return 2 * bands;
 }
 
 void MultibandEffect::resume() noexcept
@@ -245,6 +249,7 @@ void MultibandEffect::process(float *const *channels, int channelCount, int fram
     }
 
     std::array<float, bandCount> peakReduction{};
+    std::array<double, bandCount> peakSquare{}; // the detectors' loudest
     std::array<std::array<double, maxEffectChannels>, bandCount> split{};
     for (int start = 0; start < frames; start += blockFrames) {
         const int end = std::min(frames, start + blockFrames);
@@ -294,6 +299,7 @@ void MultibandEffect::process(float *const *channels, int channelCount, int fram
                 s.reductionDb = wanted + ((s.reductionDb - wanted) * k);
                 s.level += (band.level - s.level) * m_levelStep;
                 peakReduction.at(b) = std::max(peakReduction.at(b), static_cast<float>(s.reductionDb));
+                peakSquare.at(b) = std::max(peakSquare.at(b), s.meanSquare);
             }
             std::array<double, bandCount> gains{};
             for (std::size_t b = 0; b < bandCount; ++b) {
@@ -333,6 +339,13 @@ void MultibandEffect::process(float *const *channels, int channelCount, int fram
         while (peakReduction.at(b) > current &&
                !meter.compare_exchange_weak(current, peakReduction.at(b),
                                             std::memory_order_relaxed)) {
+        }
+        const auto above = static_cast<float>(std::max(
+            0.0, (10.0 * std::log10(std::max(peakSquare.at(b), 1e-18))) - meterFloorDb));
+        auto &level = m_target.at(b).levelMeter;
+        current = level.load(std::memory_order_relaxed);
+        while (above > current &&
+               !level.compare_exchange_weak(current, above, std::memory_order_relaxed)) {
         }
     }
 }

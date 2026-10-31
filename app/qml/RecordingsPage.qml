@@ -8,7 +8,8 @@ import org.kde.kirigami as Kirigami
 import org.kingsqueak.patchprime.engine
 
 // Recordings: the files the record buttons made, the player that plays them
-// into a strip, and the recording format.
+// into a strip, and the recording format. (The mixer has a compact version
+// of this: RecordingsPanel.)
 Kirigami.ScrollablePage {
     id: page
 
@@ -16,60 +17,7 @@ Kirigami.ScrollablePage {
 
     header: EngineMessage {}
 
-    property var files: []
-    readonly property string playing: Devices.player.path || ""
-    readonly property bool paused: Devices.player.paused === true
-    readonly property real duration: Devices.player.duration || 0
-
-    // Where the player can play: hardware inputs (in place of the device),
-    // mix buses, routed inputs and hardware outputs, in console order.
-    readonly property var targets: {
-        const list = [];
-        for (let row = 0; row < strips.count; ++row) {
-            const s = strips.get(row);
-            if (s.kind === "hardware" && s.direction === "input")
-                list.push({ key: s.key, label: qsTr("%1 (instead of the device)").arg(s.label),
-                            name: s.label, input: true });
-            else if (s.kind === "virtual-sink" || s.kind === "virtual-input" || s.kind === "hardware")
-                list.push({ key: s.key, label: s.label, name: s.label, input: false });
-        }
-        return list;
-    }
-    readonly property var targetInfo: targets.find(t => t.key === target) || ({})
-    readonly property string target: {
-        if (targets.some(t => t.key === Devices.playerTarget))
-            return Devices.playerTarget;
-        return targets.length > 0 ? targets[0].key : "";
-    }
-
-    function refresh() {
-        files = Devices.daemonRunning ? Devices.recordings() : [];
-    }
-    function play(path) {
-        if (target !== Devices.playerTarget)
-            Devices.setPlayerTarget(target);
-        Devices.playRecording(path);
-    }
-    function size(bytes) {
-        if (bytes >= 1024 * 1024 * 1024)
-            return qsTr("%1 GB").arg((bytes / (1024 * 1024 * 1024)).toFixed(1));
-        if (bytes >= 1024 * 1024)
-            return qsTr("%1 MB").arg((bytes / (1024 * 1024)).toFixed(1));
-        return qsTr("%1 kB").arg(Math.max(1, Math.round(bytes / 1024)));
-    }
-
-    Component.onCompleted: refresh()
-    Connections {
-        target: Devices
-        function onRecordingsRevisionChanged() { page.refresh(); }
-        function onDaemonRunningChanged() { page.refresh(); }
-    }
-
-    StripFilter {
-        id: strips
-        sourceModel: Devices
-        stages: ["input", "bus", "output"]
-    }
+    readonly property RecordingsState rec: RecordingsState {}
 
     ColumnLayout {
         spacing: Kirigami.Units.largeSpacing
@@ -85,113 +33,39 @@ Kirigami.ScrollablePage {
         Kirigami.AbstractCard {
             Layout.fillWidth: true
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+            contentItem: RowLayout {
+                spacing: Kirigami.Units.largeSpacing
 
-                RowLayout {
+                PlayerControls {
                     Layout.fillWidth: true
-
-                    QQC2.ToolButton {
-                        icon.name: page.playing.length > 0 && !page.paused
-                                   ? "media-playback-pause" : "media-playback-start"
-                        text: page.playing.length > 0 && !page.paused ? qsTr("Pause") : qsTr("Play")
-                        display: QQC2.AbstractButton.IconOnly
-                        enabled: page.playing.length > 0 || page.files.length > 0
-                        onClicked: {
-                            if (page.playing.length > 0)
-                                Devices.pausePlayback(!page.paused);
-                            else
-                                page.play(page.files[0].path);
-                        }
-                        QQC2.ToolTip.text: text
-                        QQC2.ToolTip.visible: hovered
-                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
-                    }
-                    QQC2.ToolButton {
-                        icon.name: "media-playlist-repeat"
-                        text: qsTr("Loop")
-                        display: QQC2.AbstractButton.IconOnly
-                        checkable: true
-                        checked: Devices.player.loop === true
-                        onToggled: Devices.setPlaybackLoop(checked)
-                        QQC2.ToolTip.text: qsTr("Loop: play the recording over and over, for example while you set up effects")
-                        QQC2.ToolTip.visible: hovered
-                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
-                    }
-                    QQC2.ToolButton {
-                        icon.name: "media-playback-stop"
-                        text: qsTr("Stop")
-                        display: QQC2.AbstractButton.IconOnly
-                        enabled: page.playing.length > 0
-                        onClicked: Devices.stopPlayback()
-                        QQC2.ToolTip.text: text
-                        QQC2.ToolTip.visible: hovered
-                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
-                    }
-                    QQC2.Label {
-                        Layout.fillWidth: true
-                        elide: Text.ElideMiddle
-                        text: page.playing.length > 0 ? page.playing.split("/").pop()
-                                                      : qsTr("Nothing playing")
-                        opacity: page.playing.length > 0 ? 1 : 0.6
-                    }
-                    QQC2.Label {
-                        text: qsTr("Play into")
-                    }
-                    QQC2.ComboBox {
-                        id: targetBox
-                        model: page.targets
-                        textRole: "label"
-                        valueRole: "key"
-                        enabled: page.targets.length > 0
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 15
-                        currentIndex: page.targets.findIndex(t => t.key === page.target)
-                        onActivated: Devices.setPlayerTarget(currentValue)
-                        Accessible.name: qsTr("Play into")
-                    }
+                    rec: page.rec
                 }
-
-                RowLayout {
-                    Layout.fillWidth: true
-
-                    QQC2.Slider {
-                        id: position
-                        Layout.fillWidth: true
-                        from: 0
-                        to: Math.max(page.duration, 0.001)
-                        enabled: page.playing.length > 0
-                        // Follows the player, except while dragged; a
-                        // drag seeks when let go (see VolumeFader.qml).
-                        onPressedChanged: {
-                            if (!pressed)
-                                Devices.seekPlayback(value);
-                        }
-                        Accessible.name: qsTr("Position")
-                    }
-                    Connections {
-                        target: Devices
-                        function onRecordingTimesChanged() {
-                            if (!position.pressed)
-                                position.value = Devices.playerPosition;
-                        }
-                    }
-                    QQC2.Label {
-                        font.family: "monospace"
-                        text: qsTr("%1 / %2").arg(Style.clock(position.pressed ? position.value
-                                                                                : Devices.playerPosition))
-                                             .arg(Style.clock(page.duration))
-                    }
+                QQC2.Label {
+                    Layout.alignment: Qt.AlignTop
+                    Layout.topMargin: Kirigami.Units.smallSpacing
+                    text: qsTr("Play into")
+                }
+                QQC2.ComboBox {
+                    Layout.alignment: Qt.AlignTop
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 15
+                    model: page.rec.targets
+                    textRole: "label"
+                    valueRole: "key"
+                    enabled: page.rec.targets.length > 0
+                    currentIndex: page.rec.targets.findIndex(t => t.key === page.rec.target)
+                    onActivated: Devices.setPlayerTarget(currentValue)
+                    Accessible.name: qsTr("Play into")
                 }
             }
         }
 
         Kirigami.InlineMessage {
             Layout.fillWidth: true
-            visible: page.targetInfo.input === true
+            visible: page.rec.targetInfo.input === true
             type: Kirigami.MessageType.Information
-            text: page.playing.length > 0
-                  ? qsTr("%1 hears this recording instead of its device, through its effects, until playback stops. The device is cut off meanwhile.").arg(page.targetInfo.name)
-                  : qsTr("While playing, %1 hears the recording instead of its device, through its effects. Record a raw sample with the input's Record button, then loop it here while you set up the effects.").arg(page.targetInfo.name)
+            text: page.rec.playing.length > 0
+                  ? qsTr("%1 hears this recording instead of its device, through its effects, until playback stops. The device is cut off meanwhile.").arg(page.rec.targetInfo.name)
+                  : qsTr("While playing, %1 hears the recording instead of its device, through its effects. Record a raw sample with the input's Record button, then loop it here while you set up the effects.").arg(page.rec.targetInfo.name)
         }
 
         // --- settings
@@ -202,14 +76,10 @@ Kirigami.ScrollablePage {
                 text: qsTr("Record as")
             }
             QQC2.ComboBox {
-                model: [
-                    { value: "flac", text: qsTr("FLAC (lossless)") },
-                    { value: "wav", text: qsTr("WAV (uncompressed)") },
-                    { value: "mp3", text: qsTr("MP3 (small, up to 48 kHz)") }
-                ].filter(f => Devices.recordingFormats.includes(f.value))
+                model: page.rec.formats
                 textRole: "text"
                 valueRole: "value"
-                currentIndex: Math.max(0, model.findIndex(m => m.value === Devices.recordingFormat))
+                currentIndex: Math.max(0, page.rec.formats.findIndex(m => m.value === Devices.recordingFormat))
                 onActivated: Devices.setRecordingFormat(currentValue)
                 Accessible.name: qsTr("Recording format")
             }
@@ -226,76 +96,19 @@ Kirigami.ScrollablePage {
         Kirigami.PlaceholderMessage {
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.gridUnit * 2
-            visible: page.files.length === 0
+            visible: page.rec.files.length === 0
             icon.name: "media-record"
             text: qsTr("No recordings yet")
-            explanation: qsTr("Press the record button on a mix bus or on Desktop in the mixer. Recordings go to %1.")
+            explanation: qsTr("Press Record on an input, a mix bus or Desktop in the mixer. Recordings go to %1.")
                          .arg(Devices.recordingFolder)
         }
 
         Repeater {
-            model: page.files
+            model: page.rec.files
 
-            delegate: QQC2.ItemDelegate {
-                id: row
-
-                required property var modelData
-                readonly property bool current: modelData.path === page.playing
-
+            delegate: RecordingRow {
                 Layout.fillWidth: true
-                highlighted: current
-                onDoubleClicked: page.play(modelData.path)
-
-                contentItem: RowLayout {
-                    spacing: Kirigami.Units.largeSpacing
-
-                    Kirigami.Icon {
-                        implicitWidth: Kirigami.Units.iconSizes.smallMedium
-                        implicitHeight: implicitWidth
-                        source: row.current ? "media-playback-start" : "audio-x-generic"
-                    }
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 0
-                        QQC2.Label {
-                            Layout.fillWidth: true
-                            text: row.modelData.name
-                            elide: Text.ElideRight
-                        }
-                        QQC2.Label {
-                            Layout.fillWidth: true
-                            font: Kirigami.Theme.smallFont
-                            opacity: 0.7
-                            text: [row.modelData.seconds > 0 ? Style.clock(row.modelData.seconds) : "",
-                                   page.size(row.modelData.bytes),
-                                   new Date(row.modelData.modified).toLocaleString(Qt.locale(), Locale.ShortFormat)]
-                                  .filter(s => s.length > 0).join(" · ")
-                        }
-                    }
-                    QQC2.ToolButton {
-                        icon.name: "media-playback-start"
-                        text: qsTr("Play")
-                        display: QQC2.AbstractButton.IconOnly
-                        enabled: page.target.length > 0
-                        onClicked: page.play(row.modelData.path)
-                        QQC2.ToolTip.text: qsTr("Play into %1").arg(targetBox.currentText)
-                        QQC2.ToolTip.visible: hovered
-                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
-                    }
-                    QQC2.ToolButton {
-                        icon.name: "user-trash"
-                        text: qsTr("Move to Trash")
-                        display: QQC2.AbstractButton.IconOnly
-                        enabled: !row.current && !Object.values(Devices.recording).includes(row.modelData.path)
-                        onClicked: {
-                            if (Devices.trashFile(row.modelData.path))
-                                page.refresh();
-                        }
-                        QQC2.ToolTip.text: text
-                        QQC2.ToolTip.visible: hovered
-                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
-                    }
-                }
+                rec: page.rec
             }
         }
     }
