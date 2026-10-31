@@ -18,7 +18,7 @@ A virtual audio mixer and router for KDE Plasma, built on PipeWire. Think of it 
   - broadcast leveler and safety limiter;
   - reverb;
   - delay, to line up outputs with different latency.
-- **Plugins.** Add LV2 plugins (LSP, x42, ZAM, Calf, Dragonfly...) to any strip, in the same chain as the built-in effects and in any order. Open a plugin's own window to use its full editor (its knobs, graphs and meters), or use the simple controls in Patch Prime. Each plugin runs in a process of its own, so one that crashes doesn't take the mixer down: the strip carries on without it.
+- **Plugins.** Add LV2 and CLAP plugins (LSP, x42, ZAM, Calf, Dragonfly...) to any strip, in the same chain as the built-in effects and in any order. Open a plugin's own window to use its full editor (its knobs, graphs and meters), or use the simple controls in Patch Prime. Each plugin runs in a process of its own, so one that crashes doesn't take the mixer down: the strip carries on without it.
 - **Recording and playback.** Record any input, mix bus or Desktop to FLAC, WAV or MP3 with one click, and play recordings back into a strip. Play a raw mic sample into the mic's own strip, on a loop, to set up its effects while you listen.
 - **Scenes.** Save the whole mix, including effects, under a name and load it back.
 - **Cue.** Listen to any strip alone in your headphones without changing the mix.
@@ -30,7 +30,7 @@ See the **[user guide](docs/HELP.md)** for how to use it.
 
 ## Status
 
-Version 0.11: under active development and in daily use on the author's machine. Phases 1–6 (devices, mixer, routing, apps, scenes, effects, monitoring) and recording are done, with packages for Ubuntu 26.04, Fedora 44 and Arch Linux. LV2 plugins work, with their own editor windows; next: CLAP and VST3 plugins, then hardware control.
+Version 0.11: under active development and in daily use on the author's machine. Phases 1–6 (devices, mixer, routing, apps, scenes, effects, monitoring) and recording are done, with packages for Ubuntu 26.04, Fedora 44 and Arch Linux. LV2 and CLAP plugins work, with their own editor windows; next: VST3 plugins, then hardware control.
 
 ## Requirements
 
@@ -53,7 +53,7 @@ cmake --build --preset gcc-debug
 ctest --preset gcc-debug
 ```
 
-The noise suppression uses [RNNoise](https://github.com/xiph/rnnoise) (BSD-3-Clause), which CMake downloads at configure time, checks against a fixed checksum, and builds in. To build without network access, configure with `-DPATCHPRIME_RNNOISE=OFF`; you then don't get noise suppression.
+The noise suppression uses [RNNoise](https://github.com/xiph/rnnoise) (BSD-3-Clause), which CMake downloads at configure time, checks against a fixed checksum, and builds in. To build without network access, configure with `-DPATCHPRIME_RNNOISE=OFF`; you then don't get noise suppression. The [CLAP](https://github.com/free-audio/clap) plugin headers (MIT) are fetched the same way; offline, unpack them yourself and pass `-DFETCHCONTENT_SOURCE_DIR_CLAP=<dir>`.
 
 ## Installing
 
@@ -107,4 +107,4 @@ Copyright © 2026 KC2RGW Chris
 
 Patch Prime is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See [LICENSE](LICENSE).
 
-RNNoise is Copyright Xiph.Org Foundation and others, under the BSD-3-Clause license.
+RNNoise is Copyright Xiph.Org Foundation and others, under the BSD-3-Clause license. The CLAP headers are Copyright Alexandre Bique and contributors, under the MIT license.

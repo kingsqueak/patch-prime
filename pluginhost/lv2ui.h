@@ -3,20 +3,18 @@
 
 #pragma once
 
+#include "hostedplugin.h"
+#include "x11window.h"
+
 #include <lilv/lilv.h>
 #include <lv2/data-access/data-access.h>
 #include <lv2/options/options.h>
 #include <lv2/ui/ui.h>
 
 #include <cstdint>
-#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
-
-// Xlib's types, without its macros in every file that includes this.
-using XDisplay = struct _XDisplay;
-using XWindowId = unsigned long; // NOLINT(google-runtime-int): Xlib's Window
 
 namespace pp {
 
@@ -34,38 +32,26 @@ struct UiChoice
 };
 std::optional<UiChoice> findX11Ui(LilvWorld *world, const LilvPlugin *plugin);
 
-// Makes Xlib safe for plugin UIs that use it from more than one thread; call
-// first, before anything else touches X.
-void initX11Threads();
-
-// A plugin's own editor, in a window of its own (a plain X11 window the UI
-// is embedded in). Lives on the host's main thread: idle() runs it.
+// An LV2 plugin's own editor, embedded in an X11Window. Lives on the host's
+// main thread: idle() runs it.
 //
 // It talks to the plugin as an LV2 host does: control values both ways
 // (what the UI changes goes to the plugin, and to onParam so the engine
 // saves it; what changes elsewhere, and the plugin's meters, go to the UI),
 // and atom events both ways (see Lv2Effect::sendAtom and takeEvents).
-class Lv2Ui
+class Lv2Ui : public PluginWindow
 {
 public:
     Lv2Ui(Lv2World &world, Lv2Effect &effect, const std::string &title);
-    ~Lv2Ui();
+    ~Lv2Ui() override;
     Lv2Ui(const Lv2Ui &) = delete;
     Lv2Ui &operator=(const Lv2Ui &) = delete;
     Lv2Ui(Lv2Ui &&) = delete;
     Lv2Ui &operator=(Lv2Ui &&) = delete;
 
-    // Why there's no window ("" when it's open).
-    [[nodiscard]] const std::string &error() const { return m_error; }
-    // Handles the window's events, runs the UI, and brings it up to date;
-    // call it often (about 30 times a second). False once the window has
-    // been closed (by its close button, or the UI itself).
-    bool idle();
-    // Brings the window to the front.
-    void raise();
-
-    // A control input the UI changed: its symbol and value.
-    std::function<void(const std::string &, float)> onParam;
+    [[nodiscard]] const std::string &error() const override { return m_error; }
+    bool idle() override;
+    void raise() override { m_window.raise(); }
 
 private:
     static void write(LV2UI_Controller controller, std::uint32_t port, std::uint32_t size,
@@ -75,12 +61,8 @@ private:
 
     Lv2Effect &m_effect;
     std::string m_error;
-    XDisplay *m_display = nullptr;
-    XWindowId m_window = 0;
+    X11Window m_window;
     XWindowId m_child = 0;
-    unsigned long m_deleteAtom = 0; // NOLINT(google-runtime-int): an X Atom
-    int m_width = 0;
-    int m_height = 0;
     const LV2UI_Descriptor *m_descriptor = nullptr;
     LV2UI_Handle m_handle = nullptr;
     const LV2UI_Idle_Interface *m_idle = nullptr;

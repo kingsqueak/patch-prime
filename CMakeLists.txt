@@ -30,6 +30,7 @@ include(cmake/Warnings.cmake)
 if(PATCHPRIME_RNNOISE)
     include(cmake/RNNoise.cmake)
 endif()
+include(cmake/Clap.cmake)
 
 # systemd also searches $XDG_DATA_DIRS/systemd/user, so this works for both a
 # /usr and a ~/.local install.

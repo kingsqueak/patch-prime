@@ -1012,6 +1012,114 @@ private Q_SLOTS:
         buses.setMetering(false);
     }
 
+    void runsClapPlugins()
+    {
+        // The CLAP test gain on a fake stereo mic (one instance per channel),
+        // in its own process: sound through it, a parameter the plugin
+        // changes itself coming back to the settings, and its state.
+        const auto pid = std::to_string(QCoreApplication::applicationPid());
+        const auto feed = "pp_clapfeed_" + pid;
+        const auto mic = "pp_clapsrc_" + pid;
+        QProcess loopback;
+        loopback.start(QStringLiteral("pw-loopback"),
+                       {QString::fromStdString("--capture-props=media.class=Audio/Sink node.name=" +
+                                               feed + " audio.position=[FL,FR]"),
+                        QString::fromStdString("--playback-props=media.class=Audio/Source "
+                                               "node.name=" +
+                                               mic + " audio.position=[FL,FR]")});
+        auto stopLoopback = qScopeGuard([&loopback] {
+            loopback.terminate();
+            loopback.waitForFinished(2000);
+        });
+
+        QTemporaryDir dir;
+        PluginCatalog catalog(dir.filePath(QStringLiteral("plugins.json")));
+        catalog.start();
+        QVERIFY(QTest::qWaitFor([&] { return !catalog.isScanning(); }, 30000));
+        const std::string gainType = "clap:com.github.kingsqueak.patch-prime.tests.gain";
+        QVERIFY2(catalog.find(gainType) != nullptr, "the CLAP test plugin wasn't found");
+
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel devices(&store);
+        devices.setPluginCatalog(&catalog);
+        devices.attach(&m_graph);
+        BusManager buses(&m_graph, &devices);
+        m_owners.insert(busOwnerFor(store.path()));
+
+        const auto micKey = makeEndpointKey("Audio/Source", mic);
+        QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(micKey) >= 0; }, 5000));
+        const auto micRow = [&] { return devices.rowForKey(micKey); };
+        devices.setEnabled(micRow(), true);
+        const auto mixKey =
+            devices.createVirtual(QStringLiteral("Clap Mix"), EndpointKind::VirtualSink);
+        devices.setSend(micRow(), mixKey, true);
+        const auto inBus = store.find(micKey)->busName;
+        const auto mixNode = store.find(mixKey.toStdString())->busName;
+        const auto send =
+            sendNodeName(store.find(micKey)->busId, store.find(mixKey.toStdString())->busId);
+        QVERIFY(QTest::qWaitFor([&] { return sentThrough(m_graph, inBus, mixNode, send, 2); }, 5000));
+
+        QTemporaryDir toneDir;
+        const auto tone = toneDir.filePath(QStringLiteral("tone.wav"));
+        QVERIFY(writeTone(tone));
+        buses.setMetering(true);
+        const auto peakWhilePlaying = [&](int ms) {
+            QProcess player;
+            player.start(QStringLiteral("pw-play"),
+                         {QStringLiteral("-P"),
+                          QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                          QStringLiteral("--target"), QString::fromStdString(feed), tone});
+            QTest::qWait(300);
+            buses.takeLevels();
+            float peak = 0.0F;
+            [[maybe_unused]] const bool never = QTest::qWaitFor(
+                [&] {
+                    if (const auto levels = buses.takeLevels(); levels.contains(mixKey.toStdString())) {
+                        for (const float level : levels.at(mixKey.toStdString())) {
+                            peak = std::max(peak, level);
+                        }
+                    }
+                    return false;
+                },
+                ms);
+            player.kill();
+            player.waitForFinished();
+            return peak;
+        };
+
+        const auto plug = pluginNodeName(inBus, 1);
+        devices.addEffect(micRow(), QString::fromStdString(gainType));
+        devices.setEffectParam(micRow(), 0, QStringLiteral("1"), 0.1); // gain
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return linkCount(m_graph, mic, plug) == 2 && linkCount(m_graph, plug, inBus) == 2 &&
+                       linkCount(m_graph, mic, inBus) == 0;
+            },
+            10000));
+        QVERIFY(linksHold(m_graph, {{mic, plug}, {plug, inBus}}));
+        const float reduced = peakWhilePlaying(1200);
+        QVERIFY2(reduced > 0.02F && reduced < 0.1F, qPrintable(QString::number(reduced)));
+
+        // Halve: the plugin halves its output and turns the switch off
+        // itself; the settings follow.
+        devices.setEffectParam(micRow(), 0, QStringLiteral("3"), 1.0);
+        QCOMPARE(store.find(micKey)->effects[0].params.at("3"), 1.0);
+        QVERIFY(QTest::qWaitFor([&] { return store.find(micKey)->effects[0].params.at("3") == 0.0; },
+                                5000));
+        const float halved = peakWhilePlaying(1200);
+        QVERIFY2(halved > 0.012F && halved < 0.035F, qPrintable(QString::number(halved)));
+
+        // Its state (the trim) is saved when asked.
+        buses.requestPluginStates();
+        QVERIFY(QTest::qWaitFor([&] { return !store.find(micKey)->effects[0].state.empty(); }, 5000));
+
+        devices.removeEffect(micRow(), 0);
+        QVERIFY(QTest::qWaitFor(
+            [&] { return linkCount(m_graph, mic, inBus) == 2 && nodeNamed(m_graph, plug) == nullptr; },
+            10000));
+        buses.setMetering(false);
+    }
+
     void runsEffects()
     {
         // A fake mic sent to a mix bus, and the test sink as an output: each

@@ -28,7 +28,7 @@ QQC2.ApplicationWindow {
     function open() {
         if (!visible) {
             const wide = panel.effects.some(e => e.type === "eq" || e.type === "multiband"
-                                                 || e.type.startsWith("lv2:"));
+                                                 || e.type.startsWith("lv2:") || e.type.startsWith("clap:"));
             width = Kirigami.Units.gridUnit * (wide ? 60 : 36);
             height = Math.min(Screen.desktopAvailableHeight * 0.85, Kirigami.Units.gridUnit * 44);
         }
@@ -138,7 +138,7 @@ QQC2.ApplicationWindow {
                         }
                         QQC2.Label {
                             visible: slot.plugin
-                            text: qsTr("LV2")
+                            text: slot.modelData.type.startsWith("clap:") ? "CLAP" : "LV2"
                             font: Kirigami.Theme.smallFont
                             color: Style.dimText
                             QQC2.ToolTip.text: qsTr("A plugin: it runs in a process of its own, so if it crashes the strip carries on without it.")

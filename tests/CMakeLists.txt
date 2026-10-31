@@ -37,9 +37,21 @@ set(TEST_GAIN_BINARY testgain${CMAKE_SHARED_MODULE_SUFFIX})
 configure_file(lv2/manifest.ttl.in ${PATCHPRIME_TEST_LV2}/patchprime-test.lv2/manifest.ttl @ONLY)
 configure_file(lv2/testgain.ttl ${PATCHPRIME_TEST_LV2}/patchprime-test.lv2/testgain.ttl COPYONLY)
 
+# The same as a CLAP plugin, alone in its search path.
+add_library(patchprime-testgain-clap MODULE clap/testgain.c)
+target_link_libraries(patchprime-testgain-clap PRIVATE patchprime-clap)
+set(PATCHPRIME_TEST_CLAP ${CMAKE_CURRENT_BINARY_DIR}/clap)
+set_target_properties(patchprime-testgain-clap PROPERTIES
+    PREFIX ""
+    SUFFIX ".clap"
+    OUTPUT_NAME testgain
+    LIBRARY_OUTPUT_DIRECTORY ${PATCHPRIME_TEST_CLAP})
+set(PATCHPRIME_TEST_PLUGIN_ENV
+    "LV2_PATH=${PATCHPRIME_TEST_LV2};PATCHPRIME_CLAP_PATH=${PATCHPRIME_TEST_CLAP}")
+
 patchprime_add_test(test_plugins test_plugins.cpp)
-add_dependencies(test_plugins patchprime-testgain patchprime-pluginhost)
-set_tests_properties(test_plugins PROPERTIES ENVIRONMENT "LV2_PATH=${PATCHPRIME_TEST_LV2}")
+add_dependencies(test_plugins patchprime-testgain patchprime-testgain-clap patchprime-pluginhost)
+set_tests_properties(test_plugins PROPERTIES ENVIRONMENT "${PATCHPRIME_TEST_PLUGIN_ENV}")
 
 # Needs a running PipeWire server; skips itself when there isn't one.
 patchprime_add_test(test_graphsnapshot test_graphsnapshot.cpp)
@@ -51,6 +63,6 @@ set_tests_properties(test_pipewiregraph PROPERTIES LABELS "pipewire" SKIP_RETURN
 
 # Creates a null sink, enables it, and checks its bus, links, volume and meter.
 patchprime_add_test(test_buslive test_buslive.cpp)
-add_dependencies(test_buslive patchprime-testgain patchprime-pluginhost)
+add_dependencies(test_buslive patchprime-testgain patchprime-testgain-clap patchprime-pluginhost)
 set_tests_properties(test_buslive PROPERTIES LABELS "pipewire" SKIP_RETURN_CODE 77
-    ENVIRONMENT "LV2_PATH=${PATCHPRIME_TEST_LV2}")
+    ENVIRONMENT "${PATCHPRIME_TEST_PLUGIN_ENV}")

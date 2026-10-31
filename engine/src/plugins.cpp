@@ -84,7 +84,18 @@ QString defaultCachePath()
 
 bool isPluginType(std::string_view type)
 {
-    return type.starts_with(lv2TypePrefix) && type.size() > lv2TypePrefix.size();
+    return !pluginFormat(type).empty();
+}
+
+std::string pluginFormat(std::string_view type)
+{
+    if (type.starts_with(lv2TypePrefix) && type.size() > lv2TypePrefix.size()) {
+        return "lv2";
+    }
+    if (type.starts_with(clapTypePrefix) && type.size() > clapTypePrefix.size()) {
+        return "clap";
+    }
+    return {};
 }
 
 std::string pluginType(std::string_view uri)
@@ -94,7 +105,8 @@ std::string pluginType(std::string_view uri)
 
 std::string pluginUri(std::string_view type)
 {
-    return isPluginType(type) ? std::string(type.substr(lv2TypePrefix.size())) : std::string();
+    const auto format = pluginFormat(type);
+    return format.empty() ? std::string() : std::string(type.substr(format.size() + 1));
 }
 
 QByteArray pluginsToJson(const std::vector<PluginInfo> &plugins)
@@ -109,6 +121,7 @@ QByteArray pluginsToJson(const std::vector<PluginInfo> &plugins)
             {QStringLiteral("type"), qs(p.type)},
             {QStringLiteral("name"), qs(p.name)},
             {QStringLiteral("author"), qs(p.author)},
+            {QStringLiteral("binary"), qs(p.binary)},
             {QStringLiteral("category"), qs(p.category)},
             {QStringLiteral("audioIn"), p.audioIn},
             {QStringLiteral("audioOut"), p.audioOut},
@@ -132,6 +145,7 @@ std::vector<PluginInfo> pluginsFromJson(const QByteArray &json)
         }
         p.name = str(o, "name");
         p.author = str(o, "author");
+        p.binary = str(o, "binary");
         p.category = str(o, "category");
         p.audioIn = o.value(QLatin1String("audioIn")).toInt();
         p.audioOut = o.value(QLatin1String("audioOut")).toInt();

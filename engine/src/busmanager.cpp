@@ -1066,6 +1066,7 @@ BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
                 const auto *info = catalog != nullptr ? catalog->find(e.type) : nullptr;
                 m_runner->want(nodeName,
                                PluginSpec{.type = e.type,
+                                          .binary = info != nullptr ? info->binary : std::string(),
                                           .positions = positions,
                                           .sampleRate = rate,
                                           .enabled = e.enabled,

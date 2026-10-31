@@ -9,14 +9,8 @@
 #include <lv2/instance-access/instance-access.h>
 #include <lv2/parameters/parameters.h>
 
-#include <X11/Xatom.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-
 #include <dlfcn.h>
 
-#include <cstdio>
-#include <print>
 #include <cstring>
 #include <limits>
 #include <set>
@@ -48,14 +42,6 @@ std::string pathOf(const LilvNode *uri)
     std::string out = path != nullptr ? std::string(path) : std::string();
     lilv_free(path);
     return out;
-}
-
-// X errors a plugin's window causes (one already gone, say) aren't fatal.
-int ignoreXError(Display * /*display*/, XErrorEvent *event)
-{
-    std::println(stderr, "patchprime-pluginhost: X error {} (request {})", event->error_code,
-                 event->request_code);
-    return 0;
 }
 
 } // namespace
@@ -96,11 +82,6 @@ std::optional<UiChoice> findX11Ui(LilvWorld *world, const LilvPlugin *plugin)
     return choice;
 }
 
-void initX11Threads()
-{
-    XInitThreads();
-}
-
 Lv2Ui::Lv2Ui(Lv2World &world, Lv2Effect &effect, const std::string &title)
     : m_effect(effect)
 {
@@ -113,33 +94,10 @@ Lv2Ui::Lv2Ui(Lv2World &world, Lv2Effect &effect, const std::string &title)
         m_error = "the plugin isn't running";
         return;
     }
-    m_display = XOpenDisplay(nullptr);
-    if (m_display == nullptr) {
+    if (!m_window.create(title, 640, 480)) {
         m_error = "there's no display to show it on";
         return;
     }
-    XSetErrorHandler(ignoreXError);
-
-    // The window the UI goes in.
-    const int screen = DefaultScreen(m_display);
-    m_width = 640;
-    m_height = 480;
-    m_window = XCreateSimpleWindow(m_display, RootWindow(m_display, screen), 0, 0,
-                                   static_cast<unsigned>(m_width), static_cast<unsigned>(m_height),
-                                   0, BlackPixel(m_display, screen), BlackPixel(m_display, screen));
-    XStoreName(m_display, m_window, title.c_str());
-    XChangeProperty(m_display, m_window, XInternAtom(m_display, "_NET_WM_NAME", False),
-                    XInternAtom(m_display, "UTF8_STRING", False), 8, PropModeReplace,
-                    reinterpret_cast<const unsigned char *>(title.c_str()), // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-                    static_cast<int>(title.size()));
-    std::string name = "patchprime";
-    std::string className = "Patch Prime";
-    XClassHint hint{.res_name = name.data(), .res_class = className.data()};
-    XSetClassHint(m_display, m_window, &hint);
-    m_deleteAtom = XInternAtom(m_display, "WM_DELETE_WINDOW", False);
-    Atom protocols = m_deleteAtom;
-    XSetWMProtocols(m_display, m_window, &protocols, 1);
-    XSelectInput(m_display, m_window, StructureNotifyMask);
 
     // Its features.
     m_eventTransfer = world.map(LV2_ATOM__eventTransfer);
@@ -154,7 +112,7 @@ Lv2Ui::Lv2Ui(Lv2World &world, Lv2Effect &effect, const std::string &title)
     m_resize = {.handle = this, .ui_resize = &Lv2Ui::resize};
     m_dataAccess = {.data_access = effect.descriptor()->extension_data};
     m_parentFeature = {.URI = LV2_UI__parent,
-                       .data = reinterpret_cast<void *>(m_window)}; // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast,performance-no-int-to-ptr): LV2 passes the XID as a pointer
+                       .data = reinterpret_cast<void *>(m_window.id())}; // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast,performance-no-int-to-ptr): LV2 passes the XID as a pointer
     m_resizeFeature = {.URI = LV2_UI__resize, .data = &m_resize};
     m_idleFeature = {.URI = LV2_UI__idleInterface, .data = nullptr};
     m_instanceFeature = {.URI = LV2_INSTANCE_ACCESS_URI, .data = effect.handle()};
@@ -211,22 +169,10 @@ Lv2Ui::Lv2Ui(Lv2World &world, Lv2Effect &effect, const std::string &title)
 
     // Sized to the UI: by its resize request, or else by its window.
     idle();
-    XSync(m_display, False);
-    if (m_child != 0) {
-        Window root = 0;
-        int x = 0;
-        int y = 0;
-        unsigned width = 0;
-        unsigned height = 0;
-        unsigned border = 0;
-        unsigned depth = 0;
-        if (XGetGeometry(m_display, m_child, &root, &x, &y, &width, &height, &border, &depth) != 0 &&
-            width > 16 && height > 16) {
-            resize(this, static_cast<int>(width), static_cast<int>(height));
-        }
+    if (const auto size = m_window.sizeOf(m_child); size && size->first > 16 && size->second > 16) {
+        m_window.resize(size->first, size->second);
     }
-    XMapRaised(m_display, m_window);
-    XFlush(m_display);
+    m_window.show();
 }
 
 Lv2Ui::~Lv2Ui()
@@ -241,47 +187,25 @@ void Lv2Ui::close()
         m_descriptor->cleanup(m_handle);
     }
     m_handle = nullptr;
-    if (m_display != nullptr) {
-        if (m_window != 0) {
-            XDestroyWindow(m_display, m_window);
-        }
-        XCloseDisplay(m_display);
-    }
-    m_display = nullptr;
-    m_window = 0;
+    m_window.destroy();
 }
 
 bool Lv2Ui::idle()
 {
-    if (m_handle == nullptr || m_display == nullptr) {
+    if (m_handle == nullptr || !m_window.isOpen()) {
         return false;
     }
-    bool open = true;
-    while (XPending(m_display) > 0) {
-        XEvent event{};
-        XNextEvent(m_display, &event);
-        if (event.type == ClientMessage &&
-            std::cmp_equal(event.xclient.data.l[0], m_deleteAtom)) { // NOLINT(cppcoreguidelines-pro-type-union-access)
-            open = false;
-        } else if (event.type == ConfigureNotify && event.xconfigure.window == m_window) { // NOLINT(cppcoreguidelines-pro-type-union-access)
-            const int width = event.xconfigure.width;   // NOLINT(cppcoreguidelines-pro-type-union-access)
-            const int height = event.xconfigure.height; // NOLINT(cppcoreguidelines-pro-type-union-access)
-            if (width != m_width || height != m_height) {
-                // The user resized the window: the UI follows.
-                m_width = width;
-                m_height = height;
-                if (m_uiResize != nullptr) {
-                    // A UI's own resize interface takes the UI's handle: the
-                    // struct is shared by all its instances, so its handle
-                    // field is meaningless (often null).
-                    m_uiResize->ui_resize(m_handle, width, height);
-                } else if (m_child != 0) {
-                    XResizeWindow(m_display, m_child, static_cast<unsigned>(width),
-                                  static_cast<unsigned>(height));
-                }
-            }
+    // The user resized the window: the UI follows.
+    const bool open = m_window.pump([this](int width, int height) {
+        if (m_uiResize != nullptr) {
+            // A UI's own resize interface takes the UI's handle: the struct
+            // is shared by all its instances, so its handle field is
+            // meaningless (often null).
+            m_uiResize->ui_resize(m_handle, width, height);
+        } else if (m_child != 0) {
+            m_window.resize(m_child, width, height);
         }
-    }
+    });
     if (!open) {
         return false;
     }
@@ -302,26 +226,8 @@ bool Lv2Ui::idle()
     if (m_idle != nullptr && m_idle->idle(m_handle) != 0) {
         return false; // the UI closed itself
     }
-    XFlush(m_display);
+    m_window.flush();
     return true;
-}
-
-void Lv2Ui::raise()
-{
-    if (m_display == nullptr) {
-        return;
-    }
-    XMapRaised(m_display, m_window);
-    // Ask the window manager to activate it (it may refuse focus stealing).
-    XEvent event{};
-    event.xclient.type = ClientMessage;                                         // NOLINT(cppcoreguidelines-pro-type-union-access)
-    event.xclient.window = m_window;                                            // NOLINT(cppcoreguidelines-pro-type-union-access)
-    event.xclient.message_type = XInternAtom(m_display, "_NET_ACTIVE_WINDOW", False); // NOLINT(cppcoreguidelines-pro-type-union-access)
-    event.xclient.format = 32;                                                  // NOLINT(cppcoreguidelines-pro-type-union-access)
-    event.xclient.data.l[0] = 2; // from a pager-like tool  // NOLINT(cppcoreguidelines-pro-type-union-access)
-    XSendEvent(m_display, DefaultRootWindow(m_display), False,
-               SubstructureRedirectMask | SubstructureNotifyMask, &event);
-    XFlush(m_display);
 }
 
 void Lv2Ui::write(LV2UI_Controller controller, std::uint32_t port, std::uint32_t size,
@@ -337,7 +243,7 @@ void Lv2Ui::write(LV2UI_Controller controller, std::uint32_t port, std::uint32_t
                 self->m_sent[port] = self->m_effect.controlValue(port); // no echo
             }
             if (self->onParam) {
-                self->onParam(symbol, self->m_effect.controlValue(port));
+                self->onParam(symbol, static_cast<double>(self->m_effect.controlValue(port)));
             }
         }
     } else if (protocol == self->m_eventTransfer) {
@@ -348,14 +254,10 @@ void Lv2Ui::write(LV2UI_Controller controller, std::uint32_t port, std::uint32_t
 int Lv2Ui::resize(LV2UI_Feature_Handle handle, int width, int height)
 {
     auto *self = static_cast<Lv2Ui *>(handle);
-    if (self->m_display == nullptr || width <= 0 || height <= 0) {
+    if (!self->m_window.isOpen() || width <= 0 || height <= 0) {
         return 1;
     }
-    self->m_width = width;
-    self->m_height = height;
-    XResizeWindow(self->m_display, self->m_window, static_cast<unsigned>(width),
-                  static_cast<unsigned>(height));
-    XFlush(self->m_display);
+    self->m_window.resize(width, height);
     return 0;
 }
 

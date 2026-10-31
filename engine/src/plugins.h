@@ -19,16 +19,21 @@
 
 namespace pp {
 
-// Plugins in a strip's chain: an effect whose type is "lv2:<plugin URI>",
-// with its parameters keyed by control port symbol. Each one runs in its own
+// Plugins in a strip's chain: an effect whose type is "lv2:<plugin URI>"
+// (parameters keyed by control port symbol) or "clap:<plugin id>"
+// (parameters keyed by CLAP param id, in decimal). Each one runs in its own
 // patchprime-pluginhost process (see PluginRunner), so a crashing plugin
 // can't take the engine down.
 
 constexpr std::string_view lv2TypePrefix = "lv2:";
+constexpr std::string_view clapTypePrefix = "clap:";
 
 bool isPluginType(std::string_view type);
 std::string pluginType(std::string_view uri); // "lv2:" + uri
-std::string pluginUri(std::string_view type); // the URI, or "" for a built-in type
+// The plugin's URI or id (what follows the format), or "" for a built-in type.
+std::string pluginUri(std::string_view type);
+// "lv2" or "clap", or "" for a built-in type.
+std::string pluginFormat(std::string_view type);
 
 // What the scan found out about a plugin.
 struct PluginInfo
@@ -37,6 +42,7 @@ struct PluginInfo
     std::string name;
     std::string author;
     std::string category; // "Compressor", "Reverb", ... ("Plugin" when unknown)
+    std::string binary;   // CLAP: the .clap file it's in
     int audioIn = 0;      // audio ports, not counting sidechains
     int audioOut = 0;
     std::vector<ParamInfo> params;

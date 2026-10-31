@@ -83,7 +83,8 @@ void PluginRunner::want(const std::string &node, const PluginSpec &spec)
     }
     // The window's title and the plugin's state don't restart it: the
     // state came from it, and the title only shows the next time.
-    const bool restart = host.spec.type != spec.type || host.spec.positions != spec.positions ||
+    const bool restart = host.spec.type != spec.type || host.spec.binary != spec.binary ||
+                         host.spec.positions != spec.positions ||
                          host.spec.sampleRate != spec.sampleRate ||
                          host.spec.owner != spec.owner ||
                          host.spec.description != spec.description;
@@ -187,7 +188,9 @@ void PluginRunner::start(const std::string &node, Host &host)
     }
     QStringList args{
         QStringLiteral("--run"),
+        QStringLiteral("--format"), qs(pluginFormat(host.spec.type)),
         QStringLiteral("--uri"), qs(pluginUri(host.spec.type)),
+        QStringLiteral("--binary"), qs(host.spec.binary),
         QStringLiteral("--name"), qs(node),
         QStringLiteral("--positions"), positions.join(QLatin1Char(',')),
         QStringLiteral("--rate"), QString::number(host.spec.sampleRate),

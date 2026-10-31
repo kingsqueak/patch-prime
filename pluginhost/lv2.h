@@ -5,6 +5,7 @@
 
 #include "effects.h"
 #include "eventring.h"
+#include "hostedplugin.h"
 #include "plugins.h"
 
 #include <lilv/lilv.h>
@@ -96,7 +97,7 @@ private:
 // runs once per channel on a stereo strip; otherwise channels are spread
 // over its ports (averaged when it has fewer). Sidechain inputs get silence.
 // Parameters are its control input ports, by symbol.
-class Lv2Effect : public Effect
+class Lv2Effect : public HostedPlugin
 {
 public:
     Lv2Effect(Lv2World &world, const LilvPlugin *plugin);
@@ -112,8 +113,8 @@ public:
     void process(float *const *channels, int channelCount, int frames) noexcept override;
     void setParam(const std::string &name, double value) override;
 
-    // Why the plugin couldn't be started, or "" when it runs.
-    [[nodiscard]] const std::string &error() const { return m_error; }
+    [[nodiscard]] const std::string &error() const override { return m_error; }
+    std::unique_ptr<PluginWindow> openWindow(const std::string &title) override;
 
     // --- For its UI (see Lv2Ui), on the main thread ---
     [[nodiscard]] const LilvPlugin *plugin() const { return m_plugin; }
@@ -141,8 +142,8 @@ public:
     // a UI may have changed (a loaded file, say). Saving runs alongside the
     // audio; restoring happens in prepare(), before the plugin starts.
     [[nodiscard]] bool hasState() const;
-    [[nodiscard]] std::string saveState() const;
-    void setInitialState(std::string state) { m_initialState = std::move(state); }
+    [[nodiscard]] std::string saveState() const override;
+    void setInitialState(std::string state) override { m_initialState = std::move(state); }
 
 private:
     enum class PortKind : std::uint8_t

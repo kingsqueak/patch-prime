@@ -56,6 +56,12 @@ class TestPlugins : public QObject
 private Q_SLOTS:
     void types()
     {
+        QVERIFY(isPluginType("clap:com.x.y"));
+        QCOMPARE(pluginFormat("clap:com.x.y"), "clap");
+        QCOMPARE(pluginFormat("lv2:urn:x"), "lv2");
+        QCOMPARE(pluginFormat("gain"), "");
+        QCOMPARE(pluginUri("clap:com.x.y"), "com.x.y");
+        QVERIFY(!isPluginType("clap:"));
         QVERIFY(isPluginType("lv2:urn:x"));
         QVERIFY(!isPluginType("lv2:"));
         QVERIFY(!isPluginType("gain"));
@@ -92,6 +98,7 @@ private Q_SLOTS:
                      .name = "X Comp",
                      .author = "Someone",
                      .category = "Compressor",
+                     .binary = {},
                      .audioIn = 2,
                      .audioOut = 2,
                      .params = {ParamInfo{.name = "mode",
@@ -123,7 +130,7 @@ private Q_SLOTS:
         QSignalSpy changed(&catalog, &PluginCatalog::changed);
         catalog.start();
         QVERIFY(QTest::qWaitFor([&] { return !catalog.isScanning(); }, 15000));
-        QCOMPARE(catalog.plugins().size(), 1U);
+        QCOMPARE(catalog.plugins().size(), 2U); // LV2 and CLAP
         const auto *gain = catalog.find(testGain);
         QVERIFY(gain != nullptr);
         QCOMPARE(gain->name, "Patch Prime Test Gain");
@@ -137,6 +144,22 @@ private Q_SLOTS:
         QCOMPARE(gain->params[0].maximum, 4.0);
         QCOMPARE(gain->params[0].initial, 1.0);
         QCOMPARE(gain->params[1].kind, ParamKind::Toggle);
+
+        // The CLAP one: its parameters by id, its file.
+        const auto *clap = catalog.find("clap:com.github.kingsqueak.patch-prime.tests.gain");
+        QVERIFY(clap != nullptr);
+        QCOMPARE(clap->name, "Patch Prime Test Gain (CLAP)");
+        QCOMPARE(clap->category, "Utility");
+        QCOMPARE(clap->audioIn, 1);
+        QCOMPARE(clap->audioOut, 1);
+        QCOMPARE(clap->problem, "");
+        QVERIFY(!clap->hasUi);
+        QVERIFY(clap->binary.ends_with("testgain.clap"));
+        QCOMPARE(clap->params.size(), 3U);
+        QCOMPARE(clap->params[0].name, "1");
+        QCOMPARE(clap->params[0].label, "Gain");
+        QCOMPARE(clap->params[0].maximum, 4.0);
+        QCOMPARE(clap->params[2].kind, ParamKind::Toggle);
 
         // Cached: the next start has it at once.
         PluginCatalog again(dir.filePath(QStringLiteral("cache/plugins.json")));
@@ -163,6 +186,7 @@ private Q_SLOTS:
                         .name = "Gain",
                         .author = {},
                         .category = "Amplifier",
+                        .binary = {},
                         .audioIn = 1,
                         .audioOut = 1,
                         .params = {ParamInfo{.name = "gain",
@@ -178,6 +202,7 @@ private Q_SLOTS:
                          .name = "Synth",
                          .author = {},
                          .category = "Instrument",
+                         .binary = {},
                          .audioIn = 0,
                          .audioOut = 2,
                          .params = {},

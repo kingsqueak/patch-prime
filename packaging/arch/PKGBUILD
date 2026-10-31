@@ -3,8 +3,8 @@
 # SPDX-FileCopyrightText: 2026 KC2RGW Chris
 
 # Arch Linux package: `makepkg -si` in this directory. Builds the release
-# tarball; RNNoise (for noise suppression) is a second source here rather
-# than fetched while building. Keep pkgver in step with CMakeLists.txt.
+# tarball; RNNoise (for noise suppression) and the CLAP headers are sources
+# here rather than fetched while building. Keep pkgver in step with CMakeLists.txt.
 
 pkgname=patchprime
 pkgver=0.11
@@ -18,16 +18,19 @@ depends=(glibc gcc-libs libpipewire libsndfile lilv libx11 pipewire wireplumber 
 makedepends=(cmake ninja lv2)
 install=patchprime.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
-        "https://github.com/xiph/rnnoise/releases/download/v0.2/rnnoise-0.2.tar.gz")
+        "https://github.com/xiph/rnnoise/releases/download/v0.2/rnnoise-0.2.tar.gz"
+        "clap-1.2.10.tar.gz::https://github.com/free-audio/clap/archive/refs/tags/1.2.10.tar.gz")
 sha256sums=('c1930075cd37a1a72edbbcfceef5cf40b9ee34919a27359adf2b430a75eeaf11'
-            '90fce4b00b9ff24c08dbfe31b82ffd43bae383d85c5535676d28b0a2b11c0d37')
+            '90fce4b00b9ff24c08dbfe31b82ffd43bae383d85c5535676d28b0a2b11c0d37'
+            '58fdb977c6678859c15d57942378b651399178f49a3a8ecad1813b9f231dc096')
 
 build() {
     cmake -B build -S "patch-prime-$pkgver" -G Ninja -Wno-dev \
         -DCMAKE_BUILD_TYPE=None \
         -DCMAKE_INSTALL_PREFIX=/usr \
         -DPATCHPRIME_SYSTEMD_USER_UNIT_DIR=lib/systemd/user \
-        -DFETCHCONTENT_SOURCE_DIR_RNNOISE="$srcdir/rnnoise-0.2"
+        -DFETCHCONTENT_SOURCE_DIR_RNNOISE="$srcdir/rnnoise-0.2" \
+        -DFETCHCONTENT_SOURCE_DIR_CLAP="$srcdir/clap-1.2.10"
     cmake --build build
 }
 

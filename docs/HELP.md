@@ -158,7 +158,7 @@ Cue is temporary: it isn't saved, and it isn't part of scenes. Set **Cue** to **
 
 Click a strip's insert slots to open its effects window. The window is separate from the mixer, so you can keep both in view.
 
-- **Add Effect** adds an effect at the end of the chain: a built-in one, or a plugin (see [Plugins](#plugins-lv2)). A strip can have up to eight.
+- **Add Effect** adds an effect at the end of the chain: a built-in one, or a plugin (see [Plugins](#plugins-lv2-and-clap)). A strip can have up to eight.
 - Effects run top to bottom. Move them with the up and down arrows; remove one with **✕**.
 - The **power button** on each effect turns it on or bypasses it, crossfading so it doesn't click.
 - Every value can be dragged or typed: click a value box, type (for example `2.5k`, `-6`, `40 ms`), and press Enter. Double-click a slider to reset it.
@@ -234,12 +234,12 @@ Delays the strip by up to one second. Use it on a fast output to line it up with
 
 A plain level trim, ±24 dB.
 
-### Plugins (LV2)
+### Plugins (LV2 and CLAP)
 
-Besides the built-in effects, a strip can run **LV2 plugins**: the Linux plugin format, used by LSP, x42, ZAM, Calf, Dragonfly and many more. Install them from your distribution (for example `sudo apt install lsp-plugins-lv2`).
+Besides the built-in effects, a strip can run **plugins** in two formats: **LV2**, the Linux plugin format (LSP, x42, ZAM, Calf, Dragonfly and many more), and **CLAP**, a newer cross-platform format (LSP, DPF, Dragonfly, Surge, Airwindows...). Install them from your distribution (for example `sudo apt install lsp-plugins-lv2` or `lsp-plugins-clap`). Patch Prime looks for CLAP plugins in `~/.clap`, `/usr/lib/clap`, `/usr/local/lib/clap` and the folders in `CLAP_PATH`.
 
 - **Add Effect → Plugin…** opens the plugin list. Search by name, maker or category, or pick a category; double-click a plugin, or select it and press **Add**. Plugins that can't be used here (instruments, analysers, and a few that need something Patch Prime doesn't provide yet) are hidden; tick **Show plugins that can't be used** to see them and why. **Rescan** looks for plugins installed since Patch Prime started.
-- A plugin goes in the chain like any effect, and mixes freely with the built-in ones, in any order: a gate, then a plugin compressor, then the built-in limiter, say. It's marked **LV2** in the effects window.
+- A plugin goes in the chain like any effect, and mixes freely with the built-in ones, in any order: a gate, then a plugin compressor, then the built-in limiter, say. It's marked **LV2** or **CLAP** in the effects window and in the plugin list (many plugin sets come in both formats; either works).
 - Its controls are listed by name: a slider and a value box, a switch, or a menu, depending on the control. A plugin with many controls shows the first eight; **All … parameters** shows the rest.
 - **Plugin Window** opens the plugin's own editor, with all its knobs, graphs and meters, in a window of its own; click it again (or close the window) to close it. What you change there is saved like any other setting, and Patch Prime's controls follow it. Most plugins have one (LSP, ZAM, x42, Dragonfly...); plugins whose editor is made with Gtk (Calf) don't show one. The window needs your desktop session (X11, or XWayland on Wayland).
 - Some plugins keep settings of their own besides their controls, a loaded file for example. Patch Prime saves those too, when you close the plugin's window (and every few seconds while it's open), with the strip and in scenes.

@@ -389,7 +389,7 @@ QVariantMap DaemonClient::effectInfo(const QString &type) const
         }
     }
     // A plugin that isn't installed (any more): its URI's last part as a name.
-    const bool plugin = type.startsWith(QLatin1String("lv2:"));
+    const bool plugin = type.startsWith(QLatin1String("lv2:")) || type.startsWith(QLatin1String("clap:"));
     return {{QStringLiteral("type"), type},
             {QStringLiteral("label"), plugin ? type.section(QLatin1Char('/'), -1) : type},
             {QStringLiteral("params"), QVariantList{}},

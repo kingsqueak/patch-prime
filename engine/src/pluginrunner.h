@@ -23,7 +23,8 @@ namespace pp {
 // What one plugin node should run.
 struct PluginSpec
 {
-    std::string type;                   // "lv2:<uri>"
+    std::string type;                   // "lv2:<uri>" or "clap:<id>"
+    std::string binary;                 // CLAP: the .clap file
     std::vector<std::string> positions; // the strip's channels
     int sampleRate = 48000;
     bool enabled = true; // false: bypassed
@@ -38,7 +39,8 @@ struct PluginSpec
 
 // Runs each plugin node in a patchprime-pluginhost process of its own:
 //
-//   patchprime-pluginhost --run --uri U --name N --positions FL,FR --rate R
+//   patchprime-pluginhost --run --format F --uri U [--binary B] --name N
+//                         --positions FL,FR --rate R
 //                         --owner O --description D --title T --params {json}
 //                         [--bypassed] [--state-follows]
 //

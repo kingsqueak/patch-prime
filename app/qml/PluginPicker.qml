@@ -7,8 +7,8 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kingsqueak.patchprime.engine
 
-// Choose a plugin to add to a strip: the installed LV2 plugins, searchable
-// by name, maker or category, and filterable by category. Plugins that
+// Choose a plugin to add to a strip: the installed LV2 and CLAP plugins,
+// searchable by name, maker, category or format, and filterable by category. Plugins that
 // can't run here (instruments, ones needing something Patch Prime doesn't
 // provide) are listed greyed out, with the reason.
 QQC2.Dialog {
@@ -30,11 +30,14 @@ QQC2.Dialog {
                 return false;
             if (!showAll.checked && p.problem.length > 0)
                 return false;
-            const text = (p.name + " " + p.author + " " + p.category).toLowerCase();
+            const text = (p.name + " " + p.author + " " + p.category + " " + picker.format(p)).toLowerCase();
             return words.every(w => text.includes(w));
         });
     }
 
+    function format(plugin) {
+        return plugin.type.startsWith("clap:") ? "CLAP" : "LV2";
+    }
     function choose(plugin) {
         if (plugin.problem.length > 0)
             return;
@@ -117,7 +120,7 @@ QQC2.Dialog {
                             opacity: 0.7
                             elide: Text.ElideRight
                             text: item.usable
-                                  ? [item.modelData.category, item.modelData.author,
+                                  ? [picker.format(item.modelData), item.modelData.category, item.modelData.author,
                                      qsTr("%1 in, %2 out").arg(item.modelData.audioIn).arg(item.modelData.audioOut)]
                                     .filter(s => s.length > 0).join(" · ")
                                   : qsTr("Can't be used: %1").arg(item.modelData.problem)
@@ -134,7 +137,7 @@ QQC2.Dialog {
                           : Devices.plugins.length === 0 ? qsTr("No plugins installed")
                           : qsTr("No plugin matches")
                     explanation: Devices.plugins.length === 0 && !Devices.pluginsScanning
-                                 ? qsTr("Install LV2 plugins from your distribution, for example LSP, x42, Calf or ZAM plugins, then press Rescan.")
+                                 ? qsTr("Install LV2 or CLAP plugins from your distribution, for example LSP, x42, Calf or ZAM plugins, then press Rescan.")
                                  : ""
                 }
             }

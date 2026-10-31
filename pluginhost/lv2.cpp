@@ -659,6 +659,11 @@ void Lv2Effect::process(float *const *channels, int channelCount, int frames) no
     }
 }
 
+std::unique_ptr<PluginWindow> Lv2Effect::openWindow(const std::string &title)
+{
+    return std::make_unique<Lv2Ui>(m_world, *this, title);
+}
+
 LV2_Handle Lv2Effect::handle() const
 {
     return m_instances.empty() ? nullptr : lilv_instance_get_handle(m_instances.front().instance);
