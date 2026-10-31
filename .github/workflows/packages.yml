@@ -152,10 +152,12 @@ jobs:
           cd /tmp/pkg
           su builder -c "QTEST_DISABLE_STACK_DUMP=1 makepkg --noconfirm"
           su builder -c "makepkg --printsrcinfo" > .SRCINFO
-          pacman -Qip patchprime-*.pkg.tar.zst
-          pacman -Qlp patchprime-*.pkg.tar.zst
+          # Not the separate patchprime-debug package makepkg also builds.
+          pkg=$(ls patchprime-[0-9]*.pkg.tar.zst)
+          pacman -Qip "$pkg"
+          pacman -Qlp "$pkg"
           mkdir -p "$GITHUB_WORKSPACE/out"
-          cp patchprime-*.pkg.tar.zst "$GITHUB_WORKSPACE/out/"
+          cp "$pkg" "$GITHUB_WORKSPACE/out/"
 
       - uses: actions/upload-artifact@v4
         with:

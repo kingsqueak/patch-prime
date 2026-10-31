@@ -49,6 +49,8 @@ set(CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION ON)
 set(CPACK_RPM_PACKAGE_RELEASE "1")
 set(CPACK_RPM_PACKAGE_RELEASE_DIST ON) # .fc44
 set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
+# Not relocatable: the unit, D-Bus and .desktop files hold /usr/bin paths.
+set(CPACK_RPM_PACKAGE_RELOCATABLE OFF)
 set(CPACK_RPM_PACKAGE_LICENSE "GPL-3.0-or-later")
 set(CPACK_RPM_PACKAGE_GROUP "Applications/Multimedia")
 set(CPACK_RPM_PACKAGE_URL "https://github.com/kingsqueak/patch-prime")
