@@ -114,6 +114,11 @@ public Q_SLOTS:
     // whether a scan runs. Rescan looks for newly installed ones.
     QString GetPlugins() const;
     void RescanPlugins();
+    // A plugin's own window (plugins with "hasUi"): open (or bring forward)
+    // or close it. Open ones are in the state as "pluginWindows" =
+    // {key: [index, ...]}; why one couldn't be opened as
+    // "pluginWindowErrors" = {key: {index: message}}.
+    void SetPluginWindow(const QString &key, int index, bool open);
     // Cue (solo in the headphones): the hardware output it plays to (a key,
     // "" for none; in the state as "cueOutput"), and whether a strip is cued
     // (per device as "cued"). While anything is cued, the cue output plays

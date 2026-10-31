@@ -81,10 +81,13 @@ void PluginRunner::want(const std::string &node, const PluginSpec &spec)
     if (host.spec == spec) {
         return;
     }
+    // The window's title and the plugin's state don't restart it: the
+    // state came from it, and the title only shows the next time.
     const bool restart = host.spec.type != spec.type || host.spec.positions != spec.positions ||
                          host.spec.sampleRate != spec.sampleRate ||
                          host.spec.owner != spec.owner ||
                          host.spec.description != spec.description;
+    const bool settingsChanged = host.spec.enabled != spec.enabled || host.spec.params != spec.params;
     host.spec = spec;
     if (!host.error.empty() || restart || host.process == nullptr) {
         // Changed settings give a plugin that failed another go.
@@ -93,6 +96,9 @@ void PluginRunner::want(const std::string &node, const PluginSpec &spec)
         host.error.clear();
         start(node, host);
         Q_EMIT changed();
+        return;
+    }
+    if (!settingsChanged) {
         return;
     }
     send(host, line({{QStringLiteral("set"),
@@ -129,6 +135,35 @@ void PluginRunner::setMetering(const std::string &node, bool on)
     send(*it->second, line({{QStringLiteral("metering"), on}}));
 }
 
+void PluginRunner::setWindow(const std::string &node, bool open)
+{
+    const auto it = m_hosts.find(node);
+    if (it == m_hosts.end()) {
+        return;
+    }
+    it->second->windowError.clear();
+    send(*it->second, line({{QStringLiteral("window"), open}}));
+}
+
+bool PluginRunner::isWindowOpen(const std::string &node) const
+{
+    const auto it = m_hosts.find(node);
+    return it != m_hosts.end() && it->second->windowOpen;
+}
+
+std::string PluginRunner::windowError(const std::string &node) const
+{
+    const auto it = m_hosts.find(node);
+    return it == m_hosts.end() ? std::string() : it->second->windowError;
+}
+
+void PluginRunner::requestState(const std::string &node)
+{
+    if (const auto it = m_hosts.find(node); it != m_hosts.end()) {
+        send(*it->second, line({{QStringLiteral("saveState"), true}}));
+    }
+}
+
 std::optional<EffectLevels> PluginRunner::takeLevels(const std::string &node)
 {
     const auto it = m_hosts.find(node);
@@ -158,11 +193,15 @@ void PluginRunner::start(const std::string &node, Host &host)
         QStringLiteral("--rate"), QString::number(host.spec.sampleRate),
         QStringLiteral("--owner"), qs(host.spec.owner),
         QStringLiteral("--description"), qs(host.spec.description),
+        QStringLiteral("--title"), qs(host.spec.title),
         QStringLiteral("--params"),
         QString::fromUtf8(QJsonDocument(paramsJson(host.spec.params)).toJson(QJsonDocument::Compact)),
     };
     if (!host.spec.enabled) {
         args.append(QStringLiteral("--bypassed"));
+    }
+    if (!host.spec.state.empty()) {
+        args.append(QStringLiteral("--state-follows"));
     }
     host.pending.clear();
     host.reported.clear();
@@ -183,6 +222,9 @@ void PluginRunner::start(const std::string &node, Host &host)
     host.process = process;
     qCInfo(lcRunner, "starting plugin node %s (%s)", node.c_str(), host.spec.type.c_str());
     process->start(program, args);
+    if (!host.spec.state.empty()) {
+        send(host, line({{QStringLiteral("state"), qs(host.spec.state)}}));
+    }
     if (host.metering) {
         send(host, line({{QStringLiteral("metering"), true}}));
     }
@@ -214,6 +256,7 @@ void PluginRunner::finished(const std::string &node, int exitCode, QProcess::Exi
     }
     Host &host = *it->second;
     readOutput(node);
+    host.windowOpen = false;
     host.process->disconnect();
     host.process->deleteLater();
     host.process = nullptr;
@@ -269,6 +312,21 @@ void PluginRunner::readOutput(const std::string &node)
             host.hasLevels = true;
         } else if (const auto error = o.value(QLatin1String("error")); error.isString()) {
             host.reported = error.toString().toStdString();
+        } else if (const auto window = o.value(QLatin1String("window")); window.isBool()) {
+            host.windowOpen = window.toBool();
+            Q_EMIT changed();
+        } else if (const auto failed = o.value(QLatin1String("windowError")); failed.isString()) {
+            host.windowError = failed.toString().toStdString();
+            Q_EMIT changed();
+        } else if (const auto param = o.value(QLatin1String("param")); param.isObject()) {
+            const auto p = param.toObject();
+            const auto name = p.value(QLatin1String("name")).toString().toStdString();
+            const double value = p.value(QLatin1String("value")).toDouble();
+            host.spec.params[name] = value; // it has it already: no need to send it back
+            Q_EMIT paramChanged(node, name, value);
+        } else if (const auto state = o.value(QLatin1String("state")); state.isString()) {
+            host.spec.state = state.toString().toStdString();
+            Q_EMIT stateChanged(node, host.spec.state);
         }
     }
 }

@@ -113,6 +113,7 @@ QByteArray pluginsToJson(const std::vector<PluginInfo> &plugins)
             {QStringLiteral("audioIn"), p.audioIn},
             {QStringLiteral("audioOut"), p.audioOut},
             {QStringLiteral("params"), params},
+            {QStringLiteral("hasUi"), p.hasUi},
             {QStringLiteral("problem"), qs(p.problem)},
         });
     }
@@ -137,6 +138,7 @@ std::vector<PluginInfo> pluginsFromJson(const QByteArray &json)
         for (const auto &param : o.value(QLatin1String("params")).toArray()) {
             p.params.push_back(paramFromJson(param.toObject()));
         }
+        p.hasUi = o.value(QLatin1String("hasUi")).toBool();
         p.problem = str(o, "problem");
         plugins.push_back(std::move(p));
     }
@@ -212,7 +214,7 @@ void PluginCatalog::setPlugins(std::vector<PluginInfo> plugins)
     });
     const auto same = [](const PluginInfo &a, const PluginInfo &b) {
         return a.type == b.type && a.name == b.name && a.problem == b.problem &&
-               a.params.size() == b.params.size();
+               a.hasUi == b.hasUi && a.params.size() == b.params.size();
     };
     if (std::ranges::equal(plugins, m_plugins, same)) {
         return;

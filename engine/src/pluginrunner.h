@@ -30,6 +30,8 @@ struct PluginSpec
     std::map<std::string, double> params;
     std::string description; // the node's
     std::string owner;       // patchprime.fx.owner, as on the engine's effects nodes
+    std::string title;       // its window's
+    std::string state;       // the plugin's own state, restored when it starts
 
     bool operator==(const PluginSpec &) const = default;
 };
@@ -37,13 +39,17 @@ struct PluginSpec
 // Runs each plugin node in a patchprime-pluginhost process of its own:
 //
 //   patchprime-pluginhost --run --uri U --name N --positions FL,FR --rate R
-//                         --owner O --description D --params {json} [--bypassed]
+//                         --owner O --description D --title T --params {json}
+//                         [--bypassed] [--state-follows]
 //
 // makes a filter node N (like the engine's effects nodes) running plugin U.
-// The runner talks to it in JSON lines: {"set": {"enabled", "params"}} and
-// {"metering": bool} on its stdin; {"ready"}, {"levels": ...} and
-// {"error": message} on its stdout. The host exits when its stdin closes,
-// so it never outlives the engine.
+// The runner talks to it in JSON lines. To it: {"state": ...} first (with
+// --state-follows), then {"set": {"enabled", "params"}}, {"metering": bool},
+// {"window": bool} (its own window) and {"saveState": true}. From it:
+// {"ready"}, {"levels": ...}, {"error": message}, {"window": bool},
+// {"windowError": message}, {"param": {"name", "value"}} (changed in its
+// window) and {"state": ...} (its own state changed). The host exits when
+// its stdin closes, so it never outlives the engine.
 //
 // A host that crashes is restarted after a second; after crashLimit crashes
 // within crashWindow its plugin stays off, with an error, until its spec
@@ -74,11 +80,22 @@ public:
     // The plugin's input and output levels, measured while metering is on.
     void setMetering(const std::string &node, bool on);
     std::optional<EffectLevels> takeLevels(const std::string &node);
+    // The plugin's own window: open (or bring forward) or close; whether
+    // it's open, and why it couldn't be opened the last time.
+    void setWindow(const std::string &node, bool open);
+    [[nodiscard]] bool isWindowOpen(const std::string &node) const;
+    [[nodiscard]] std::string windowError(const std::string &node) const;
+    // Asks the host for the plugin's state (stateChanged follows if it changed).
+    void requestState(const std::string &node);
 
 Q_SIGNALS:
     // A host started, stopped, crashed or failed: errors may have changed,
     // and its node may have come or gone.
     void changed();
+    // A control changed in the plugin's window.
+    void paramChanged(const std::string &node, const std::string &name, double value);
+    // The plugin's own state changed (see PluginSpec::state).
+    void stateChanged(const std::string &node, const std::string &state);
 
 private:
     using Clock = std::chrono::steady_clock;
@@ -92,6 +109,8 @@ private:
         std::string error;
         std::string reported; // the last error line the host printed
         bool metering = false;
+        bool windowOpen = false;
+        std::string windowError;
         bool hasLevels = false;
         EffectLevels levels;
     };

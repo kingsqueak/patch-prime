@@ -84,6 +84,8 @@ QQC2.ApplicationWindow {
                 }
                 readonly property bool plugin: info.plugin === true
                 readonly property string failure: (Devices.pluginErrors[panel.key] || {})[index] || ""
+                readonly property bool windowOpen: (Devices.pluginWindows[panel.key] || []).includes(index)
+                readonly property string windowFailure: (Devices.pluginWindowErrors[panel.key] || {})[index] || ""
                 // A plugin with many parameters shows the first few until asked.
                 property bool allParams: false
                 readonly property int paramLimit: 8
@@ -148,6 +150,22 @@ QQC2.ApplicationWindow {
                             }
                         }
 
+                        // The plugin's own window: its full editor.
+                        QQC2.ToolButton {
+                            visible: slot.plugin && slot.info.hasUi === true
+                            icon.name: "window-new"
+                            text: slot.windowOpen ? qsTr("Close Window") : qsTr("Plugin Window")
+                            display: QQC2.AbstractButton.TextBesideIcon
+                            checkable: true
+                            checked: slot.windowOpen
+                            enabled: Devices.daemonRunning && slot.failure.length === 0
+                            onClicked: Devices.setPluginWindow(panel.key, slot.index, !slot.windowOpen)
+                            QQC2.ToolTip.text: slot.windowOpen ? qsTr("Close the plugin's own window")
+                                                               : qsTr("Open the plugin's own window, with all its controls and displays")
+                            QQC2.ToolTip.visible: hovered
+                            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        }
+
                         QQC2.ToolButton {
                             icon.name: "go-up"
                             enabled: slot.index > 0
@@ -174,6 +192,13 @@ QQC2.ApplicationWindow {
                         text: slot.info.missing === true
                               ? qsTr("This plugin isn't installed (any more), so the strip runs without it.")
                               : qsTr("The plugin is off: %1.").arg(slot.failure)
+                    }
+
+                    Kirigami.InlineMessage {
+                        Layout.fillWidth: true
+                        visible: slot.windowFailure.length > 0
+                        type: Kirigami.MessageType.Warning
+                        text: qsTr("Its window couldn't be opened: %1.").arg(slot.windowFailure)
                     }
 
                     RowLayout {

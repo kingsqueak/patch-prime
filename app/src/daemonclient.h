@@ -50,6 +50,10 @@ class DaemonClient : public QAbstractListModel
     Q_PROPERTY(bool pluginsScanning READ pluginsScanning NOTIFY pluginsChanged)
     // Plugins that are off because they failed: {stripKey: {index: message}}.
     Q_PROPERTY(QVariantMap pluginErrors READ pluginErrors NOTIFY pluginsChanged)
+    // Plugins' own windows: open ones, {stripKey: [index]}; and why ones
+    // couldn't be opened, {stripKey: {index: message}}.
+    Q_PROPERTY(QVariantMap pluginWindows READ pluginWindows NOTIFY pluginsChanged)
+    Q_PROPERTY(QVariantMap pluginWindowErrors READ pluginWindowErrors NOTIFY pluginsChanged)
     // Effects' meters by "<strip key>|<effect index>": a list of values
     // (the multiband compressor's gain reduction per band in dB), each held
     // and let fall slowly so it can be read.
@@ -108,6 +112,9 @@ public:
     [[nodiscard]] QVariantList plugins() const { return m_plugins; }
     [[nodiscard]] bool pluginsScanning() const { return m_pluginsScanning; }
     [[nodiscard]] QVariantMap pluginErrors() const { return m_pluginErrors; }
+    [[nodiscard]] QVariantMap pluginWindows() const { return m_pluginWindows; }
+    [[nodiscard]] QVariantMap pluginWindowErrors() const { return m_pluginWindowErrors; }
+    Q_INVOKABLE void setPluginWindow(const QString &key, int index, bool open);
     // An effect type's name and parameters: a built-in's (from effectTypes)
     // or a plugin's; {type, label, params} either way.
     [[nodiscard]] Q_INVOKABLE QVariantMap effectInfo(const QString &type) const;
@@ -264,6 +271,8 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     int m_pluginsRevision = -1;
     bool m_pluginsScanning = false;
     QVariantMap m_pluginErrors;
+    QVariantMap m_pluginWindows;
+    QVariantMap m_pluginWindowErrors;
     QString m_cueOutput;
     QVariantMap m_effectMeters;
     QVariantMap m_effectLevels;

@@ -607,7 +607,7 @@ void DeviceModel::addEffect(int row, const QString &type)
         if (effects.size() >= maxEffectsPerStrip) {
             return false;
         }
-        EffectSettings e{.type = type.toStdString(), .enabled = true, .params = {}, .key = {}};
+        EffectSettings e{.type = type.toStdString(), .enabled = true, .params = {}, .key = {}, .state = {}};
         for (const auto &p : params) {
             e.params[p.name] = p.initial;
         }
@@ -675,6 +675,21 @@ void DeviceModel::setEffectParam(int row, int index, const QString &name, double
             }
         }
         return false;
+    });
+}
+
+void DeviceModel::setEffectState(int row, int index, const std::string &state)
+{
+    editEffects(row, [index, &state](std::vector<EffectSettings> &effects) {
+        if (index < 0 || std::cmp_greater_equal(index, effects.size())) {
+            return false;
+        }
+        auto &e = effects[static_cast<std::size_t>(index)];
+        if (!isPluginType(e.type) || e.state == state) {
+            return false;
+        }
+        e.state = state;
+        return true;
     });
 }
 

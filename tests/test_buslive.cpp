@@ -977,6 +977,29 @@ private Q_SLOTS:
         const float back = peakWhilePlaying(1200);
         QVERIFY2(back > 0.02F && back < 0.1F, qPrintable(QString::number(back)));
 
+        // The plugin's own state: "halve" sets a trim it keeps only there
+        // (switching halve off again doesn't undo it). Saved when asked, and
+        // restored when the plugin starts again, after another crash.
+        devices.setEffectParam(micRow(), 1, QStringLiteral("halve"), 1.0);
+        QTest::qWait(200);
+        devices.setEffectParam(micRow(), 1, QStringLiteral("halve"), 0.0);
+        const float halved = peakWhilePlaying(1200);
+        QVERIFY2(halved > 0.012F && halved < 0.035F, qPrintable(QString::number(halved)));
+        buses.requestPluginStates();
+        QVERIFY(QTest::qWaitFor([&] { return !store.find(micKey)->effects[1].state.empty(); }, 5000));
+        QVERIFY(store.find(micKey)->effects[1].state.find("trim") != std::string::npos);
+        devices.setEffectParam(micRow(), 1, QStringLiteral("crash"), 1.0);
+        QVERIFY(QTest::qWaitFor([&] { return !buses.pluginErrors().empty(); }, 15000));
+        devices.setEffectParam(micRow(), 1, QStringLiteral("crash"), 0.0);
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return buses.pluginErrors().empty() && linkCount(m_graph, fx, plug) == 2 &&
+                       linkCount(m_graph, plug, inBus) == 2;
+            },
+            20000));
+        const float restored = peakWhilePlaying(1200);
+        QVERIFY2(restored > 0.012F && restored < 0.035F, qPrintable(QString::number(restored)));
+
         // Without effects the mic goes straight to its bus, and the host goes.
         devices.removeEffect(micRow(), 1);
         devices.removeEffect(micRow(), 0);

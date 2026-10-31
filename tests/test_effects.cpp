@@ -823,12 +823,13 @@ private Q_SLOTS:
     void settingsRoundTrip()
     {
         const std::vector<EffectSettings> effects{
-            {.type = "gain", .enabled = false, .params = {{"gainDb", -3.0}}, .key = {}},
+            {.type = "gain", .enabled = false, .params = {{"gainDb", -3.0}}, .key = {}, .state = {}},
             {.type = "ducker",
              .enabled = true,
              .params = {{"threshold", -30.0}, {"depth", 10.0}, {"attack", 20.0}, {"hold", 250.0},
                         {"release", 600.0}},
-             .key = "Audio/Source|mic"},
+             .key = "Audio/Source|mic",
+             .state = {}},
         };
         QCOMPARE(effectsFromJson(effectsToJson(effects)), effects);
         // Unknown types go; parameters are clamped, and missing ones filled in.
@@ -853,7 +854,7 @@ private Q_SLOTS:
 
     void chainUpdatesInPlace()
     {
-        std::vector<EffectSettings> effects{{.type = "gain", .enabled = true, .params = {}, .key = {}}};
+        std::vector<EffectSettings> effects{{.type = "gain", .enabled = true, .params = {}, .key = {}, .state = {}}};
         auto chain = buildChain(effects, rate, 2);
         QCOMPARE(chain->size(), 1U);
         Effect *first = &chain->at(0);
@@ -864,7 +865,7 @@ private Q_SLOTS:
         QCOMPARE(&chain->at(0), first);
         QVERIFY(!chain->at(0).enabled);
         // Another shape: rebuilt.
-        effects.push_back({.type = "gain", .enabled = true, .params = {}, .key = {}});
+        effects.push_back({.type = "gain", .enabled = true, .params = {}, .key = {}, .state = {}});
         QVERIFY(!updateChain(*chain, effects));
         QCOMPARE(effectsNodeName("patchprime.out.maudio-1"), "patchprime.fx.out.maudio-1");
         QCOMPARE(effectsNodeName("patchprime.desktop"), "patchprime.fx.desktop");

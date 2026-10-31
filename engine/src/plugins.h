@@ -40,6 +40,7 @@ struct PluginInfo
     int audioIn = 0;      // audio ports, not counting sidechains
     int audioOut = 0;
     std::vector<ParamInfo> params;
+    bool hasUi = false; // has its own window that Patch Prime can show
     // Empty when it can run here; otherwise why not (an instrument, a
     // feature Patch Prime doesn't provide).
     std::string problem;

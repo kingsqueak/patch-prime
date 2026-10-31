@@ -127,6 +127,25 @@ QString PatchPrimeService::GetState() const
         {QStringLiteral("effectTypes"), effectTypes},
         {QStringLiteral("pluginsRevision"), m_plugins->revision()},
         {QStringLiteral("pluginsScanning"), m_plugins->isScanning()},
+        {QStringLiteral("pluginWindows"), [this] {
+             QJsonObject windows;
+             for (const auto &[key, index] : m_buses->pluginWindows()) {
+                 auto list = windows.value(QString::fromStdString(key)).toArray();
+                 list.append(static_cast<int>(index));
+                 windows.insert(QString::fromStdString(key), list);
+             }
+             return windows;
+         }()},
+        {QStringLiteral("pluginWindowErrors"), [this] {
+             QJsonObject errors;
+             for (const auto &[at, message] : m_buses->pluginWindowErrors()) {
+                 const auto key = QString::fromStdString(at.first);
+                 auto forStrip = errors.value(key).toObject();
+                 forStrip.insert(QString::number(at.second), QString::fromStdString(message));
+                 errors.insert(key, forStrip);
+             }
+             return errors;
+         }()},
         {QStringLiteral("pluginErrors"), [this] {
              QJsonObject errors;
              for (const auto &[at, message] : m_buses->pluginErrors()) {
@@ -450,6 +469,13 @@ void PatchPrimeService::SetEffectParam(const QString &key, int index, const QStr
 QString PatchPrimeService::GetPlugins() const
 {
     return QString::fromUtf8(pp::pluginsToJson(m_plugins->plugins()));
+}
+
+void PatchPrimeService::SetPluginWindow(const QString &key, int index, bool open)
+{
+    if (index >= 0) {
+        m_buses->setPluginWindow(key.toStdString(), static_cast<std::size_t>(index), open);
+    }
 }
 
 void PatchPrimeService::RescanPlugins()

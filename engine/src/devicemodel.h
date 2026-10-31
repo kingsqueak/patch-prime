@@ -111,6 +111,8 @@ public:
     // The strip an effect listens to (a ducker's key): another strip's key,
     // or empty for none. Ignored for effects that don't take one.
     Q_INVOKABLE void setEffectKey(int row, int index, const QString &key);
+    // A plugin's own state (see EffectSettings::state), as its host saved it.
+    void setEffectState(int row, int index, const std::string &state);
     // The installed plugins, for adding and checking plugin effects (types
     // "lv2:<uri>"); without it, only built-in effects can be added.
     void setPluginCatalog(const PluginCatalog *catalog) { m_pluginCatalog = catalog; }

@@ -444,6 +444,9 @@ QJsonArray effectsToJson(const std::vector<EffectSettings> &effects)
         if (effectTakesKey(e.type)) {
             effect.insert(QStringLiteral("key"), qs(e.key));
         }
+        if (!e.state.empty()) {
+            effect.insert(QStringLiteral("state"), qs(e.state));
+        }
         out.append(effect);
     }
     return out;
@@ -466,6 +469,7 @@ std::vector<EffectSettings> effectsFromJson(const QJsonArray &json)
                     e.params[it.key().toStdString()] = number;
                 }
             }
+            e.state = str(o, "state");
             effects.push_back(std::move(e));
             continue;
         }

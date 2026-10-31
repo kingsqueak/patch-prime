@@ -397,6 +397,11 @@ QVariantMap DaemonClient::effectInfo(const QString &type) const
             {QStringLiteral("missing"), true}};
 }
 
+void DaemonClient::setPluginWindow(const QString &key, int index, bool open)
+{
+    call(QStringLiteral("SetPluginWindow"), {key, index, open});
+}
+
 void DaemonClient::rescanPlugins()
 {
     call(QStringLiteral("RescanPlugins"), {});
@@ -617,8 +622,12 @@ void DaemonClient::onStateChanged(const QString &state)
         const int revision = root.value(QLatin1String("pluginsRevision")).toInt();
         const bool scanning = root.value(QLatin1String("pluginsScanning")).toBool();
         const auto errors = root.value(QLatin1String("pluginErrors")).toObject().toVariantMap();
+        const auto windows = root.value(QLatin1String("pluginWindows")).toObject().toVariantMap();
+        const auto windowErrors =
+            root.value(QLatin1String("pluginWindowErrors")).toObject().toVariantMap();
         if (revision != m_pluginsRevision || scanning != m_pluginsScanning ||
-            errors != m_pluginErrors) {
+            errors != m_pluginErrors || windows != m_pluginWindows ||
+            windowErrors != m_pluginWindowErrors) {
             if (revision != m_pluginsRevision) {
                 // The list is long (every plugin's parameters): only fetched
                 // when it changed.
@@ -637,6 +646,8 @@ void DaemonClient::onStateChanged(const QString &state)
             }
             m_pluginsScanning = scanning;
             m_pluginErrors = errors;
+            m_pluginWindows = windows;
+            m_pluginWindowErrors = windowErrors;
             Q_EMIT pluginsChanged();
         }
     }

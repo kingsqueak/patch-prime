@@ -6,7 +6,8 @@
 // (see PluginRunner for the protocol), or lists the plugins installed.
 //
 //   patchprime-pluginhost --scan      the plugins, as JSON (see PluginInfo)
-//   patchprime-pluginhost --run ...   one plugin node (see PluginRunner)
+//   patchprime-pluginhost --run ...   one plugin node (see PluginRunner),
+//                                     and its window when asked
 //
 // Exit codes: 0 when stdin closes (the engine let go), 2 when the plugin
 // can't be loaded (with {"error": ...} on stdout first).
@@ -14,6 +15,7 @@
 #include "busmanager.h"
 #include "effects.h"
 #include "lv2.h"
+#include "lv2ui.h"
 #include "pipewiregraph.h"
 #include "plugins.h"
 
@@ -72,7 +74,10 @@ int main(int argc, char *argv[])
     const QCommandLineOption description(QStringLiteral("description"), QStringLiteral("The node description."), QStringLiteral("text"));
     const QCommandLineOption params(QStringLiteral("params"), QStringLiteral("Parameters as JSON."), QStringLiteral("json"));
     const QCommandLineOption bypassed(QStringLiteral("bypassed"), QStringLiteral("Start bypassed."));
-    parser.addOptions({scan, run, uri, name, positions, rate, owner, description, params, bypassed});
+    const QCommandLineOption title(QStringLiteral("title"), QStringLiteral("The plugin window's title."), QStringLiteral("text"));
+    const QCommandLineOption stateFollows(QStringLiteral("state-follows"), QStringLiteral("Read the plugin's state from the first line of stdin."));
+    parser.addOptions({scan, run, uri, name, positions, rate, owner, description, params, bypassed,
+                       title, stateFollows});
     parser.addHelpOption();
     parser.process(app);
 
@@ -86,6 +91,23 @@ int main(int argc, char *argv[])
     }
     if (!parser.isSet(run) || !parser.isSet(uri) || !parser.isSet(name)) {
         parser.showHelp(1);
+    }
+    if (!qEnvironmentVariableIsEmpty("DISPLAY")) {
+        pp::initX11Threads(); // before any plugin (or its window) touches X
+    }
+    // The plugin's own state, saved before: {"state": "..."} on the first line.
+    std::string initialState;
+    if (parser.isSet(stateFollows)) {
+        std::string line;
+        char c = 0;
+        while (::read(STDIN_FILENO, &c, 1) == 1 && c != '\n') {
+            line += c;
+        }
+        initialState = QJsonDocument::fromJson(QByteArray::fromStdString(line))
+                           .object()
+                           .value(QLatin1String("state"))
+                           .toString()
+                           .toStdString();
     }
 
     const auto *plugin = world.find(parser.value(uri).toStdString());
@@ -110,6 +132,7 @@ int main(int argc, char *argv[])
         lv2.setParam(it.key().toStdString(), it.value().toDouble());
     }
     lv2.enabled = !parser.isSet(bypassed);
+    lv2.setInitialState(initialState);
     std::vector<std::unique_ptr<pp::Effect>> effects;
     effects.push_back(std::move(effect));
     // Making the chain prepares the plugin: instantiates and activates it.
@@ -136,6 +159,60 @@ int main(int argc, char *argv[])
         }
     });
     graph.start();
+
+    // The plugin's own window, while it's open, and its state, sent to the
+    // engine when it changes (checked while the window is open, when it
+    // closes, and when asked).
+    std::unique_ptr<pp::Lv2Ui> window;
+    std::string lastState = initialState;
+    const auto sendState = [&] {
+        if (auto state = lv2.saveState(); state != lastState) {
+            lastState = std::move(state);
+            say({{QStringLiteral("state"), QString::fromStdString(lastState)}});
+        }
+    };
+    const auto closeWindow = [&] {
+        if (!window) {
+            return;
+        }
+        window.reset();
+        say({{QStringLiteral("window"), false}});
+        sendState();
+    };
+    const auto openWindow = [&] {
+        if (window) {
+            window->raise();
+            return;
+        }
+        window = std::make_unique<pp::Lv2Ui>(world, lv2, parser.value(title).toStdString());
+        if (!window->error().empty()) {
+            say({{QStringLiteral("windowError"), QString::fromStdString(window->error())}});
+            window.reset();
+            say({{QStringLiteral("window"), false}});
+            return;
+        }
+        window->onParam = [](const std::string &symbol, float value) {
+            say({{QStringLiteral("param"), QJsonObject{{QStringLiteral("name"), QString::fromStdString(symbol)},
+                                                       {QStringLiteral("value"), static_cast<double>(value)}}}});
+        };
+        say({{QStringLiteral("window"), true}});
+    };
+    QTimer windowTimer;
+    windowTimer.setInterval(33);
+    QObject::connect(&windowTimer, &QTimer::timeout, &app, [&] {
+        if (window && !window->idle()) {
+            closeWindow();
+        }
+    });
+    windowTimer.start();
+    QTimer stateTimer;
+    stateTimer.setInterval(5000);
+    QObject::connect(&stateTimer, &QTimer::timeout, &app, [&] {
+        if (window) {
+            sendState();
+        }
+    });
+    stateTimer.start();
 
     // Commands from the engine; the host ends when the engine lets go.
     QByteArray pending;
@@ -165,6 +242,16 @@ int main(int argc, char *argv[])
             if (const auto metering = o.value(QLatin1String("metering")); metering.isBool()) {
                 processor->setMetering(metering.toBool());
             }
+            if (const auto show = o.value(QLatin1String("window")); show.isBool()) {
+                if (show.toBool()) {
+                    openWindow();
+                } else {
+                    closeWindow();
+                }
+            }
+            if (o.value(QLatin1String("saveState")).toBool()) {
+                sendState();
+            }
         }
     });
 
@@ -191,6 +278,7 @@ int main(int argc, char *argv[])
     meters.start();
 
     const int code = QCoreApplication::exec();
+    window.reset();
     graph.stop();
     return code;
 }

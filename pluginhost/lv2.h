@@ -4,18 +4,22 @@
 #pragma once
 
 #include "effects.h"
+#include "eventring.h"
 #include "plugins.h"
 
 #include <lilv/lilv.h>
+#include <lv2/atom/atom.h>
 #include <lv2/log/log.h>
 #include <lv2/options/options.h>
 #include <lv2/urid/urid.h>
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -43,6 +47,7 @@ public:
     LV2_URID map(const char *uri);
     const char *unmap(LV2_URID urid);
     [[nodiscard]] LV2_URID_Map *mapFeature() { return &m_map; }
+    [[nodiscard]] LV2_URID_Unmap *unmapFeature() { return &m_unmap; }
     // Features for an instance: options carry the rate and block sizes.
     [[nodiscard]] std::vector<const LV2_Feature *> features(const LV2_Options_Option *options);
     // Why a plugin can't run here, or "" when it can.
@@ -110,6 +115,35 @@ public:
     // Why the plugin couldn't be started, or "" when it runs.
     [[nodiscard]] const std::string &error() const { return m_error; }
 
+    // --- For its UI (see Lv2Ui), on the main thread ---
+    [[nodiscard]] const LilvPlugin *plugin() const { return m_plugin; }
+    [[nodiscard]] float sampleRate() const { return m_rate; }
+    // The (first) instance, for UIs that reach into it (instance-access).
+    [[nodiscard]] LV2_Handle handle() const;
+    [[nodiscard]] const LV2_Descriptor *descriptor() const;
+    // Control ports, inputs and outputs, by index.
+    [[nodiscard]] std::vector<std::uint32_t> controlPorts() const;
+    // A control port's value: an input's as set, an output's as the plugin
+    // last wrote it (a meter, say).
+    [[nodiscard]] float controlValue(std::uint32_t index) const;
+    // Sets a control input from the UI; returns its symbol, or "" when the
+    // port isn't a control input.
+    std::string setControl(std::uint32_t index, float value);
+    // Events from the UI to an atom input (instance 0), delivered before the
+    // next block; false when the port isn't one, or there's no room.
+    bool sendAtom(std::uint32_t index, std::span<const std::uint8_t> atom);
+    // Events the plugin wrote to its atom outputs since the last call, as
+    // fn(port index, atom); collected only while forwarding is on.
+    void setForwarding(bool on) { m_forwarding.store(on, std::memory_order_relaxed); }
+    void takeEvents(const std::function<void(std::uint32_t, const LV2_Atom &)> &fn);
+
+    // The plugin's own state (state:interface), apart from its ports: what
+    // a UI may have changed (a loaded file, say). Saving runs alongside the
+    // audio; restoring happens in prepare(), before the plugin starts.
+    [[nodiscard]] bool hasState() const;
+    [[nodiscard]] std::string saveState() const;
+    void setInitialState(std::string state) { m_initialState = std::move(state); }
+
 private:
     enum class PortKind : std::uint8_t
     {
@@ -148,6 +182,7 @@ private:
     std::vector<Port> m_ports;
     std::vector<std::uint32_t> m_audioIn;  // port indexes, in order
     std::vector<std::uint32_t> m_audioOut;
+    std::vector<int> m_atomSlot; // by port index: its place in atomIn/atomOut, or -1
     // Parameters by control port index, set from the main thread; copied
     // into each instance's controls every block.
     std::map<std::string, std::uint32_t> m_bySymbol;
@@ -163,6 +198,15 @@ private:
     LV2_URID m_sequence = 0;
     LV2_URID m_chunk = 0;
     std::string m_error;
+    std::string m_initialState;
+    // Atom events between the UI and the realtime thread, and scratch space
+    // for one event on each side.
+    EventRing m_toPlugin;
+    EventRing m_toUi;
+    std::vector<std::uint8_t> m_rtScratch;
+    std::vector<std::uint8_t> m_eventScratch; // an event being appended (realtime)
+    std::vector<std::uint8_t> m_uiScratch;
+    std::atomic<bool> m_forwarding{false};
 };
 
 } // namespace pp

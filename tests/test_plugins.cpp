@@ -24,7 +24,7 @@ const std::string testGain = "lv2:https://github.com/kingsqueak/patch-prime/test
 
 EffectSettings effect(std::string type)
 {
-    return {.type = std::move(type), .enabled = true, .params = {}, .key = {}};
+    return {.type = std::move(type), .enabled = true, .params = {}, .key = {}, .state = {}};
 }
 
 std::vector<std::vector<std::size_t>> indices(const std::vector<ChainSegment> &segments)
@@ -131,7 +131,8 @@ private Q_SLOTS:
         QCOMPARE(gain->audioIn, 1);
         QCOMPARE(gain->audioOut, 1);
         QCOMPARE(gain->problem, "");
-        QCOMPARE(gain->params.size(), 2U);
+        QCOMPARE(gain->params.size(), 3U);
+        QVERIFY(!gain->hasUi);
         QCOMPARE(gain->params[0].name, "gain");
         QCOMPARE(gain->params[0].maximum, 4.0);
         QCOMPARE(gain->params[0].initial, 1.0);
@@ -202,11 +203,16 @@ private Q_SLOTS:
 
         // Saved and read back as they are, even without the catalog (the
         // plugin may be uninstalled; it stays in the chain).
+        // Its own state too (only plugins have one).
+        model.setEffectState(row, 1, "<urn:x> a <urn:y> .");
+        model.setEffectState(row, 0, "not for a built-in");
+        QCOMPARE(store.find("Audio/Source|mic")->effects[0].state, "");
         const auto json = effectsToJson(store.find("Audio/Source|mic")->effects);
         const auto back = effectsFromJson(json);
         QCOMPARE(back.size(), 2U);
         QCOMPARE(back[1].type, testGain);
         QCOMPARE(back[1].params.at("gain"), 4.0);
+        QCOMPARE(back[1].state, "<urn:x> a <urn:y> .");
     }
 };
 

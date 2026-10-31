@@ -328,11 +328,32 @@ BusManager::BusManager(PipeWireGraph *graph, DeviceModel *devices, QObject *pare
         scheduleReconcile();
         Q_EMIT pluginsChanged();
     });
+    // What a plugin's window changes is kept like any change of its settings.
+    connect(m_runner, &PluginRunner::paramChanged, this,
+            [this](const std::string &node, const std::string &name, double value) {
+                const auto at = m_plugins.find(node);
+                if (const int row = at != m_plugins.end() ? m_devices->rowForKey(at->second.first) : -1;
+                    row >= 0) {
+                    m_devices->setEffectParam(row, static_cast<int>(at->second.second),
+                                              QString::fromStdString(name), value);
+                }
+            });
+    connect(m_runner, &PluginRunner::stateChanged, this,
+            [this](const std::string &node, const std::string &state) {
+                const auto at = m_plugins.find(node);
+                if (const int row = at != m_plugins.end() ? m_devices->rowForKey(at->second.first) : -1;
+                    row >= 0) {
+                    m_devices->setEffectState(row, static_cast<int>(at->second.second), state);
+                }
+            });
     // Graph events come in bursts (a device brings a node and its ports);
     // reconcile once after the burst.
     m_reconcileTimer.setSingleShot(true);
     m_reconcileTimer.setInterval(20);
     connect(&m_reconcileTimer, &QTimer::timeout, this, &BusManager::reconcile);
+    m_retryTimer.setSingleShot(true);
+    m_retryTimer.setInterval(pendingTimeout + std::chrono::milliseconds(200));
+    connect(&m_retryTimer, &QTimer::timeout, this, &BusManager::scheduleReconcile);
 
     connect(graph, &PipeWireGraph::objectAdded, this, &BusManager::scheduleReconcile);
     connect(graph, &PipeWireGraph::objectChanged, this, &BusManager::scheduleReconcile);
@@ -517,6 +538,44 @@ std::map<std::pair<std::string, std::size_t>, EffectLevels> BusManager::takeEffe
         }
         if (auto levels = m_runner->takeLevels(node)) {
             out[at] = *levels;
+        }
+    }
+    return out;
+}
+
+void BusManager::setPluginWindow(const std::string &key, std::size_t index, bool open)
+{
+    for (const auto &[node, at] : m_plugins) {
+        if (at == std::pair{key, index}) {
+            m_runner->setWindow(node, open);
+        }
+    }
+}
+
+void BusManager::requestPluginStates()
+{
+    for (const auto &[node, at] : m_plugins) {
+        m_runner->requestState(node);
+    }
+}
+
+std::set<std::pair<std::string, std::size_t>> BusManager::pluginWindows() const
+{
+    std::set<std::pair<std::string, std::size_t>> out;
+    for (const auto &[node, at] : m_plugins) {
+        if (m_runner->isWindowOpen(node)) {
+            out.insert(at);
+        }
+    }
+    return out;
+}
+
+std::map<std::pair<std::string, std::size_t>, std::string> BusManager::pluginWindowErrors() const
+{
+    std::map<std::pair<std::string, std::size_t>, std::string> out;
+    for (const auto &[node, at] : m_plugins) {
+        if (auto error = m_runner->windowError(node); !error.empty()) {
+            out[at] = std::move(error);
         }
     }
     return out;
@@ -807,6 +866,10 @@ void BusManager::reconcile()
     linkCue(ready, wanted, stripOuts, existingLinks);
     linkTaps(ready, wanted, fx, stripOuts, existingLinks);
 
+    if ((!m_pendingLinks.empty() || !m_pendingBuses.empty()) && !m_retryTimer.isActive()) {
+        m_retryTimer.start();
+    }
+
     // Meters whose bus is gone or no longer wanted.
     for (auto it = m_meters.begin(); it != m_meters.end();) {
         if (!ready.contains(it->first)) {
@@ -1009,7 +1072,10 @@ BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
                                           .params = e.params,
                                           .description = "Patch Prime plugin: " + description +
                                                          (info != nullptr ? ": " + info->name : ""),
-                                          .owner = m_owner});
+                                          .owner = m_owner,
+                                          .title = (info != nullptr ? info->name : pluginUri(e.type)) +
+                                                   " · " + description,
+                                          .state = e.state});
                 m_runner->setMetering(nodeName, m_effectMetering.contains(w.key));
                 plugins[nodeName] = {w.key, index};
             } else {

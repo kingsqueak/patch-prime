@@ -250,6 +250,17 @@ public:
     // Plugins that are off because they failed (couldn't load, kept
     // crashing): why, by endpoint key and effect index.
     [[nodiscard]] std::map<std::pair<std::string, std::size_t>, std::string> pluginErrors() const;
+    // A plugin's own window, by endpoint key and effect index: open (or
+    // bring forward) or close it. Controls changed in it are saved as the
+    // effect's parameters, and its own state (see EffectSettings::state)
+    // when it changes.
+    void setPluginWindow(const std::string &key, std::size_t index, bool open);
+    // Asks every plugin for its own state now (it's otherwise saved when
+    // its window closes, and every few seconds while it's open).
+    void requestPluginStates();
+    // The plugins whose windows are open, and why ones couldn't be opened.
+    [[nodiscard]] std::set<std::pair<std::string, std::size_t>> pluginWindows() const;
+    [[nodiscard]] std::map<std::pair<std::string, std::size_t>, std::string> pluginWindowErrors() const;
 
     // Recording and playback nodes (see RecordingManager), linked here
     // since only the manager knows each strip's ports. Recorders, by node
@@ -385,6 +396,10 @@ private:
     DeviceModel *m_devices;
     std::string m_owner;
     QTimer m_reconcileTimer;
+    // Another pass once requests still pending have expired: a request
+    // PipeWire refused silently (a link to a port that was going away) is
+    // then made again, even when nothing else in the graph changes.
+    QTimer m_retryTimer;
     bool m_metering = false;
     std::set<std::string> m_effectMetering; // endpoint keys
 
