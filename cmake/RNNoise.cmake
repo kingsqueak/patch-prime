@@ -25,7 +25,9 @@ add_library(patchprime-rnnoise STATIC
     ${rnnoise_SOURCE_DIR}/src/rnnoise_data.c
     ${rnnoise_SOURCE_DIR}/src/rnnoise_tables.c)
 target_include_directories(patchprime-rnnoise SYSTEM PUBLIC ${rnnoise_SOURCE_DIR}/include)
-target_include_directories(patchprime-rnnoise PRIVATE ${rnnoise_SOURCE_DIR}/src)
+target_include_directories(patchprime-rnnoise PRIVATE ${rnnoise_SOURCE_DIR}/src
+    # os_support.h, which the release lacks but its ARM NEON code includes.
+    ${CMAKE_CURRENT_LIST_DIR}/rnnoise)
 # Third-party code: optimised even in debug builds (it runs on the realtime
 # thread), and its warnings aren't ours to fix.
 target_compile_options(patchprime-rnnoise PRIVATE -O2 -w)
