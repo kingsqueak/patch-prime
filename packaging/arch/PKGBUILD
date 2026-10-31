@@ -7,7 +7,7 @@
 # than fetched while building. Keep pkgver in step with CMakeLists.txt.
 
 pkgname=patchprime
-pkgver=0.10
+pkgver=0.11
 pkgrel=1
 pkgdesc="Virtual audio mixer and router for KDE Plasma on PipeWire"
 arch=(x86_64 aarch64)

@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 project(PatchPrime
-    VERSION 0.10
+    VERSION 0.11
     DESCRIPTION "Virtual audio mixer and router for KDE Plasma on PipeWire"
     LANGUAGES C CXX)
 
