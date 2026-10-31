@@ -1,0 +1,42 @@
+# Maintainer: KC2RGW Chris <2788495+kingsqueak@users.noreply.github.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 KC2RGW Chris
+
+# Arch Linux package: `makepkg -si` in this directory. Builds the release
+# tarball; RNNoise (for noise suppression) is a second source here rather
+# than fetched while building. Keep pkgver in step with CMakeLists.txt.
+
+pkgname=patchprime
+pkgver=0.10
+pkgrel=1
+pkgdesc="Virtual audio mixer and router for KDE Plasma on PipeWire"
+arch=(x86_64 aarch64)
+url="https://github.com/kingsqueak/patch-prime"
+license=(GPL-3.0-or-later)
+depends=(glibc gcc-libs libpipewire pipewire wireplumber qt6-base qt6-declarative
+         kirigami qqc2-desktop-style)
+makedepends=(cmake ninja)
+install=patchprime.install
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
+        "https://github.com/xiph/rnnoise/releases/download/v0.2/rnnoise-0.2.tar.gz")
+sha256sums=('fa5a8a39007f180562335e912ea231fe7d1d3f88e0d4cdcbdaf79c6a829d6937'
+            '90fce4b00b9ff24c08dbfe31b82ffd43bae383d85c5535676d28b0a2b11c0d37')
+
+build() {
+    cmake -B build -S "patch-prime-$pkgver" -G Ninja -Wno-dev \
+        -DCMAKE_BUILD_TYPE=None \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DPATCHPRIME_SYSTEMD_USER_UNIT_DIR=lib/systemd/user \
+        -DFETCHCONTENT_SOURCE_DIR_RNNOISE="$srcdir/rnnoise-0.2"
+    cmake --build build
+}
+
+check() {
+    # The live tests need a running PipeWire server.
+    QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure -LE pipewire
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install build
+    install -Dm644 "patch-prime-$pkgver/LICENSE" -t "$pkgdir/usr/share/licenses/$pkgname"
+}

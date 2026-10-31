@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileCopyrightText: 2026 KC2RGW Chris
 
-# A .deb with `cpack -G DEB` in a build configured with
-# -DCMAKE_INSTALL_PREFIX=/usr: patchprime_<version>-<release>_<arch>.deb.
-# Library dependencies come from dpkg-shlibdeps; the QML modules the GUI
-# loads at run time, and PipeWire itself, are listed by hand.
+# Packages with CPack, in a build configured with -DCMAKE_INSTALL_PREFIX=/usr:
+# `cpack -G DEB` (Ubuntu): patchprime_<version>-<release>_<arch>.deb, and
+# `cpack -G RPM` (Fedora): patchprime-<version>-<release>.<dist>.<arch>.rpm.
+# Library dependencies come from dpkg-shlibdeps / rpm's automatic ones; the
+# QML modules the GUI loads at run time, and PipeWire itself, are listed by
+# hand (their package names differ per distribution). Arch Linux has its
+# own PKGBUILD in packaging/arch.
 
 set(CPACK_GENERATOR "DEB")
 set(CPACK_PACKAGE_NAME "patchprime")
@@ -41,5 +44,22 @@ qml6-module-qtquick-templates, qml6-module-qtqml-workerscript")
 set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
     "${PROJECT_SOURCE_DIR}/packaging/debian/postinst;${PROJECT_SOURCE_DIR}/packaging/debian/prerm")
 set(CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION ON)
+
+# Fedora
+set(CPACK_RPM_PACKAGE_RELEASE "1")
+set(CPACK_RPM_PACKAGE_RELEASE_DIST ON) # .fc44
+set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
+set(CPACK_RPM_PACKAGE_LICENSE "GPL-3.0-or-later")
+set(CPACK_RPM_PACKAGE_GROUP "Applications/Multimedia")
+set(CPACK_RPM_PACKAGE_URL "https://github.com/kingsqueak/patch-prime")
+set(CPACK_RPM_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION}")
+set(CPACK_RPM_PACKAGE_REQUIRES
+    "pipewire >= 1.6, wireplumber, kf6-kirigami, kf6-qqc2-desktop-style, qt6-qtdeclarative")
+set(CPACK_RPM_POST_INSTALL_SCRIPT_FILE "${PROJECT_SOURCE_DIR}/packaging/rpm/postinstall")
+set(CPACK_RPM_PRE_UNINSTALL_SCRIPT_FILE "${PROJECT_SOURCE_DIR}/packaging/rpm/preuninstall")
+# Directories other packages own.
+list(APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
+     /usr/share/applications /usr/share/dbus-1 /usr/share/dbus-1/services
+     /usr/share/systemd /usr/share/systemd/user /usr/lib/systemd /usr/lib/systemd/user)
 
 include(CPack)

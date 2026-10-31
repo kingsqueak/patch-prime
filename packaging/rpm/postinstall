@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 KC2RGW Chris
+# The engine starts at every user's login (from the next one on). $1 is 1 on
+# a first install, 2 on an upgrade.
+if [ "$1" -eq 1 ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl --global enable patchprimed.service || true
+fi

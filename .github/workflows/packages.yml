@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileCopyrightText: 2026 KC2RGW Chris
 
-# Builds the .deb packages for Ubuntu 26.04 on amd64 and arm64, in an
-# ubuntu:26.04 container on GitHub's runners. Runs by hand (Actions > Packages
-# > Run workflow) and on a version tag (v*), which also attaches the packages
-# to that tag's GitHub release.
+# Builds the packages, each in its distribution's container on GitHub's
+# runners: .deb for Ubuntu 26.04 and .rpm for Fedora 44 (amd64 and arm64),
+# and an Arch Linux package from packaging/arch/PKGBUILD (x86_64). Runs by
+# hand (Actions > Packages > Run workflow) and on a version tag (v*), which
+# also attaches the packages to that tag's GitHub release.
 name: Packages
 
 on:
@@ -70,16 +71,108 @@ jobs:
           path: build/patchprime_*.deb
           if-no-files-found: error
 
+  rpm:
+    name: Fedora 44 ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    container: fedora:44
+    steps:
+      - name: Install build dependencies
+        run: >
+          dnf install -y gcc-c++ cmake ninja-build pkgconf-pkg-config git rpm-build
+          qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel pipewire-devel
+
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_INSTALL_PREFIX=/usr
+          -DPATCHPRIME_SYSTEMD_USER_UNIT_DIR=lib/systemd/user
+          -DPATCHPRIME_WERROR=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -LE pipewire
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QTEST_DISABLE_STACK_DUMP: "1"
+
+      - name: Package
+        run: |
+          cd build
+          cpack -G RPM
+          rpm -qip patchprime-*.rpm
+          rpm -qp --requires patchprime-*.rpm
+          rpm -qlp patchprime-*.rpm
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patchprime-fedora44-${{ matrix.arch }}
+          path: build/patchprime-*.rpm
+          if-no-files-found: error
+
+  arch:
+    name: Arch Linux x86_64
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    steps:
+      - name: Install build dependencies
+        run: >
+          pacman -Syu --noconfirm --needed base-devel git cmake ninja
+          qt6-base qt6-declarative pipewire wireplumber kirigami qqc2-desktop-style
+
+      - uses: actions/checkout@v4
+
+      # The PKGBUILD as it would be published, but for this commit: its
+      # version from CMakeLists.txt and a tarball of the checkout in place of
+      # the release download. makepkg won't run as root.
+      - name: Package
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          ver=$(sed -n 's/^ *VERSION \([0-9.]*\)$/\1/p' CMakeLists.txt | head -1)
+          useradd -m builder
+          mkdir /tmp/pkg
+          cp packaging/arch/PKGBUILD packaging/arch/patchprime.install /tmp/pkg/
+          git archive --prefix="patch-prime-$ver/" -o "/tmp/pkg/patchprime-$ver.tar.gz" HEAD
+          sum=$(sha256sum "/tmp/pkg/patchprime-$ver.tar.gz" | cut -d' ' -f1)
+          sed -i -e "s/^pkgver=.*/pkgver=$ver/" \
+                 -e "0,/^sha256sums=('[0-9a-f]*'/s//sha256sums=('$sum'/" /tmp/pkg/PKGBUILD
+          chown -R builder /tmp/pkg
+          cd /tmp/pkg
+          su builder -c "QTEST_DISABLE_STACK_DUMP=1 makepkg --noconfirm"
+          su builder -c "makepkg --printsrcinfo" > .SRCINFO
+          pacman -Qip patchprime-*.pkg.tar.zst
+          pacman -Qlp patchprime-*.pkg.tar.zst
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp patchprime-*.pkg.tar.zst "$GITHUB_WORKSPACE/out/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patchprime-arch-x86_64
+          path: out/patchprime-*.pkg.tar.zst
+          if-no-files-found: error
+
   release:
     name: Attach to the release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: deb
+    needs: [deb, rpm, arch]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: debs
+          path: packages
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          files: debs/*.deb
+          files: packages/*

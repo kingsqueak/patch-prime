@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 KC2RGW Chris
+# $1 is 0 when the package is removed, 1 when it's being upgraded.
+if [ "$1" -eq 0 ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl --global disable patchprimed.service || true
+fi
