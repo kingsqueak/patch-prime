@@ -56,6 +56,23 @@ class DaemonClient : public QAbstractListModel
     // Where apps can play to / record from: [{name (a node.name), label, kind}].
     Q_PROPERTY(QVariantList playbackTargets READ playbackTargets NOTIFY appsChanged)
     Q_PROPERTY(QVariantList recordTargets READ recordTargets NOTIFY appsChanged)
+    // Recording: the folder, the format ("flac", "wav" or "mp3"), the strips
+    // recording now ({key: file}) and for how long ({key: seconds}), and why
+    // the last recording failed (empty when it didn't).
+    Q_PROPERTY(QString recordingFolder READ recordingFolder NOTIFY recordingChanged)
+    Q_PROPERTY(QString recordingFormat READ recordingFormat NOTIFY recordingChanged)
+    // The formats the engine can write (MP3 depends on libsndfile's build).
+    Q_PROPERTY(QStringList recordingFormats READ recordingFormats NOTIFY recordingChanged)
+    Q_PROPERTY(QVariantMap recording READ recording NOTIFY recordingChanged)
+    Q_PROPERTY(QVariantMap recordingSeconds READ recordingSeconds NOTIFY recordingTimesChanged)
+    Q_PROPERTY(QString recordingError READ recordingError NOTIFY recordingChanged)
+    // Goes up when the folder's files change (call recordings() again).
+    Q_PROPERTY(int recordingsRevision READ recordingsRevision NOTIFY recordingChanged)
+    // The player: {path (empty when stopped), paused, duration}, where it
+    // is (seconds), and the strip it plays into (a key).
+    Q_PROPERTY(QVariantMap player READ player NOTIFY recordingChanged)
+    Q_PROPERTY(double playerPosition READ playerPosition NOTIFY recordingTimesChanged)
+    Q_PROPERTY(QString playerTarget READ playerTarget NOTIFY recordingChanged)
 
 public:
     explicit DaemonClient(QObject *parent = nullptr);
@@ -87,6 +104,16 @@ public:
     [[nodiscard]] QVariantMap effectLevels() const { return m_effectLevels; }
     [[nodiscard]] QVariantList playbackTargets() const { return m_playbackTargets; }
     [[nodiscard]] QVariantList recordTargets() const { return m_recordTargets; }
+    [[nodiscard]] QString recordingFolder() const { return m_recordingFolder; }
+    [[nodiscard]] QString recordingFormat() const { return m_recordingFormat; }
+    [[nodiscard]] QStringList recordingFormats() const { return m_recordingFormats; }
+    [[nodiscard]] QVariantMap recording() const { return m_recording; }
+    [[nodiscard]] QVariantMap recordingSeconds() const { return m_recordingSeconds; }
+    [[nodiscard]] QString recordingError() const { return m_recordingError; }
+    [[nodiscard]] int recordingsRevision() const { return m_recordingsRevision; }
+    [[nodiscard]] QVariantMap player() const { return m_player; }
+    [[nodiscard]] double playerPosition() const { return m_playerPosition; }
+    [[nodiscard]] QString playerTarget() const { return m_playerTarget; }
     static constexpr double minimumVolumeDb() { return -60.0; }
     // Effect meters reach lower than the strips', down to a mic's noise floor,
     // so a gate's threshold can be set between the floor and the voice.
@@ -133,6 +160,19 @@ public:
     // levels (effectLevels). Counted, so two windows on one strip both work.
     Q_INVOKABLE void watchEffectLevels(const QString &key, bool watch);
     Q_INVOKABLE void setEffectKey(const QString &key, int index, const QString &sourceKey);
+    Q_INVOKABLE void startRecording(const QString &key);
+    Q_INVOKABLE void stopRecording(const QString &key);
+    Q_INVOKABLE void setRecordingFormat(const QString &format);
+    // The recordings folder's files, newest first: [{path, name, seconds,
+    // bytes, modified}]. Asks the daemon and waits for the answer.
+    [[nodiscard]] Q_INVOKABLE QVariantList recordings() const;
+    Q_INVOKABLE void playRecording(const QString &file);
+    Q_INVOKABLE void pausePlayback(bool paused);
+    Q_INVOKABLE void stopPlayback();
+    Q_INVOKABLE void seekPlayback(double seconds);
+    Q_INVOKABLE void setPlayerTarget(const QString &key);
+    // Moves a file to the desktop's trash; false when it can't.
+    Q_INVOKABLE bool trashFile(const QString &file);
     // An EQ's response in dB at each frequency in freqs (Hz), from its
     // parameters (an "effects" entry's params; missing ones take their
     // defaults); only band (1-6) when given, else all bands together.
@@ -157,6 +197,8 @@ Q_SIGNALS:
     void effectTypesChanged();
     void cueOutputChanged();
     void effectMetersChanged();
+    void recordingChanged();
+    void recordingTimesChanged();
 
 private Q_SLOTS:
     void onStateChanged(const QString &state);
@@ -166,6 +208,8 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     void setDaemonRunning(bool running);
     void fetchState();
     void call(const QString &method, const QVariantList &args);
+    // For methods that answer with an error message ("" when all went well).
+    void callReportingError(const QString &method, const QVariantList &args);
     void setLastError(const QString &error);
 
     QHash<int, QByteArray> m_roles;
@@ -206,6 +250,16 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QHash<QString, int> m_effectLevelWatches; // strip key -> windows showing it
     QVariantList m_playbackTargets;
     QVariantList m_recordTargets;
+    QString m_recordingFolder;
+    QString m_recordingFormat;
+    QStringList m_recordingFormats;
+    QVariantMap m_recording;
+    QVariantMap m_recordingSeconds;
+    QString m_recordingError;
+    int m_recordingsRevision = 0;
+    QVariantMap m_player;
+    double m_playerPosition = 0.0;
+    QString m_playerTarget;
 };
 
 // The enabled strips of some stages ("input", "bus", "output"), for a row of

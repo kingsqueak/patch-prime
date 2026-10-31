@@ -8,7 +8,7 @@ import org.kde.kirigami as Kirigami
 Kirigami.ApplicationWindow {
     id: root
 
-    // "devices", "routing", "apps" or "about" opens that page first, "guide"
+    // "devices", "routing", "apps", "recordings" or "about" opens that page first, "guide"
     // the user guide (set from PATCHPRIME_PAGE).
     property string startPage
     // A strip label whose effects panel opens at start (set from PATCHPRIME_EFFECTS).
@@ -81,6 +81,14 @@ Kirigami.ApplicationWindow {
                     onTriggered: root.open(devicesPage)
                 }
             }
+            QQC2.MenuItem {
+                text: qsTr("R&ecordings")
+                icon.name: "media-record"
+                action: QQC2.Action {
+                    shortcut: "Ctrl+5"
+                    onTriggered: root.open(recordingsPage)
+                }
+            }
         }
 
         QQC2.Menu {
@@ -123,6 +131,12 @@ Kirigami.ApplicationWindow {
         onOpenDevices: root.open(devicesPage)
         onOpenRouting: root.open(routingPage)
         onOpenApps: root.open(appsPage)
+        onOpenRecordings: root.open(recordingsPage)
+    }
+
+    Component {
+        id: recordingsPage
+        RecordingsPage {}
     }
 
     Component {
@@ -181,6 +195,8 @@ Kirigami.ApplicationWindow {
             open(routingPage);
         else if (startPage === "apps")
             open(appsPage);
+        else if (startPage === "recordings")
+            open(recordingsPage);
         else if (startPage === "about")
             open(aboutPage);
         else if (startPage === "guide")

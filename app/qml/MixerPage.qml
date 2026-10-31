@@ -13,6 +13,7 @@ Kirigami.Page {
     signal openDevices()
     signal openRouting()
     signal openApps()
+    signal openRecordings()
 
     title: qsTr("Mixer")
     header: EngineMessage {}
@@ -22,6 +23,11 @@ Kirigami.Page {
             text: qsTr("Apps")
             icon.name: "applications-multimedia"
             onTriggered: page.openApps()
+        },
+        Kirigami.Action {
+            text: qsTr("Recordings")
+            icon.name: "media-record"
+            onTriggered: page.openRecordings()
         },
         Kirigami.Action {
             text: qsTr("Routing")

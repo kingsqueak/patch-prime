@@ -113,6 +113,9 @@ public:
     // and clear every cued strip), and whether a strip is cued. Cued strips
     // are temporary: not saved, not part of scenes.
     void setCueOutput(const std::string &key);
+    // Recording settings (see DeviceStore); emit recordingSettingsChanged.
+    void setRecordingFormat(const std::string &format);
+    void setPlayerTarget(const std::string &key);
     Q_INVOKABLE void setCue(int row, bool cued);
     [[nodiscard]] const std::set<std::string> &cued() const { return m_cued; }
     // Sets a strip's mix from a scene (see mixFromJson), keeping only what
@@ -165,6 +168,8 @@ Q_SIGNALS:
     void cueChanged();
     // The mixer's rate or block size, or a device's rate or scheduling.
     void audioSettingsChanged();
+    // The recording format or the player's target.
+    void recordingSettingsChanged();
 
 private:
     [[nodiscard]] static bool lessThan(const Row &a, const Row &b);

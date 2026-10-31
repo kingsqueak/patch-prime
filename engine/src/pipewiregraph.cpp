@@ -169,6 +169,24 @@ struct PipeWireGraph::Session
         std::shared_ptr<Processor> processor;
     };
 
+    // A recorder's or player's node (see addStream). A recorder is a filter
+    // with DSP input ports, like an effects node: it takes the graph's rate
+    // and format as they are. A player is a stream, so PipeWire converts
+    // the file's rate.
+    struct IoStream
+    {
+        static constexpr std::uint32_t maxFrames = 8192; // PipeWire's largest quantum
+        pw_stream *stream = nullptr;
+        pw_filter *filter = nullptr;
+        spa_hook listener{};
+        std::array<void *, 2> ports{};
+        std::shared_ptr<StreamIo> io;
+        // Realtime only (recorder): the last rate passed on, and the cycle
+        // interleaved for the recorder.
+        std::uint32_t rate = 0;
+        std::array<float, std::size_t{maxFrames} * 2> interleaved{};
+    };
+
     void bind(const GraphObject &object, std::uint32_t version);
 
     static void onCoreError(void *data, std::uint32_t id, int seq, int res, const char *message);
@@ -185,6 +203,9 @@ struct PipeWireGraph::Session
     static void onMeterProcess(void *data);
     static void onMeterParamChanged(void *data, std::uint32_t id, const spa_pod *param);
     static void onFilterProcess(void *data, spa_io_position *position);
+    static void onIoProcess(void *data);
+    static void onTapProcess(void *data, spa_io_position *position);
+    static void onIoParamChanged(void *data, std::uint32_t id, const spa_pod *param);
 
     void announce(Bound &bound, const spa_dict *props, bool propsChanged);
 
@@ -208,6 +229,7 @@ struct PipeWireGraph::Session
     std::map<pw_proxy *, std::unique_ptr<Created>> created;
     std::map<const MeterLevels *, std::unique_ptr<Meter>> meters;
     std::map<std::string, std::unique_ptr<Filter>> filters; // by node name
+    std::map<std::string, std::unique_ptr<IoStream>> streams; // by node name
 };
 
 namespace {
@@ -273,6 +295,34 @@ const pw_stream_events meterEvents = [] {
     return e;
 }();
 
+// A format's sample rate, or 0. Read from the property itself:
+// spa_format_audio_raw_parse() (varargs) leaves the rate unread when built
+// with Clang.
+int formatRate(const spa_pod *format)
+{
+    const spa_pod_prop *prop = spa_pod_find_prop(format, nullptr, SPA_FORMAT_AUDIO_rate);
+    std::int32_t rate = 0;
+    if (prop == nullptr || spa_pod_get_int(&prop->value, &rate) < 0) {
+        return 0;
+    }
+    return rate;
+}
+
+const pw_filter_events tapEvents = [] {
+    pw_filter_events e{};
+    e.version = PW_VERSION_FILTER_EVENTS;
+    e.process = &PipeWireGraph::Session::onTapProcess;
+    return e;
+}();
+
+const pw_stream_events ioEvents = [] {
+    pw_stream_events e{};
+    e.version = PW_VERSION_STREAM_EVENTS;
+    e.process = &PipeWireGraph::Session::onIoProcess;
+    e.param_changed = &PipeWireGraph::Session::onIoParamChanged;
+    return e;
+}();
+
 } // namespace
 
 std::string PipeWireGraph::Session::open()
@@ -320,6 +370,15 @@ PipeWireGraph::Session::~Session()
         pw_filter_destroy(f->filter);
     }
     filters.clear();
+    for (auto &[name, s] : streams) {
+        spa_hook_remove(&s->listener);
+        if (s->filter != nullptr) {
+            pw_filter_destroy(s->filter);
+        } else {
+            pw_stream_destroy(s->stream);
+        }
+    }
+    streams.clear();
     // Lingering objects (buses, links) stay on the server after this.
     for (auto &[proxy, c] : created) {
         spa_hook_remove(&c->listener);
@@ -561,10 +620,67 @@ void PipeWireGraph::Session::onMeterParamChanged(void *data, std::uint32_t id,
     if (param == nullptr || id != SPA_PARAM_Format) {
         return;
     }
-    spa_audio_info_raw info{};
-    if (spa_format_audio_raw_parse(param, &info) >= 0 && info.rate > 0) {
-        static_cast<Meter *>(data)->levels->rate.store(static_cast<int>(info.rate));
+    if (const int rate = formatRate(param); rate > 0) {
+        static_cast<Meter *>(data)->levels->rate.store(rate);
     }
+}
+
+void PipeWireGraph::Session::onIoParamChanged(void *data, std::uint32_t id, const spa_pod *param)
+{
+    if (param == nullptr || id != SPA_PARAM_Format) {
+        return;
+    }
+    if (const int rate = formatRate(param); rate > 0) {
+        static_cast<IoStream *>(data)->io->setRate(rate);
+    }
+}
+
+void PipeWireGraph::Session::onIoProcess(void *data)
+{
+    auto *s = static_cast<IoStream *>(data);
+    pw_buffer *buffer = pw_stream_dequeue_buffer(s->stream);
+    if (buffer == nullptr) {
+        return;
+    }
+    spa_data &d = buffer->buffer->datas[0];
+    constexpr std::uint32_t channels = 2;
+    constexpr std::uint32_t stride = channels * sizeof(float);
+    if (d.data != nullptr && d.chunk != nullptr) {
+        std::uint32_t frames = d.maxsize / stride;
+        if (buffer->requested > 0) {
+            frames = std::min(frames, static_cast<std::uint32_t>(buffer->requested));
+        }
+        s->io->process(static_cast<float *>(d.data), frames, channels);
+        d.chunk->offset = 0;
+        d.chunk->stride = static_cast<std::int32_t>(stride);
+        d.chunk->size = frames * stride;
+    }
+    pw_stream_queue_buffer(s->stream, buffer);
+}
+
+void PipeWireGraph::Session::onTapProcess(void *data, spa_io_position *position)
+{
+    auto *s = static_cast<IoStream *>(data);
+    if (position == nullptr) {
+        return;
+    }
+    if (const auto rate = position->clock.rate.denom; rate != s->rate) {
+        s->rate = rate;
+        s->io->setRate(static_cast<int>(rate));
+    }
+    const auto frames =
+        std::min(static_cast<std::uint32_t>(position->clock.duration), IoStream::maxFrames);
+    const auto *left = static_cast<const float *>(pw_filter_get_dsp_buffer(s->ports[0], frames));
+    const auto *right = static_cast<const float *>(pw_filter_get_dsp_buffer(s->ports[1], frames));
+    auto &out = s->interleaved;
+    for (std::uint32_t i = 0; i < frames; ++i) {
+        // Bounds: frames <= maxFrames, the array holds two per frame.
+        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
+        out[std::size_t{i} * 2] = left != nullptr ? left[i] : 0.0F;
+        out[(std::size_t{i} * 2) + 1] = right != nullptr ? right[i] : 0.0F;
+        // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
+    }
+    s->io->process(out.data(), frames, 2);
 }
 
 void PipeWireGraph::Session::onMeterProcess(void *data)
@@ -1015,6 +1131,103 @@ bool PipeWireGraph::hasFilter(const std::string &name) const
     const bool has = m_session->filters.contains(name);
     pw_thread_loop_unlock(m_session->loop);
     return has;
+}
+
+bool PipeWireGraph::addStream(const std::string &name, bool capture, int rate,
+                              const Properties &extraProps, const std::shared_ptr<StreamIo> &io)
+{
+    if (!m_session || !io) {
+        return false;
+    }
+    auto &session = *m_session;
+    Properties props = extraProps;
+    props[PW_KEY_NODE_NAME] = name;
+    props[PW_KEY_MEDIA_TYPE] = "Audio";
+    props[PW_KEY_MEDIA_CATEGORY] = capture ? "Capture" : "Playback";
+    props[PW_KEY_NODE_AUTOCONNECT] = "false";
+    props[PW_KEY_NODE_DONT_RECONNECT] = "true";
+
+    pw_thread_loop_lock(session.loop);
+    if (session.streams.contains(name)) {
+        pw_thread_loop_unlock(session.loop);
+        return false;
+    }
+    auto s = std::make_unique<Session::IoStream>();
+    s->io = io;
+    bool ok = false;
+    if (capture) {
+        s->filter = pw_filter_new(session.core, name.c_str(), toPwProperties(props)); // takes props
+        ok = s->filter != nullptr;
+        if (ok) {
+            pw_filter_add_listener(s->filter, &s->listener, &tapEvents, s.get());
+            const std::array<std::string, 2> positions{"FL", "FR"};
+            for (std::size_t c = 0; c < positions.size(); ++c) {
+                s->ports.at(c) = pw_filter_add_port(
+                    s->filter, PW_DIRECTION_INPUT, PW_FILTER_PORT_FLAG_MAP_BUFFERS, 0,
+                    toPwProperties({
+                        {PW_KEY_FORMAT_DSP, "32 bit float mono audio"},
+                        {PW_KEY_PORT_NAME, "input_" + positions.at(c)},
+                        {PW_KEY_AUDIO_CHANNEL, positions.at(c)},
+                    }),
+                    nullptr, 0);
+                ok = ok && s->ports.at(c) != nullptr;
+            }
+            ok = ok && pw_filter_connect(s->filter, PW_FILTER_FLAG_RT_PROCESS, nullptr, 0) >= 0;
+            if (!ok) {
+                spa_hook_remove(&s->listener);
+                pw_filter_destroy(s->filter);
+            }
+        }
+    } else {
+        s->stream = pw_stream_new(session.core, name.c_str(), toPwProperties(props)); // takes props
+        ok = s->stream != nullptr;
+        if (ok) {
+            pw_stream_add_listener(s->stream, &s->listener, &ioEvents, s.get());
+            std::array<std::uint8_t, 1024> buffer{};
+            spa_pod_builder b{};
+            spa_pod_builder_init(&b, buffer.data(), static_cast<std::uint32_t>(buffer.size()));
+            spa_audio_info_raw info{};
+            info.format = SPA_AUDIO_FORMAT_F32;
+            info.channels = 2;
+            info.rate = static_cast<std::uint32_t>(std::max(rate, 0));
+            info.position[0] = SPA_AUDIO_CHANNEL_FL;
+            info.position[1] = SPA_AUDIO_CHANNEL_FR;
+            std::array<const spa_pod *, 1> params{
+                spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &info)};
+            const auto flags = static_cast<pw_stream_flags>(PW_STREAM_FLAG_MAP_BUFFERS |
+                                                            PW_STREAM_FLAG_RT_PROCESS);
+            ok = pw_stream_connect(s->stream, PW_DIRECTION_OUTPUT, PW_ID_ANY, flags, params.data(),
+                                   static_cast<std::uint32_t>(params.size())) >= 0;
+            if (!ok) {
+                spa_hook_remove(&s->listener);
+                pw_stream_destroy(s->stream);
+            }
+        }
+    }
+    if (ok) {
+        session.streams[name] = std::move(s);
+    }
+    pw_thread_loop_unlock(session.loop);
+    return ok;
+}
+
+void PipeWireGraph::removeStream(const std::string &name)
+{
+    if (!m_session) {
+        return;
+    }
+    auto &session = *m_session;
+    pw_thread_loop_lock(session.loop);
+    if (auto it = session.streams.find(name); it != session.streams.end()) {
+        spa_hook_remove(&it->second->listener);
+        if (it->second->filter != nullptr) {
+            pw_filter_destroy(it->second->filter);
+        } else {
+            pw_stream_destroy(it->second->stream);
+        }
+        session.streams.erase(it);
+    }
+    pw_thread_loop_unlock(session.loop);
 }
 
 void PipeWireGraph::removeMeter(const std::shared_ptr<MeterLevels> &meter)

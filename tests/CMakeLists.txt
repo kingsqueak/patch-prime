@@ -22,6 +22,7 @@ patchprime_add_test(test_audiosetup test_audiosetup.cpp)
 patchprime_add_test(test_hotplugrecovery test_hotplugrecovery.cpp)
 patchprime_add_test(test_scenes test_scenes.cpp)
 patchprime_add_test(test_effects test_effects.cpp)
+patchprime_add_test(test_recording test_recording.cpp)
 
 # Needs a running PipeWire server; skips itself when there isn't one.
 patchprime_add_test(test_graphsnapshot test_graphsnapshot.cpp)

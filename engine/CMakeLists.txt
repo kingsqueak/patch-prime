@@ -48,6 +48,10 @@ add_library(patchprime-engine STATIC
     src/hotplugrecovery.h
     src/pipewiregraph.cpp
     src/pipewiregraph.h
+    src/recording.cpp
+    src/recording.h
+    src/recordingmanager.cpp
+    src/recordingmanager.h
     src/scenes.cpp
     src/scenes.h)
 add_library(PatchPrime::Engine ALIAS patchprime-engine)
@@ -55,6 +59,6 @@ add_library(PatchPrime::Engine ALIAS patchprime-engine)
 target_include_directories(patchprime-engine PUBLIC src)
 target_link_libraries(patchprime-engine
     PUBLIC Qt6::Core patchprime-dsp
-    PRIVATE PkgConfig::PipeWire)
+    PRIVATE PkgConfig::PipeWire PkgConfig::SndFile)
 target_compile_definitions(patchprime-engine PRIVATE QT_NO_CAST_FROM_ASCII)
 patchprime_set_warnings(patchprime-engine)

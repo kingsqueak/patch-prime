@@ -236,6 +236,15 @@ public:
     void setEffectMetering(std::set<std::string> keys);
     std::map<std::pair<std::string, std::size_t>, EffectLevels> takeEffectLevels();
 
+    // Recording and playback streams (see RecordingManager), linked here
+    // since only the manager knows each strip's output: recorders, by node
+    // name, record the strip with that endpoint key (after its effects and
+    // fader); the player node plays into the strip playerTarget. Nodes are
+    // found by name and patchprime.tap.owner (= owner()).
+    void setTaps(std::map<std::string, std::string> recorders, std::string playerNode,
+                 std::string playerTarget);
+    [[nodiscard]] const std::string &owner() const { return m_owner; }
+
     // Removes every Patch Prime bus (and so its links) in the graph. Used by
     // `patchprimed --remove-buses`, which runs without a BusManager.
     static void removeAllBusesIn(PipeWireGraph &graph);
@@ -319,6 +328,10 @@ private:
                    const LinkMap &existingLinks);
     [[nodiscard]] std::vector<PortRef> portsOf(std::uint32_t nodeId, const std::string &direction,
                                                bool monitor) const;
+    void linkTaps(const std::map<std::string, std::uint32_t> &ready,
+                  const std::map<std::string, Wanted> &wanted,
+                  const std::map<std::string, std::vector<PortRef>> &stripOuts,
+                  const LinkMap &existingLinks);
 
     using Clock = std::chrono::steady_clock;
 
@@ -343,6 +356,9 @@ private:
     // The hardware node cue last played to, so its links can be cleaned up
     // when cue moves elsewhere or is turned off.
     std::optional<std::uint32_t> m_cueHardware;
+    std::map<std::string, std::string> m_recorders; // node name -> endpoint key
+    std::string m_playerNode;
+    std::string m_playerTarget; // endpoint key
 };
 
 } // namespace pp

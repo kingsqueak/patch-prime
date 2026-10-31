@@ -420,6 +420,26 @@ void DeviceModel::setClockDevice(const std::string &key)
     Q_EMIT audioSettingsChanged();
 }
 
+void DeviceModel::setRecordingFormat(const std::string &format)
+{
+    if (format == m_store->recordingFormat()) {
+        return;
+    }
+    m_store->setRecordingFormat(format);
+    saveStore();
+    Q_EMIT recordingSettingsChanged();
+}
+
+void DeviceModel::setPlayerTarget(const std::string &key)
+{
+    if (key == m_store->playerTarget()) {
+        return;
+    }
+    m_store->setPlayerTarget(key);
+    saveStore();
+    Q_EMIT recordingSettingsChanged();
+}
+
 void DeviceModel::setCueOutput(const std::string &key)
 {
     if (!key.empty()) {

@@ -9,6 +9,7 @@
 #include "devicemodel.h"
 #include "endpoint.h"
 #include "pipewiregraph.h"
+#include "recordingmanager.h"
 #include "scenes.h"
 
 #include <QDBusConnection>
@@ -24,9 +25,10 @@
 
 PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *devices,
                                      pp::BusManager *buses, pp::AppRouter *apps,
-                                     pp::SceneStore *scenes, QObject *parent)
+                                     pp::SceneStore *scenes, pp::RecordingManager *recordings,
+                                     QObject *parent)
     : QObject(parent), m_graph(graph), m_devices(devices), m_buses(buses), m_apps(apps),
-      m_scenes(scenes)
+      m_recordings(recordings), m_scenes(scenes)
 {
     m_stateTimer.setSingleShot(true);
     m_stateTimer.setInterval(30);
@@ -42,6 +44,12 @@ PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *
     connect(devices, &pp::DeviceModel::cueChanged, this, &PatchPrimeService::scheduleState);
     connect(devices, &pp::DeviceModel::audioSettingsChanged, this,
             &PatchPrimeService::scheduleState);
+
+    connect(recordings, &pp::RecordingManager::changed, this, &PatchPrimeService::scheduleState);
+    connect(recordings, &pp::RecordingManager::filesChanged, this, [this] {
+        ++m_recordingsRevision;
+        scheduleState();
+    });
 
     m_levelsTimer.setInterval(33);
     connect(&m_levelsTimer, &QTimer::timeout, this, &PatchPrimeService::emitLevels);
@@ -126,6 +134,35 @@ QString PatchPrimeService::GetState() const
         {QStringLiteral("scenes"), QJsonArray::fromStringList(m_scenes->names())},
         {QStringLiteral("currentScene"), m_currentScene},
         {QStringLiteral("blockSize"), m_devices->store().blockSize()},
+        {QStringLiteral("recordingFolder"), m_recordings->folder()},
+        {QStringLiteral("recordingFormat"),
+         QString::fromStdString(pp::recordingFormatName(m_recordings->format()))},
+        {QStringLiteral("recording"), [this] {
+             QJsonObject recording;
+             for (const auto &[key, path] : m_recordings->recording()) {
+                 recording.insert(QString::fromStdString(key), path);
+             }
+             return recording;
+         }()},
+        {QStringLiteral("recordingFormats"), [] {
+             QJsonArray formats;
+             for (const auto f : {pp::RecordingFormat::Flac, pp::RecordingFormat::Wav,
+                                  pp::RecordingFormat::Mp3}) {
+                 if (pp::recordingFormatAvailable(f)) {
+                     formats.append(QString::fromStdString(pp::recordingFormatName(f)));
+                 }
+             }
+             return formats;
+         }()},
+        {QStringLiteral("recordingError"), m_recordings->lastError()},
+        {QStringLiteral("recordingsRevision"), m_recordingsRevision},
+        {QStringLiteral("player"), [this] {
+             const auto p = m_recordings->player();
+             return QJsonObject{{QStringLiteral("path"), p.path},
+                                {QStringLiteral("paused"), p.paused},
+                                {QStringLiteral("duration"), p.duration}};
+         }()},
+        {QStringLiteral("playerTarget"), QString::fromStdString(m_recordings->playerTarget())},
     };
     return QString::fromUtf8(QJsonDocument(state).toJson(QJsonDocument::Compact));
 }
@@ -394,6 +431,67 @@ void PatchPrimeService::SetEffectParam(const QString &key, int index, const QStr
     }
 }
 
+QString PatchPrimeService::StartRecording(const QString &key)
+{
+    QString error;
+    m_recordings->start(key.toStdString(), &error);
+    return error;
+}
+
+void PatchPrimeService::StopRecording(const QString &key)
+{
+    m_recordings->stop(key.toStdString());
+}
+
+void PatchPrimeService::SetRecordingFormat(const QString &format)
+{
+    if (const auto parsed = pp::parseRecordingFormat(format.toStdString())) {
+        m_recordings->setFormat(*parsed);
+    }
+}
+
+QString PatchPrimeService::GetRecordings()
+{
+    QJsonArray files;
+    for (const auto &f : m_recordings->files()) {
+        files.append(QJsonObject{
+            {QStringLiteral("path"), f.path},
+            {QStringLiteral("name"), f.name},
+            {QStringLiteral("seconds"), f.seconds},
+            {QStringLiteral("bytes"), static_cast<double>(f.bytes)},
+            {QStringLiteral("modified"), f.modified.toString(Qt::ISODate)},
+        });
+    }
+    return QString::fromUtf8(QJsonDocument(files).toJson(QJsonDocument::Compact));
+}
+
+QString PatchPrimeService::PlayRecording(const QString &path)
+{
+    QString error;
+    m_recordings->play(path, &error);
+    return error;
+}
+
+void PatchPrimeService::PausePlayback(bool paused)
+{
+    m_recordings->setPaused(paused);
+}
+
+void PatchPrimeService::StopPlayback()
+{
+    m_recordings->stopPlayback();
+}
+
+void PatchPrimeService::SeekPlayback(double seconds)
+{
+    m_recordings->seek(seconds);
+}
+
+void PatchPrimeService::SetPlayerTarget(const QString &key)
+{
+    m_recordings->setPlayerTarget(key.toStdString());
+}
+
 void PatchPrimeService::SetCueOutput(const QString &key)
 {
     m_devices->setCueOutput(key.toStdString());
@@ -612,6 +710,13 @@ void PatchPrimeService::emitLevels()
         levels.insert(
             QStringLiteral("fxio|%1|%2").arg(QString::fromStdString(at.first)).arg(at.second),
             QVariant::fromValue(values));
+    }
+    for (const auto &[key, seconds] : m_recordings->recordedSeconds()) {
+        levels.insert(QStringLiteral("rec|") + QString::fromStdString(key),
+                      QVariant::fromValue(QList<double>{seconds}));
+    }
+    if (const auto player = m_recordings->player(); !player.path.isEmpty()) {
+        levels.insert(QStringLiteral("player"), QVariant::fromValue(QList<double>{player.position}));
     }
     if (!levels.isEmpty()) {
         Q_EMIT Levels(levels);

@@ -19,7 +19,8 @@ import org.kingsqueak.patchprime.engine
 //            outputs), the dB scale and the fader (fills the height)
 //   readout  fader level in dB (click to type one)
 //   toggles  mute, cue, mono, default
-//   options  the channel pair choice (blank when there's none)
+//   options  the channel pair choice; record (and the time recorded) on mix
+//            buses and routed inputs
 //
 // Sizes and colors come from Style. Roles are read through `model` (see the
 // note in DevicesPage.qml).
@@ -47,6 +48,9 @@ QQC2.Control {
     readonly property var sends: model.sends
     readonly property var effects: model.effects || []
     readonly property bool cued: model.cued === true
+    // Mix buses and routed inputs (Desktop) can be recorded.
+    readonly property bool canRecord: kind === "virtual-sink" || kind === "virtual-input"
+    readonly property bool recording: Devices.recording[key] !== undefined
 
     readonly property bool ownVirtual: kind !== "hardware"
     readonly property bool isInput: direction === "input"
@@ -301,6 +305,60 @@ QQC2.Control {
         Item {
             Layout.fillWidth: true
             Layout.preferredHeight: Style.controlHeight
+
+            // Record (mix buses and Desktop): the time while recording.
+            QQC2.ToolButton {
+                id: recordButton
+
+                anchors.fill: parent
+                anchors.margins: 1
+                visible: strip.canRecord
+                enabled: Devices.daemonRunning && strip.online
+                checkable: true
+                text: strip.recording ? Style.clock(Devices.recordingSeconds[strip.key] || 0)
+                                      : qsTr("Record")
+                onToggled: checked ? Devices.startRecording(strip.key) : Devices.stopRecording(strip.key)
+                Binding on checked {
+                    value: strip.recording
+                }
+
+                // Drawn here: the desktop style draws a button's label in its
+                // background, which this replaces.
+                contentItem: Item {
+                    RowLayout {
+                        anchors.centerIn: parent
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Rectangle {
+                            // A dot to record; a square to stop.
+                            implicitWidth: Style.signalSize + 2
+                            implicitHeight: implicitWidth
+                            radius: strip.recording ? 1 : width / 2
+                            color: strip.recording ? Style.toggleOnText : Style.recordOn
+                        }
+                        QQC2.Label {
+                            text: recordButton.text
+                            font.family: strip.recording ? "monospace" : Kirigami.Theme.smallFont.family
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            color: strip.recording ? Style.toggleOnText : Kirigami.Theme.textColor
+                        }
+                    }
+                }
+                background: Rectangle {
+                    radius: Style.toggleRadius
+                    color: strip.recording ? Style.recordOn
+                                           : recordButton.hovered ? Style.toggleHover : Style.toggleOff
+                    opacity: recordButton.enabled ? 1 : 0.5
+                }
+                Accessible.name: strip.recording ? qsTr("Stop recording %1").arg(strip.label)
+                                                 : qsTr("Record %1").arg(strip.label)
+                QQC2.ToolTip.text: strip.recording
+                     ? qsTr("Recording to %1. Click to stop.").arg(Devices.recording[strip.key])
+                     : qsTr("Record what this strip sends on (after its effects and fader) to a %1 file in %2.")
+                       .arg(Devices.recordingFormat.toUpperCase()).arg(Devices.recordingFolder)
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+            }
 
             QQC2.ComboBox {
                 anchors.fill: parent

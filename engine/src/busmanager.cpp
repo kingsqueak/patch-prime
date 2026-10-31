@@ -754,6 +754,7 @@ void BusManager::reconcile()
     linkSends(ready, stripOuts, wanted, sends, readySends, existingLinks);
     linkKeys(fx, wanted, stripOuts, existingLinks);
     linkCue(ready, wanted, stripOuts, existingLinks);
+    linkTaps(ready, wanted, stripOuts, existingLinks);
 
     // Meters whose bus is gone or no longer wanted.
     for (auto it = m_meters.begin(); it != m_meters.end();) {
@@ -1078,6 +1079,69 @@ void BusManager::linkKeys(const std::map<std::string, FxPorts> &fx,
             if (pair.second == keyPort && !desired.contains(pair.first)) {
                 m_graph->destroyObject(linkId);
             }
+        }
+    }
+}
+
+void BusManager::setTaps(std::map<std::string, std::string> recorders, std::string playerNode,
+                         std::string playerTarget)
+{
+    m_recorders = std::move(recorders);
+    m_playerNode = std::move(playerNode);
+    m_playerTarget = std::move(playerTarget);
+    scheduleReconcile();
+}
+
+void BusManager::linkTaps(const std::map<std::string, std::uint32_t> &ready,
+                          const std::map<std::string, Wanted> &wanted,
+                          const std::map<std::string, std::vector<PortRef>> &stripOuts,
+                          const LinkMap &existingLinks)
+{
+    if (m_recorders.empty() && m_playerNode.empty()) {
+        return;
+    }
+    std::map<std::string, std::string> nameOf; // endpoint key -> bus name
+    for (const auto &[name, w] : wanted) {
+        nameOf[w.key] = name;
+    }
+    const auto findNode = [this](const std::string &nodeName) -> std::optional<std::uint32_t> {
+        for (const auto &[id, node] : m_graph->nodes()) {
+            if (prop(node, "node.name") == nodeName && prop(node, "patchprime.tap.owner") == m_owner) {
+                return id;
+            }
+        }
+        return std::nullopt;
+    };
+    for (const auto &[nodeName, key] : m_recorders) {
+        const auto node = findNode(nodeName);
+        const auto bus = nameOf.find(key);
+        if (!node || bus == nameOf.end()) {
+            continue;
+        }
+        if (const auto out = stripOuts.find(bus->second); out != stripOuts.end()) {
+            link(out->second, portsOf(*node, "in", false), existingLinks);
+        }
+    }
+    if (m_playerNode.empty()) {
+        return;
+    }
+    const auto player = findNode(m_playerNode);
+    if (!player) {
+        return;
+    }
+    // Into the target strip's bus (where apps play), and nowhere else: the
+    // target may have just changed.
+    std::optional<std::uint32_t> target;
+    if (const auto bus = nameOf.find(m_playerTarget); bus != nameOf.end()) {
+        if (const auto it = ready.find(bus->second); it != ready.end()) {
+            target = it->second;
+            link(portsOf(*player, "out", false), portsOf(it->second, "in", false), existingLinks);
+        }
+    }
+    for (const auto &[id, l] : m_graph->links()) {
+        if (parseId(prop(l, "link.output.node")) == *player &&
+            (!target || parseId(prop(l, "link.input.node")) != *target)) {
+            m_graph->destroyObject(id);
         }
     }
 }

@@ -237,6 +237,8 @@ bool DeviceStore::load()
     m_cueOutput.clear();
     m_sampleRate = defaultSampleRate;
     m_blockSize = 0;
+    m_recordingFormat = "flac";
+    m_playerTarget.clear();
     m_lastError.clear();
     QFile file(m_path);
     if (!file.exists()) {
@@ -258,6 +260,9 @@ bool DeviceStore::load()
     m_cueOutput = root.value(QLatin1String("cueOutput")).toString().toStdString();
     m_sampleRate = root.value(QLatin1String("sampleRate")).toInt(defaultSampleRate);
     m_blockSize = std::max(0, root.value(QLatin1String("blockSize")).toInt());
+    m_recordingFormat =
+        root.value(QLatin1String("recordingFormat")).toString(QStringLiteral("flac")).toStdString();
+    m_playerTarget = root.value(QLatin1String("playerTarget")).toString().toStdString();
     const auto devices = document.object().value(QLatin1String("devices")).toObject();
     for (auto it = devices.begin(); it != devices.end(); ++it) {
         auto settings = fromJson(it.value().toObject());
@@ -287,6 +292,8 @@ bool DeviceStore::save()
         {QStringLiteral("cueOutput"), qs(m_cueOutput)},
         {QStringLiteral("sampleRate"), m_sampleRate},
         {QStringLiteral("blockSize"), m_blockSize},
+        {QStringLiteral("recordingFormat"), qs(m_recordingFormat)},
+        {QStringLiteral("playerTarget"), qs(m_playerTarget)},
         {QStringLiteral("devices"), devices},
     };
 
@@ -350,6 +357,9 @@ bool DeviceStore::rekey(const std::string &from, const std::string &to)
     m_entries.insert(std::move(node));
     if (m_clockDevice == from) {
         m_clockDevice = to;
+    }
+    if (m_playerTarget == from) {
+        m_playerTarget = to;
     }
     if (m_cueOutput == from) {
         m_cueOutput = to;

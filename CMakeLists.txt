@@ -39,6 +39,7 @@ set(PATCHPRIME_SYSTEMD_USER_UNIT_DIR "${CMAKE_INSTALL_DATADIR}/systemd/user"
 find_package(Qt6 6.10 REQUIRED COMPONENTS Core)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PipeWire REQUIRED IMPORTED_TARGET libpipewire-0.3>=1.6)
+pkg_check_modules(SndFile REQUIRED IMPORTED_TARGET sndfile>=1.1)
 
 add_subdirectory(engine)
 add_subdirectory(daemon)

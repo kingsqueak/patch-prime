@@ -12,6 +12,8 @@
 #include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusReply>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -235,7 +237,82 @@ void DaemonClient::call(const QString &method, const QVariantList &args)
         }
     });
 }
+
+void DaemonClient::callReportingError(const QString &method, const QVariantList &args)
+{
+    auto message = QDBusMessage::createMethodCall(service, path, interface, method);
+    message.setArguments(args);
+    auto *watcher =
+        new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](auto *w) {
+        w->deleteLater();
+        const QDBusPendingReply<QString> reply = *w;
+        if (reply.isError()) {
+            setLastError(reply.error().message());
+        } else if (!reply.value().isEmpty()) {
+            setLastError(reply.value());
+        }
+    });
+}
 // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)
+
+void DaemonClient::startRecording(const QString &key)
+{
+    callReportingError(QStringLiteral("StartRecording"), {key});
+}
+
+void DaemonClient::stopRecording(const QString &key)
+{
+    call(QStringLiteral("StopRecording"), {key});
+}
+
+void DaemonClient::setRecordingFormat(const QString &format)
+{
+    call(QStringLiteral("SetRecordingFormat"), {format});
+}
+
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static): QML calls it on the instance
+QVariantList DaemonClient::recordings() const
+{
+    const auto message = QDBusMessage::createMethodCall(service, path, interface,
+                                                        QStringLiteral("GetRecordings"));
+    const QDBusReply<QString> reply = QDBusConnection::sessionBus().call(message);
+    if (!reply.isValid()) {
+        return {};
+    }
+    return QJsonDocument::fromJson(reply.value().toUtf8()).array().toVariantList();
+}
+
+void DaemonClient::playRecording(const QString &file)
+{
+    callReportingError(QStringLiteral("PlayRecording"), {file});
+}
+
+void DaemonClient::pausePlayback(bool paused)
+{
+    call(QStringLiteral("PausePlayback"), {paused});
+}
+
+void DaemonClient::stopPlayback()
+{
+    call(QStringLiteral("StopPlayback"), {});
+}
+
+void DaemonClient::seekPlayback(double seconds)
+{
+    call(QStringLiteral("SeekPlayback"), {seconds});
+}
+
+void DaemonClient::setPlayerTarget(const QString &key)
+{
+    call(QStringLiteral("SetPlayerTarget"), {key});
+}
+
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static): QML calls it on the instance
+bool DaemonClient::trashFile(const QString &file)
+{
+    return QFile::moveToTrash(file);
+}
 
 void DaemonClient::setEnabled(const QString &key, bool enabled)
 {
@@ -459,6 +536,39 @@ void DaemonClient::onStateChanged(const QString &state)
         Q_EMIT scenesChanged();
     }
 
+    {
+        const auto folder = root.value(QLatin1String("recordingFolder")).toString();
+        const auto format = root.value(QLatin1String("recordingFormat")).toString();
+        const auto formats = root.value(QLatin1String("recordingFormats")).toVariant().toStringList();
+        const auto recording = root.value(QLatin1String("recording")).toObject().toVariantMap();
+        const auto error = root.value(QLatin1String("recordingError")).toString();
+        const int revision = root.value(QLatin1String("recordingsRevision")).toInt();
+        const auto player = root.value(QLatin1String("player")).toObject().toVariantMap();
+        const auto target = root.value(QLatin1String("playerTarget")).toString();
+        if (folder != m_recordingFolder || format != m_recordingFormat ||
+            formats != m_recordingFormats ||
+            recording != m_recording || error != m_recordingError ||
+            revision != m_recordingsRevision || player != m_player || target != m_playerTarget) {
+            m_recordingFolder = folder;
+            m_recordingFormat = format;
+            m_recordingFormats = formats;
+            m_recording = recording;
+            m_recordingError = error;
+            m_recordingsRevision = revision;
+            m_player = player;
+            m_playerTarget = target;
+            // Times of strips that stopped recording, and a stopped player's place, go.
+            for (auto it = m_recordingSeconds.begin(); it != m_recordingSeconds.end();) {
+                it = m_recording.contains(it.key()) ? std::next(it) : m_recordingSeconds.erase(it);
+            }
+            if (m_player.value(QStringLiteral("path")).toString().isEmpty()) {
+                m_playerPosition = 0.0;
+            }
+            Q_EMIT recordingChanged();
+            Q_EMIT recordingTimesChanged();
+        }
+    }
+
     if (const auto cue = root.value(QLatin1String("cueOutput")).toString(); cue != m_cueOutput) {
         m_cueOutput = cue;
         Q_EMIT cueOutputChanged();
@@ -578,6 +688,7 @@ double DaemonClient::effectMeterFraction(double peak)
 void DaemonClient::onLevels(const QVariantMap &levels)
 {
     bool metersChanged = false;
+    bool timesChanged = false;
     for (auto it = levels.begin(); it != levels.end(); ++it) {
         QList<double> peaks;
         const auto &value = it.value();
@@ -585,6 +696,22 @@ void DaemonClient::onLevels(const QVariantMap &levels)
             peaks = qdbus_cast<QList<double>>(value.value<QDBusArgument>());
         } else {
             peaks = value.value<QList<double>>();
+        }
+
+        // Recording and playing times.
+        if (it.key().startsWith(QLatin1String("rec|"))) {
+            if (!peaks.isEmpty()) {
+                m_recordingSeconds.insert(it.key().mid(4), peaks.front());
+                timesChanged = true;
+            }
+            continue;
+        }
+        if (it.key() == QLatin1String("player")) {
+            if (!peaks.isEmpty() && peaks.front() != m_playerPosition) {
+                m_playerPosition = peaks.front();
+                timesChanged = true;
+            }
+            continue;
         }
 
         // RMS and loudness: shown as they are.
@@ -692,6 +819,9 @@ void DaemonClient::onLevels(const QVariantMap &levels)
     }
     if (metersChanged) {
         Q_EMIT effectMetersChanged();
+    }
+    if (timesChanged) {
+        Q_EMIT recordingTimesChanged();
     }
 }
 

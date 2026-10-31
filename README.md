@@ -42,7 +42,7 @@ Build dependencies on Ubuntu 26.04:
 
 ```sh
 sudo apt install cmake ninja-build g++ qt6-base-dev qt6-declarative-dev \
-    libpipewire-0.3-dev libspa-0.2-dev libkirigami-dev kirigami-addons-dev
+    libpipewire-0.3-dev libspa-0.2-dev libsndfile1-dev libkirigami-dev kirigami-addons-dev
 ```
 
 ```sh

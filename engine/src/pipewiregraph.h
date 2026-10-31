@@ -11,6 +11,7 @@
 #include <QTimer>
 
 #include <atomic>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
@@ -36,6 +37,25 @@ struct MeterLevels
     std::vector<float> take();
     // The RMS values now.
     [[nodiscard]] std::vector<float> rmsNow() const;
+};
+
+// What a stream added with PipeWireGraph::addStream() runs on the realtime
+// thread: a recorder takes the samples, a player fills them. Samples are
+// 32-bit float, interleaved.
+class StreamIo
+{
+public:
+    StreamIo() = default;
+    virtual ~StreamIo() = default;
+    StreamIo(const StreamIo &) = delete;
+    StreamIo &operator=(const StreamIo &) = delete;
+    StreamIo(StreamIo &&) = delete;
+    StreamIo &operator=(StreamIo &&) = delete;
+
+    // The stream's sample rate, once negotiated.
+    virtual void setRate(int rate) noexcept = 0;
+    // Capture: frames * channels samples to take. Playback: as many to fill.
+    virtual void process(float *samples, std::uint32_t frames, std::uint32_t channels) noexcept = 0;
 };
 
 // A live mirror of the PipeWire graph: nodes, devices, ports, links and the
@@ -133,6 +153,15 @@ public:
                    bool keyInput = false);
     void removeFilter(const std::string &name);
     [[nodiscard]] bool hasFilter(const std::string &name) const;
+
+    // A node named name that never links itself (the caller links it),
+    // running io on the realtime thread, stereo: capture (a recorder: a
+    // filter with input_FL and input_FR, at the graph's rate) or playback (a
+    // player: a stream at rate, which PipeWire converts). Like filters, they
+    // belong to the current connection.
+    bool addStream(const std::string &name, bool capture, int rate, const Properties &extraProps,
+                   const std::shared_ptr<StreamIo> &io);
+    void removeStream(const std::string &name);
 
 Q_SIGNALS:
     void connectedChanged(bool connected);

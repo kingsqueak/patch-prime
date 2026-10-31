@@ -13,6 +13,7 @@
 #include "hotplugrecovery.h"
 #include "notifier.h"
 #include "pipewiregraph.h"
+#include "recordingmanager.h"
 #include "scenes.h"
 #include "service.h"
 
@@ -142,7 +143,8 @@ int run(int &argc, char **argv)
     pp::HotplugRecovery recovery(&graph, &devices);
     Notifier notifier(&devices, &recovery);
     pp::SceneStore scenes;
-    PatchPrimeService service(&graph, &devices, &buses, &apps, &scenes);
+    pp::RecordingManager recordings(&graph, &devices, &buses);
+    PatchPrimeService service(&graph, &devices, &buses, &apps, &scenes, &recordings);
     bus.registerObject(QString::fromLatin1(PatchPrimeService::objectPath), &service,
                        QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);
 

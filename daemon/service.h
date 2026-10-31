@@ -17,6 +17,7 @@ class SceneStore;
 class BusManager;
 class DeviceModel;
 class PipeWireGraph;
+class RecordingManager;
 } // namespace pp
 
 // The daemon's D-Bus API, org.kingsqueak.PatchPrime1 at /org/kingsqueak/PatchPrime.
@@ -38,6 +39,8 @@ class PipeWireGraph;
 // output peaks, output RMS] (linear, a quarter of the list each: one value
 // for a mono strip, left and right otherwise; peaks ad, RMS ~300 ms), then
 // on a strip with a key input (a ducker's) [key peak, key RMS].
+// While recording or playing: "rec|<device key>" -> [seconds recorded] and
+// "player" -> [position in seconds].
 class PatchPrimeService : public QObject, protected QDBusContext
 {
     Q_OBJECT
@@ -48,7 +51,8 @@ public:
     static constexpr auto objectPath = "/org/kingsqueak/PatchPrime";
 
     PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *devices, pp::BusManager *buses,
-                      pp::AppRouter *apps, pp::SceneStore *scenes, QObject *parent = nullptr);
+                      pp::AppRouter *apps, pp::SceneStore *scenes, pp::RecordingManager *recordings,
+                      QObject *parent = nullptr);
 
 public Q_SLOTS:
     QString GetState() const;
@@ -130,6 +134,26 @@ public Q_SLOTS:
     // output levels ("fxio|..." in Levels), which cost CPU only while watched.
     void WatchEffectLevels(const QString &key);
     void UnwatchEffectLevels(const QString &key);
+    // Recording mix buses and routed inputs to files in the recordings folder
+    // (state: "recordingFolder", "recordingFormat", "recording" = {key: file},
+    // "recordingError"). Start returns an error message, or "" on success.
+    QString StartRecording(const QString &key);
+    void StopRecording(const QString &key);
+    // "flac", "wav" or "mp3" (those this build can write are in the state as
+    // "recordingFormats"); applies to the next recording.
+    void SetRecordingFormat(const QString &format);
+    // The folder's sound files, newest first, as JSON: [{path, name,
+    // seconds, bytes, modified (ISO date)}]. "recordingsRevision" in the
+    // state goes up when they change.
+    QString GetRecordings();
+    // The player (state: "player" = {path, paused, duration}, "playerTarget"
+    // = the key of the strip it plays into). Play returns an error message,
+    // or "" on success.
+    QString PlayRecording(const QString &path);
+    void PausePlayback(bool paused);
+    void StopPlayback();
+    void SeekPlayback(double seconds);
+    void SetPlayerTarget(const QString &key);
 
 Q_SIGNALS:
     void StateChanged(const QString &state);
@@ -147,6 +171,8 @@ private:
     pp::DeviceModel *m_devices;
     pp::BusManager *m_buses;
     pp::AppRouter *m_apps;
+    pp::RecordingManager *m_recordings;
+    int m_recordingsRevision = 0;
     pp::SceneStore *m_scenes;
     QString m_currentScene;
     QTimer m_stateTimer;

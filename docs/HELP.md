@@ -9,6 +9,7 @@ Patch Prime turns your computer's audio into a small mixing console. This guide 
 - [Routing](#routing)
 - [Apps](#apps)
 - [Scenes](#scenes)
+- [Recording and playback](#recording-and-playback)
 - [Cue (headphones)](#cue-headphones)
 - [Effects](#effects)
 - [Meters](#meters)
@@ -59,6 +60,7 @@ From top to bottom:
 | Microphone | Inputs only. **Mono**: mixes all of this input's channels into one, heard in both ears. Use it for a mic on one input of a stereo interface. |
 | Star | Make this strip the system default output (for strips apps play into) or default microphone (for inputs). |
 | Channel pair | On multichannel interfaces: use every channel, or only one stereo pair (for example "Ch 3–4"). |
+| **Record** | Mix buses and Desktop (routed inputs): record this strip to a file. While recording, the button turns red and shows the time; click it to stop. See [Recording and playback](#recording-and-playback). |
 
 On a hardware **input**, effects run *before* the fader, as on a console, so apps recording your mic get the processed sound. On mix buses and outputs they run *after* the fader, which is what a limiter wants.
 
@@ -72,7 +74,7 @@ The mixer scrolls sideways when there are more strips than fit.
 ### Menus and shortcuts
 
 - **File → Quit** (Ctrl+Q) closes the window. The engine keeps running, so your audio doesn't stop.
-- **View** switches pages: **Mixer** (Ctrl+1), **Apps** (Ctrl+2), **Routing** (Ctrl+3), **Devices** (Ctrl+4).
+- **View** switches pages: **Mixer** (Ctrl+1), **Apps** (Ctrl+2), **Routing** (Ctrl+3), **Devices** (Ctrl+4), **Recordings** (Ctrl+5).
 - **Help → Patch Prime User Guide** (F1) opens this guide in a window of its own, built into the app so it works offline; **User Guide Online** opens it on GitHub; **Report a Bug…** opens the issue tracker; **About Patch Prime** shows the version and license.
 
 ## Mix buses and virtual devices
@@ -116,6 +118,22 @@ Devices, labels and engine settings are not part of scenes.
 - **Save…** stores the current mix. Typing an existing name replaces that scene.
 - **Load** sets the mix to the chosen scene, without restarting anything.
 - **✕** deletes the chosen scene. The mix stays as it is.
+
+## Recording and playback
+
+Any mix bus (Stream Mix, for example) and any routed input (Desktop) can be recorded to a file. Press **Record** at the bottom of the strip, and press it again to stop. Several strips can record at once.
+
+- **What's recorded** is what the strip sends on, after its effects and its fader. So it's what the rest of the mix hears from that strip, and what OBS would capture.
+- **Where:** files go to `~/Music/Patch Prime`, named after the strip and the time, for example `Stream Mix 2026-10-31 11-42-07.flac`.
+- **Format:** choose it on the Recordings page. **FLAC** is lossless at about half the size of WAV. **WAV** is uncompressed. **MP3** is small and plays everywhere, but only up to 48 kHz: at a higher mixer rate an MP3 recording stops at once with a message. FLAC and WAV are 24-bit. The format applies to the next recording.
+- Recording runs in the engine, so it carries on with the window closed. It stops if you change the mixer's sample rate or the audio server restarts; what was recorded until then is kept.
+
+The **Recordings** page (View menu, Ctrl+5, or the Recordings button above the mixer) lists the files, newest first, with their length, size and date.
+
+- **Play** (or double-click a file) plays it through the player. **Play into** chooses the strip it plays into: a mix bus, Desktop or a hardware output. Play into Stream Mix to let your stream hear it, or into your headphones' output to listen alone.
+- The player bar has play/pause, stop and a position slider (drag it to jump).
+- **Move to Trash** puts a file in the desktop's trash, from which you can still restore it.
+- **Open Folder** opens the recordings folder in the file manager.
 
 ## Cue (headphones)
 

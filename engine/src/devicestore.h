@@ -188,6 +188,12 @@ public:
     void setSampleRate(int rate) { m_sampleRate = rate; }
     [[nodiscard]] int blockSize() const { return m_blockSize; }
     void setBlockSize(int frames) { m_blockSize = frames; }
+    // Recording: the file format ("flac", "wav" or "mp3"), and the strip the
+    // player plays into (a key, or empty for none chosen).
+    [[nodiscard]] const std::string &recordingFormat() const { return m_recordingFormat; }
+    void setRecordingFormat(std::string format) { m_recordingFormat = std::move(format); }
+    [[nodiscard]] const std::string &playerTarget() const { return m_playerTarget; }
+    void setPlayerTarget(std::string key) { m_playerTarget = std::move(key); }
 
     [[nodiscard]] const std::map<std::string, DeviceSettings> &entries() const { return m_entries; }
     [[nodiscard]] const DeviceSettings *find(const std::string &key) const;
@@ -212,6 +218,8 @@ private:
     std::string m_cueOutput;
     int m_sampleRate = defaultSampleRate;
     int m_blockSize = 0;
+    std::string m_recordingFormat = "flac";
+    std::string m_playerTarget;
     std::map<std::string, DeviceSettings> m_entries;
 };
 

@@ -10,6 +10,7 @@
 #include "busmanager.h"
 #include "devicemodel.h"
 #include "pipewiregraph.h"
+#include "recordingmanager.h"
 
 #include <QCoreApplication>
 #include <QJsonArray>
@@ -420,6 +421,116 @@ private Q_SLOTS:
         QVERIFY(QTest::qWaitFor(
             [&] { return !nodeNamed(m_graph, desktopNode) && !nodeNamed(m_graph, mixNode); },
             5000));
+    }
+
+    // Records a mix bus while a tone plays into it, then plays the file
+    // into a routed input.
+    void recordsAndPlays()
+    {
+        QTemporaryDir dir;
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel devices(&store);
+        devices.attach(&m_graph);
+        BusManager buses(&m_graph, &devices);
+        m_owners.insert(busOwnerFor(store.path()));
+        RecordingManager recordings(&m_graph, &devices, &buses, dir.filePath(QStringLiteral("rec")));
+
+        const auto mixKey =
+            devices.createVirtual(QStringLiteral("Test Mix"), EndpointKind::VirtualSink).toStdString();
+        const auto desktopKey =
+            devices.createVirtual(QStringLiteral("Test Desktop"), EndpointKind::VirtualInput)
+                .toStdString();
+        const auto mixNode = store.find(mixKey)->busName;
+        const auto desktopNode = store.find(desktopKey)->busName;
+        QVERIFY(QTest::qWaitFor(
+            [&] { return nodeNamed(m_graph, mixNode) && nodeNamed(m_graph, desktopNode); }, 5000));
+        QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(mixKey) >= 0; }, 5000));
+
+        // Only mix buses and routed inputs record.
+        const auto outKey = makeEndpointKey("Audio/Sink", m_sinkName);
+        QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(outKey) >= 0; }, 5000));
+        QString error;
+        QVERIFY(!recordings.start(outKey, &error));
+        QVERIFY(!error.isEmpty());
+
+        recordings.setFormat(RecordingFormat::Flac);
+        QVERIFY2(recordings.start(mixKey, &error), qPrintable(error));
+        const auto recorderNode = std::string(RecordingManager::recorderPrefix) + mixNode.substr(11);
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, mixNode, recorderNode) == 2; },
+                                5000));
+        QTemporaryDir toneDir;
+        const auto tone = toneDir.filePath(QStringLiteral("tone.wav"));
+        QVERIFY(writeTone(tone));
+        QProcess player;
+        player.start(QStringLiteral("pw-play"),
+                     {QStringLiteral("-P"),
+                      QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                      QStringLiteral("--target"), QString::fromStdString(mixNode), tone});
+        QVERIFY(QTest::qWaitFor([&] { return recordings.recordedSeconds()[mixKey] > 2.0; }, 8000));
+        player.kill();
+        player.waitForFinished();
+        const auto path = recordings.recording().at(mixKey);
+        recordings.stop(mixKey);
+        QVERIFY(recordings.recording().empty());
+        QVERIFY(QTest::qWaitFor([&] { return !nodeNamed(m_graph, recorderNode); }, 3000));
+        const auto files = recordings.files();
+        QCOMPARE(files.size(), std::size_t{1});
+        QCOMPARE(files.front().path, path);
+        QVERIFY(files.front().name.startsWith(QStringLiteral("Test Mix ")));
+        QVERIFY(files.front().seconds > 2.0);
+
+        // The tone (-6 dBFS) is in the file.
+        {
+            const auto file = Player::open(path, &error);
+            QVERIFY2(file, qPrintable(error));
+            std::vector<float> buffer(512);
+            float peak = 0.0F;
+            for (int i = 0; i < 2000 && !file->finished(); ++i) {
+                file->process(buffer.data(), 256, 2);
+                for (const float x : buffer) {
+                    peak = std::max(peak, std::abs(x));
+                }
+                QTest::qWait(0);
+            }
+            QVERIFY2(std::abs(peak - 0.5F) < 0.05F, qPrintable(QString::number(peak)));
+        }
+
+        // Played into the routed input, it shows on that strip's meter.
+        buses.setMetering(true);
+        recordings.setPlayerTarget(desktopKey);
+        QVERIFY2(recordings.play(path, &error), qPrintable(error));
+        QVERIFY(QTest::qWaitFor(
+            [&] { return linkCount(m_graph, std::string(RecordingManager::playerName), desktopNode) == 2; },
+            5000));
+        float peak = 0.0F;
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                const auto levels = buses.takeLevels();
+                if (const auto it = levels.find(desktopKey); it != levels.end()) {
+                    for (const float level : it->second) {
+                        peak = std::max(peak, level);
+                    }
+                }
+                return peak > 0.3F;
+            },
+            5000));
+        QVERIFY(recordings.player().position > 0.0);
+        // Moving it moves the links.
+        recordings.setPlayerTarget(mixKey);
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return linkCount(m_graph, std::string(RecordingManager::playerName), mixNode) == 2 &&
+                       linkCount(m_graph, std::string(RecordingManager::playerName), desktopNode) == 0;
+            },
+            5000));
+        recordings.stopPlayback();
+        QVERIFY(recordings.player().path.isEmpty());
+        buses.setMetering(false);
+
+        devices.forget(devices.rowForKey(mixKey));
+        devices.forget(devices.rowForKey(desktopKey));
+        QVERIFY(QTest::qWaitFor(
+            [&] { return !nodeNamed(m_graph, mixNode) && !nodeNamed(m_graph, desktopNode); }, 5000));
     }
 
     void routesInputToVirtualSink()

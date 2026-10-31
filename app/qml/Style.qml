@@ -100,6 +100,16 @@ QtObject {
     readonly property color toggleOnText: Kirigami.Theme.highlightedTextColor
     readonly property color muteOn: Kirigami.Theme.negativeTextColor
     readonly property color cueOn: Kirigami.Theme.neutralTextColor
+    readonly property color recordOn: Kirigami.Theme.negativeTextColor
+
+    // A time as "m:ss", or "h:mm:ss" from an hour.
+    function clock(seconds) {
+        const total = Math.max(0, Math.floor(seconds));
+        const h = Math.floor(total / 3600);
+        const m = Math.floor(total / 60) % 60;
+        const s = String(total % 60).padStart(2, "0");
+        return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+    }
 
     // Signal light: lit while any audio passes, even below the meter's range.
     readonly property real signalSize: Kirigami.Units.smallSpacing * 2
