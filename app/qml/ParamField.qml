@@ -34,7 +34,9 @@ QQC2.TextField {
             return v.toFixed(1) + " s";
         if (unit === "LUFS")
             return v.toFixed(1) + " LUFS";
-        return v.toFixed(2);
+        // Any other unit (a plugin's): as many decimals as the size allows.
+        const n = Math.abs(v) >= 100 ? Math.round(v).toString() : v.toFixed(2);
+        return unit.length > 0 ? n + " " + unit : n;
     }
 
     // A number from typed text, or NaN.
@@ -59,6 +61,10 @@ QQC2.TextField {
             t = t.replace(/s$/, "");
         } else if (unit === "LUFS") {
             t = t.replace(/lufs$/, "");
+        } else if (unit.length > 0) {
+            const u = unit.toLowerCase().replace(/\s+/g, "");
+            if (t.endsWith(u))
+                t = t.slice(0, -u.length);
         }
         if (!/^[+-]?(\d+(\.\d*)?|\.\d+)$/.test(t))
             return NaN;

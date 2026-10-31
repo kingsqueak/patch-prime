@@ -57,7 +57,7 @@ set(CPACK_RPM_PACKAGE_GROUP "Applications/Multimedia")
 set(CPACK_RPM_PACKAGE_URL "https://github.com/kingsqueak/patch-prime")
 set(CPACK_RPM_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION}")
 set(CPACK_RPM_PACKAGE_REQUIRES
-    "pipewire >= 1.6, wireplumber, kf6-kirigami, kf6-qqc2-desktop-style, qt6-qtdeclarative")
+    "pipewire >= 1.6, wireplumber, kf6-kirigami, kf6-qqc2-desktop-style, qt6-qtdeclarative, lilv-libs")
 set(CPACK_RPM_POST_INSTALL_SCRIPT_FILE "${PROJECT_SOURCE_DIR}/packaging/rpm/postinstall")
 set(CPACK_RPM_PRE_UNINSTALL_SCRIPT_FILE "${PROJECT_SOURCE_DIR}/packaging/rpm/preuninstall")
 # Directories other packages own.

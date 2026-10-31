@@ -4,6 +4,7 @@
 #include "devicestore.h"
 
 #include "effects.h"
+#include "plugins.h"
 
 #include <QDir>
 #include <QFile>
@@ -16,6 +17,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <cmath>
 
 namespace pp {
 
@@ -454,12 +456,23 @@ std::vector<EffectSettings> effectsFromJson(const QJsonArray &json)
         const auto o = v.toObject();
         EffectSettings e;
         e.type = str(o, "type");
+        e.enabled = o.value(QLatin1String("enabled")).toBool(true);
+        const auto params = o.value(QLatin1String("params")).toObject();
+        if (isPluginType(e.type)) {
+            // A plugin's parameters are its own (checked against the plugin
+            // when they're changed): kept as they are, if they're numbers.
+            for (auto it = params.begin(); it != params.end(); ++it) {
+                if (const double number = it.value().toDouble(qQNaN()); std::isfinite(number)) {
+                    e.params[it.key().toStdString()] = number;
+                }
+            }
+            effects.push_back(std::move(e));
+            continue;
+        }
         const auto info = effectParams(e.type);
         if (info.empty()) {
             continue; // unknown (or from a newer version)
         }
-        e.enabled = o.value(QLatin1String("enabled")).toBool(true);
-        const auto params = o.value(QLatin1String("params")).toObject();
         for (const auto &p : info) {
             const double value = params.value(QString::fromStdString(p.name)).toDouble(p.initial);
             e.params[p.name] = validParam(p, value);

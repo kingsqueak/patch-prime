@@ -162,6 +162,7 @@ void DaemonClient::setDaemonRunning(bool running)
     }
     m_daemonRunning = running;
     Q_EMIT daemonRunningChanged();
+    m_pluginsRevision = -1; // a new daemon counts afresh: fetch its list
     if (running) {
         setLastError({});
         fetchState();
@@ -374,6 +375,33 @@ void DaemonClient::setCue(const QString &key, bool cued)
     call(QStringLiteral("SetCue"), {key, cued});
 }
 
+QVariantMap DaemonClient::effectInfo(const QString &type) const
+{
+    if (const auto at = m_pluginIndex.find(type); at != m_pluginIndex.end()) {
+        auto info = m_plugins.at(*at).toMap();
+        info.insert(QStringLiteral("label"), info.value(QStringLiteral("name")));
+        info.insert(QStringLiteral("plugin"), true);
+        return info;
+    }
+    for (const auto &t : m_effectTypes) {
+        if (const auto info = t.toMap(); info.value(QStringLiteral("type")).toString() == type) {
+            return info;
+        }
+    }
+    // A plugin that isn't installed (any more): its URI's last part as a name.
+    const bool plugin = type.startsWith(QLatin1String("lv2:"));
+    return {{QStringLiteral("type"), type},
+            {QStringLiteral("label"), plugin ? type.section(QLatin1Char('/'), -1) : type},
+            {QStringLiteral("params"), QVariantList{}},
+            {QStringLiteral("plugin"), plugin},
+            {QStringLiteral("missing"), true}};
+}
+
+void DaemonClient::rescanPlugins()
+{
+    call(QStringLiteral("RescanPlugins"), {});
+}
+
 void DaemonClient::addEffect(const QString &key, const QString &type)
 {
     call(QStringLiteral("AddEffect"), {key, type});
@@ -583,6 +611,34 @@ void DaemonClient::onStateChanged(const QString &state)
         types != m_effectTypes) {
         m_effectTypes = types;
         Q_EMIT effectTypesChanged();
+    }
+
+    {
+        const int revision = root.value(QLatin1String("pluginsRevision")).toInt();
+        const bool scanning = root.value(QLatin1String("pluginsScanning")).toBool();
+        const auto errors = root.value(QLatin1String("pluginErrors")).toObject().toVariantMap();
+        if (revision != m_pluginsRevision || scanning != m_pluginsScanning ||
+            errors != m_pluginErrors) {
+            if (revision != m_pluginsRevision) {
+                // The list is long (every plugin's parameters): only fetched
+                // when it changed.
+                const auto message = QDBusMessage::createMethodCall(service, path, interface,
+                                                                    QStringLiteral("GetPlugins"));
+                const QDBusReply<QString> reply = QDBusConnection::sessionBus().call(message);
+                m_plugins = reply.isValid()
+                                ? QJsonDocument::fromJson(reply.value().toUtf8()).array().toVariantList()
+                                : QVariantList{};
+                m_pluginIndex.clear();
+                for (qsizetype i = 0; i < m_plugins.size(); ++i) {
+                    m_pluginIndex.insert(m_plugins.at(i).toMap().value(QStringLiteral("type")).toString(),
+                                         static_cast<int>(i));
+                }
+                m_pluginsRevision = revision;
+            }
+            m_pluginsScanning = scanning;
+            m_pluginErrors = errors;
+            Q_EMIT pluginsChanged();
+        }
     }
 
     QList<QVariantMap> rows;

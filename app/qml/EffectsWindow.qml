@@ -13,7 +13,9 @@ import org.kingsqueak.patchprime.engine
 // on/bypass, move, remove and its parameters; and a menu to add one. On a
 // hardware input the effects run before the fader (and the system mic gets
 // them); elsewhere, after it. Each effect has a meter bridge (in, gain
-// reduction, out), measured only while the window is open.
+// reduction, out), measured only while the window is open. Plugins (LV2)
+// go in the same chain, each running in a process of its own; they get a
+// row per parameter.
 QQC2.ApplicationWindow {
     id: panel
 
@@ -21,20 +23,12 @@ QQC2.ApplicationWindow {
     property string label
     property var effects: []
 
-    // The parameter list for a type, from the daemon's effectTypes.
-    function typeInfo(type) {
-        const types = Devices.effectTypes;
-        for (let i = 0; i < types.length; ++i) {
-            if (types[i].type === type)
-                return types[i];
-        }
-        return { type: type, label: type, params: [] };
-    }
 
     // Shows the window (or brings it forward), sized for its editors.
     function open() {
         if (!visible) {
-            const wide = panel.effects.some(e => e.type === "eq" || e.type === "multiband");
+            const wide = panel.effects.some(e => e.type === "eq" || e.type === "multiband"
+                                                 || e.type.startsWith("lv2:"));
             width = Kirigami.Units.gridUnit * (wide ? 60 : 36);
             height = Math.min(Screen.desktopAvailableHeight * 0.85, Kirigami.Units.gridUnit * 44);
         }
@@ -82,7 +76,17 @@ QQC2.ApplicationWindow {
 
                 required property var modelData
                 required property int index
-                readonly property var info: panel.typeInfo(modelData.type)
+                // The type's name and parameters; read again when the lists change.
+                readonly property var info: {
+                    Devices.effectTypes;
+                    Devices.plugins;
+                    return Devices.effectInfo(modelData.type);
+                }
+                readonly property bool plugin: info.plugin === true
+                readonly property string failure: (Devices.pluginErrors[panel.key] || {})[index] || ""
+                // A plugin with many parameters shows the first few until asked.
+                property bool allParams: false
+                readonly property int paramLimit: 8
 
                 Layout.fillWidth: true
                 leftPadding: Kirigami.Units.largeSpacing + Style.stageBarHeight
@@ -127,7 +131,21 @@ QQC2.ApplicationWindow {
                             Layout.fillWidth: true
                             text: (slot.index + 1) + ". " + slot.info.label
                             font.bold: true
+                            elide: Text.ElideRight
                             opacity: slot.modelData.enabled ? 1 : 0.6
+                        }
+                        QQC2.Label {
+                            visible: slot.plugin
+                            text: qsTr("LV2")
+                            font: Kirigami.Theme.smallFont
+                            color: Style.dimText
+                            QQC2.ToolTip.text: qsTr("A plugin: it runs in a process of its own, so if it crashes the strip carries on without it.")
+                            QQC2.ToolTip.visible: pluginTag.hovered
+                            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+
+                            HoverHandler {
+                                id: pluginTag
+                            }
                         }
 
                         QQC2.ToolButton {
@@ -147,6 +165,15 @@ QQC2.ApplicationWindow {
                             onClicked: Devices.removeEffect(panel.key, slot.index)
                             Accessible.name: qsTr("Remove %1").arg(slot.info.label)
                         }
+                    }
+
+                    Kirigami.InlineMessage {
+                        Layout.fillWidth: true
+                        visible: slot.failure.length > 0 || slot.info.missing === true
+                        type: Kirigami.MessageType.Error
+                        text: slot.info.missing === true
+                              ? qsTr("This plugin isn't installed (any more), so the strip runs without it.")
+                              : qsTr("The plugin is off: %1.").arg(slot.failure)
                     }
 
                     RowLayout {
@@ -183,79 +210,29 @@ QQC2.ApplicationWindow {
                             }
 
                             Repeater {
-                                model: slot.modelData.type === "eq" || slot.modelData.type === "multiband"
-                                       ? [] : slot.info.params
-
-                                delegate: RowLayout {
-                                    id: param
-
-                                    required property var modelData
-                                    readonly property real current: {
-                                        const v = slot.modelData.params[modelData.name];
-                                        return v === undefined ? modelData.initial : v;
-                                    }
-                                    readonly property bool log: modelData.kind === "log" && modelData.minimum > 0
-
-                                    // Slider position (0-1) <-> value, on a log scale for times and frequencies.
-                                    function toPosition(v) {
-                                        const lo = modelData.minimum;
-                                        const hi = modelData.maximum;
-                                        return log ? Math.log(v / lo) / Math.log(hi / lo) : (v - lo) / (hi - lo);
-                                    }
-                                    function toValue(position) {
-                                        const lo = modelData.minimum;
-                                        const hi = modelData.maximum;
-                                        const v = log ? lo * Math.pow(hi / lo, position) : lo + position * (hi - lo);
-                                        return Math.round(v * (Math.abs(v) < 10 ? 10 : 1)) / (Math.abs(v) < 10 ? 10 : 1);
-                                    }
-
-                                    Layout.fillWidth: true
-
-                                    QQC2.Label {
-                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-                                        text: param.modelData.label
-                                        elide: Text.ElideRight
-                                    }
-
-                                    QQC2.Slider {
-                                        id: slider
-
-                                        Layout.fillWidth: true
-                                        from: 0
-                                        to: 1
-                                        onMoved: Devices.setEffectParam(panel.key, slot.index,
-                                                                        param.modelData.name,
-                                                                        param.toValue(value))
-                                        Accessible.name: param.modelData.label
-                                        // Follow the daemon as VolumeFader does.
-                                        Connections {
-                                            target: param
-                                            function onCurrentChanged() {
-                                                if (!slider.pressed)
-                                                    slider.value = param.toPosition(param.current);
-                                            }
-                                        }
-                                        onPressedChanged: {
-                                            if (!pressed)
-                                                value = param.toPosition(param.current);
-                                        }
-                                        Component.onCompleted: value = param.toPosition(param.current)
-
-                                        TapHandler {
-                                            onDoubleTapped: Devices.setEffectParam(panel.key, slot.index,
-                                                                                   param.modelData.name,
-                                                                                   param.modelData.initial)
-                                        }
-                                    }
-
-                                    ParamField {
-                                        unit: param.modelData.unit
-                                        value: slider.pressed ? param.toValue(slider.value) : param.current
-                                        accessibleName: param.modelData.label
-                                        onRequested: v => Devices.setEffectParam(panel.key, slot.index,
-                                                                                 param.modelData.name, v)
-                                    }
+                                model: {
+                                    if (slot.modelData.type === "eq" || slot.modelData.type === "multiband")
+                                        return [];
+                                    const all = slot.info.params || [];
+                                    return slot.plugin && !slot.allParams ? all.slice(0, slot.paramLimit) : all;
                                 }
+
+                                delegate: EffectParamRow {
+                                    required property var modelData
+                                    stripKey: panel.key
+                                    effectIndex: slot.index
+                                    info: modelData
+                                    values: slot.modelData.params
+                                }
+                            }
+
+                            QQC2.Button {
+                                visible: slot.plugin && (slot.info.params || []).length > slot.paramLimit
+                                flat: true
+                                icon.name: slot.allParams ? "arrow-up" : "arrow-down"
+                                text: slot.allParams ? qsTr("Fewer parameters")
+                                                     : qsTr("All %1 parameters").arg((slot.info.params || []).length)
+                                onClicked: slot.allParams = !slot.allParams
                             }
 
                             // A ducker's key: the strip whose sound turns this one down.
@@ -372,8 +349,23 @@ QQC2.ApplicationWindow {
                     onObjectAdded: (index, object) => addMenu.insertItem(index, object)
                     onObjectRemoved: (index, object) => addMenu.removeItem(object)
                 }
+
+                QQC2.MenuSeparator {}
+
+                QQC2.MenuItem {
+                    icon.name: "plugins"
+                    text: qsTr("Plugin…")
+                    onTriggered: pluginPicker.open()
+                }
             }
         }
     }
+    }
+
+    PluginPicker {
+        id: pluginPicker
+
+        parent: QQC2.Overlay.overlay
+        onChosen: type => Devices.addEffect(panel.key, type)
     }
 }

@@ -18,6 +18,7 @@ A virtual audio mixer and router for KDE Plasma, built on PipeWire. Think of it 
   - broadcast leveler and safety limiter;
   - reverb;
   - delay, to line up outputs with different latency.
+- **Plugins.** Add LV2 plugins (LSP, x42, ZAM, Calf, Dragonfly...) to any strip, in the same chain as the built-in effects and in any order. Each plugin runs in a process of its own, so one that crashes doesn't take the mixer down: the strip carries on without it.
 - **Recording and playback.** Record any input, mix bus or Desktop to FLAC, WAV or MP3 with one click, and play recordings back into a strip. Play a raw mic sample into the mic's own strip, on a loop, to set up its effects while you listen.
 - **Scenes.** Save the whole mix, including effects, under a name and load it back.
 - **Cue.** Listen to any strip alone in your headphones without changing the mix.
@@ -29,7 +30,7 @@ See the **[user guide](docs/HELP.md)** for how to use it.
 
 ## Status
 
-Version 0.11: under active development and in daily use on the author's machine. Phases 1–6 (devices, mixer, routing, apps, scenes, effects, monitoring) and recording are done, with packages for Ubuntu 26.04, Fedora 44 and Arch Linux. Next: plugin hosting (LV2 first) and hardware control.
+Version 0.11: under active development and in daily use on the author's machine. Phases 1–6 (devices, mixer, routing, apps, scenes, effects, monitoring) and recording are done, with packages for Ubuntu 26.04, Fedora 44 and Arch Linux. LV2 plugin hosting has started (plugins run, with generic controls); next: plugin editor windows, CLAP and VST3, then hardware control.
 
 ## Requirements
 
@@ -43,7 +44,7 @@ Build dependencies on Ubuntu 26.04:
 
 ```sh
 sudo apt install cmake ninja-build g++ qt6-base-dev qt6-declarative-dev \
-    libpipewire-0.3-dev libspa-0.2-dev libsndfile1-dev libkirigami-dev kirigami-addons-dev
+    libpipewire-0.3-dev libspa-0.2-dev libsndfile1-dev liblilv-dev lv2-dev libkirigami-dev kirigami-addons-dev
 ```
 
 ```sh

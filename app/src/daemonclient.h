@@ -44,6 +44,12 @@ class DaemonClient : public QAbstractListModel
     // Built-in effects on offer: [{type, label, params: [{name, label, unit,
     // minimum, maximum, initial}]}]. A strip's chain is its "effects" role.
     Q_PROPERTY(QVariantList effectTypes READ effectTypes NOTIFY effectTypesChanged)
+    // The installed plugins (see the daemon's GetPlugins): [{type, name,
+    // author, category, audioIn, audioOut, params, problem}], by name.
+    Q_PROPERTY(QVariantList plugins READ plugins NOTIFY pluginsChanged)
+    Q_PROPERTY(bool pluginsScanning READ pluginsScanning NOTIFY pluginsChanged)
+    // Plugins that are off because they failed: {stripKey: {index: message}}.
+    Q_PROPERTY(QVariantMap pluginErrors READ pluginErrors NOTIFY pluginsChanged)
     // Effects' meters by "<strip key>|<effect index>": a list of values
     // (the multiband compressor's gain reduction per band in dB), each held
     // and let fall slowly so it can be read.
@@ -99,6 +105,13 @@ public:
     [[nodiscard]] int sampleRate() const { return m_sampleRate; }
     [[nodiscard]] int blockSize() const { return m_blockSize; }
     [[nodiscard]] QVariantList effectTypes() const { return m_effectTypes; }
+    [[nodiscard]] QVariantList plugins() const { return m_plugins; }
+    [[nodiscard]] bool pluginsScanning() const { return m_pluginsScanning; }
+    [[nodiscard]] QVariantMap pluginErrors() const { return m_pluginErrors; }
+    // An effect type's name and parameters: a built-in's (from effectTypes)
+    // or a plugin's; {type, label, params} either way.
+    [[nodiscard]] Q_INVOKABLE QVariantMap effectInfo(const QString &type) const;
+    Q_INVOKABLE void rescanPlugins();
     [[nodiscard]] QString cueOutput() const { return m_cueOutput; }
     [[nodiscard]] QVariantMap effectMeters() const { return m_effectMeters; }
     [[nodiscard]] QVariantMap effectLevels() const { return m_effectLevels; }
@@ -196,6 +209,7 @@ Q_SIGNALS:
     void clockChanged();
     void scenesChanged();
     void effectTypesChanged();
+    void pluginsChanged();
     void cueOutputChanged();
     void effectMetersChanged();
     void recordingChanged();
@@ -245,6 +259,11 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     int m_sampleRate = 0;
     int m_blockSize = 0;
     QVariantList m_effectTypes;
+    QVariantList m_plugins;
+    QHash<QString, int> m_pluginIndex; // type -> position in m_plugins
+    int m_pluginsRevision = -1;
+    bool m_pluginsScanning = false;
+    QVariantMap m_pluginErrors;
     QString m_cueOutput;
     QVariantMap m_effectMeters;
     QVariantMap m_effectLevels;

@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 KC2RGW Chris
+
+@prefix lv2: <http://lv2plug.in/ns/lv2core#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<https://github.com/kingsqueak/patch-prime/tests/gain>
+    a lv2:Plugin ;
+    lv2:binary <@TEST_GAIN_BINARY@> ;
+    rdfs:seeAlso <testgain.ttl> .

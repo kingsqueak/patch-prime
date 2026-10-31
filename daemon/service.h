@@ -17,6 +17,7 @@ class SceneStore;
 class BusManager;
 class DeviceModel;
 class PipeWireGraph;
+class PluginCatalog;
 class RecordingManager;
 } // namespace pp
 
@@ -52,7 +53,7 @@ public:
 
     PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *devices, pp::BusManager *buses,
                       pp::AppRouter *apps, pp::SceneStore *scenes, pp::RecordingManager *recordings,
-                      QObject *parent = nullptr);
+                      pp::PluginCatalog *plugins, QObject *parent = nullptr);
 
 public Q_SLOTS:
     QString GetState() const;
@@ -95,9 +96,12 @@ public Q_SLOTS:
     void SetDeviceScheduling(const QString &key, const QString &scheduling);
     // The level of an existing send in dB (-60 = silent .. +12).
     void SetSendLevel(const QString &inputKey, const QString &destinationKey, double db);
-    // A strip's effects (built-in; in the state per device as "effects", and
-    // the types on offer as "effectTypes"): add one of a type at the end,
-    // remove or move one by index, bypass it, set a parameter.
+    // A strip's effects (in the state per device as "effects", and the
+    // built-in types on offer as "effectTypes"; a plugin's type is
+    // "lv2:<uri>", see GetPlugins): add one of a type at the end, remove or
+    // move one by index, bypass it, set a parameter. Plugins that are off
+    // because they failed are in the state as "pluginErrors" =
+    // {key: {index: message}}.
     void AddEffect(const QString &key, const QString &type);
     void RemoveEffect(const QString &key, int index);
     void MoveEffect(const QString &key, int from, int to);
@@ -105,6 +109,11 @@ public Q_SLOTS:
     void SetEffectParam(const QString &key, int index, const QString &name, double value);
     // The strip an effect listens to (a ducker's key): its key, or "" for none.
     void SetEffectKey(const QString &key, int index, const QString &sourceKey);
+    // The installed plugins as JSON (see pluginsToJson); the state's
+    // "pluginsRevision" changes when the list does, "pluginsScanning" says
+    // whether a scan runs. Rescan looks for newly installed ones.
+    QString GetPlugins() const;
+    void RescanPlugins();
     // Cue (solo in the headphones): the hardware output it plays to (a key,
     // "" for none; in the state as "cueOutput"), and whether a strip is cued
     // (per device as "cued"). While anything is cued, the cue output plays
@@ -174,6 +183,7 @@ private:
     pp::BusManager *m_buses;
     pp::AppRouter *m_apps;
     pp::RecordingManager *m_recordings;
+    pp::PluginCatalog *m_plugins;
     int m_recordingsRevision = 0;
     pp::SceneStore *m_scenes;
     QTimer m_stateTimer;

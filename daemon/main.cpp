@@ -13,6 +13,7 @@
 #include "hotplugrecovery.h"
 #include "notifier.h"
 #include "pipewiregraph.h"
+#include "plugins.h"
 #include "recordingmanager.h"
 #include "scenes.h"
 #include "service.h"
@@ -136,6 +137,9 @@ int run(int &argc, char **argv)
         return 1;
     }
 
+    pp::PluginCatalog plugins;
+    devices.setPluginCatalog(&plugins);
+    plugins.start();
     pp::BusManager buses(&graph, &devices);
     buses.setRenamed(renamed);
     pp::AppRouter apps(&graph, &appStore);
@@ -144,7 +148,7 @@ int run(int &argc, char **argv)
     Notifier notifier(&devices, &recovery);
     pp::SceneStore scenes;
     pp::RecordingManager recordings(&graph, &devices, &buses);
-    PatchPrimeService service(&graph, &devices, &buses, &apps, &scenes, &recordings);
+    PatchPrimeService service(&graph, &devices, &buses, &apps, &scenes, &recordings, &plugins);
     bus.registerObject(QString::fromLatin1(PatchPrimeService::objectPath), &service,
                        QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);
 

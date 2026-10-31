@@ -10,6 +10,7 @@
 #include "busmanager.h"
 #include "devicemodel.h"
 #include "pipewiregraph.h"
+#include "plugins.h"
 #include "recordingmanager.h"
 
 #include <QCoreApplication>
@@ -27,6 +28,7 @@
 #include <cstdlib>
 #include <optional>
 #include <set>
+#include <vector>
 
 using namespace pp;
 
@@ -101,6 +103,46 @@ std::ptrdiff_t linkCount(const PipeWireGraph &graph, const std::string &from, co
         return prop(entry.second, "link.output.node") == std::to_string(a->id) &&
                prop(entry.second, "link.input.node") == std::to_string(b->id);
     });
+}
+
+// The ids of the links between two nodes.
+std::set<std::uint32_t> linkIds(const PipeWireGraph &graph, const std::string &from,
+                                const std::string &to)
+{
+    std::set<std::uint32_t> ids;
+    const auto *a = nodeNamed(graph, from);
+    const auto *b = nodeNamed(graph, to);
+    if (a == nullptr || b == nullptr) {
+        return ids;
+    }
+    for (const auto &[id, link] : graph.links()) {
+        if (prop(link, "link.output.node") == std::to_string(a->id) &&
+            prop(link, "link.input.node") == std::to_string(b->id)) {
+            ids.insert(id);
+        }
+    }
+    return ids;
+}
+
+// Whether the links between these pairs of nodes stay the same links for a
+// while: not removed and made again by every reconcile (which drops audio).
+bool linksHold(const PipeWireGraph &graph,
+               const std::vector<std::pair<std::string, std::string>> &pairs, int ms = 800)
+{
+    std::vector<std::set<std::uint32_t>> before;
+    for (const auto &[from, to] : pairs) {
+        before.push_back(linkIds(graph, from, to));
+        if (before.back().empty()) {
+            return false;
+        }
+    }
+    QTest::qWait(ms);
+    for (std::size_t i = 0; i < pairs.size(); ++i) {
+        if (linkIds(graph, pairs[i].first, pairs[i].second) != before[i]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // A send goes from one bus through its gain node to the other; true when
@@ -789,6 +831,164 @@ private Q_SLOTS:
             [&] { return !nodeNamed(m_graph, inBus) && !nodeNamed(m_graph, mixNode); }, 5000));
     }
 
+    void runsPlugins()
+    {
+        // A fake stereo mic sent to a mix bus; a plugin (the test gain, a
+        // mono plugin: one instance per channel) in the mic's chain, in a
+        // process of its own, alongside a built-in effect.
+        const auto pid = std::to_string(QCoreApplication::applicationPid());
+        const auto feed = "pp_plugfeed_" + pid;
+        const auto mic = "pp_plugsrc_" + pid;
+        QProcess loopback;
+        loopback.start(QStringLiteral("pw-loopback"),
+                       {QString::fromStdString("--capture-props=media.class=Audio/Sink node.name=" +
+                                               feed + " audio.position=[FL,FR]"),
+                        QString::fromStdString("--playback-props=media.class=Audio/Source "
+                                               "node.name=" +
+                                               mic + " audio.position=[FL,FR]")});
+        auto stopLoopback = qScopeGuard([&loopback] {
+            loopback.terminate();
+            loopback.waitForFinished(2000);
+        });
+
+        QTemporaryDir dir;
+        PluginCatalog catalog(dir.filePath(QStringLiteral("plugins.json")));
+        catalog.start();
+        QVERIFY(QTest::qWaitFor([&] { return !catalog.isScanning(); }, 15000));
+        const std::string gainType = "lv2:https://github.com/kingsqueak/patch-prime/tests/gain";
+        QVERIFY2(catalog.find(gainType) != nullptr, "the test plugin wasn't found");
+
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel devices(&store);
+        devices.setPluginCatalog(&catalog);
+        devices.attach(&m_graph);
+        BusManager buses(&m_graph, &devices);
+        m_owners.insert(busOwnerFor(store.path()));
+
+        const auto micKey = makeEndpointKey("Audio/Source", mic);
+        QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(micKey) >= 0; }, 5000));
+        const auto micRow = [&] { return devices.rowForKey(micKey); };
+        devices.setEnabled(micRow(), true);
+        const auto mixKey =
+            devices.createVirtual(QStringLiteral("Plug Mix"), EndpointKind::VirtualSink);
+        devices.setSend(micRow(), mixKey, true);
+        const auto inBus = store.find(micKey)->busName;
+        const auto mixNode = store.find(mixKey.toStdString())->busName;
+        const auto send =
+            sendNodeName(store.find(micKey)->busId, store.find(mixKey.toStdString())->busId);
+        QVERIFY(QTest::qWaitFor([&] { return sentThrough(m_graph, inBus, mixNode, send, 2); }, 5000));
+
+        QTemporaryDir toneDir;
+        const auto tone = toneDir.filePath(QStringLiteral("tone.wav"));
+        QVERIFY(writeTone(tone));
+        buses.setMetering(true);
+        // The mix bus's peak while the tone (peaking near 0.5) plays into the mic.
+        const auto peakWhilePlaying = [&](int ms) {
+            QProcess player;
+            player.start(QStringLiteral("pw-play"),
+                         {QStringLiteral("-P"),
+                          QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                          QStringLiteral("--target"), QString::fromStdString(feed), tone});
+            QTest::qWait(300);
+            buses.takeLevels();
+            float peak = 0.0F;
+            [[maybe_unused]] const bool never = QTest::qWaitFor(
+                [&] {
+                    if (const auto levels = buses.takeLevels(); levels.contains(mixKey.toStdString())) {
+                        for (const float level : levels.at(mixKey.toStdString())) {
+                            peak = std::max(peak, level);
+                        }
+                    }
+                    return false;
+                },
+                ms);
+            player.kill();
+            player.waitForFinished();
+            return peak;
+        };
+
+        // The plugin at x0.1 (-20 dB): mic -> plugin -> bus.
+        const auto plug = pluginNodeName(inBus, 1);
+        devices.addEffect(micRow(), QString::fromStdString(gainType));
+        devices.setEffectParam(micRow(), 0, QStringLiteral("gain"), 0.1);
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return linkCount(m_graph, mic, plug) == 2 && linkCount(m_graph, plug, inBus) == 2 &&
+                       linkCount(m_graph, mic, inBus) == 0;
+            },
+            10000));
+        QVERIFY(linksHold(m_graph, {{mic, plug}, {plug, inBus}}));
+        QCOMPARE(prop(*nodeNamed(m_graph, plug), "node.autoconnect"), "false");
+        // Its levels come from its process, like a built-in's (peaks held
+        // until taken).
+        buses.setEffectMetering({micKey});
+        QTest::qWait(100);
+        const float reduced = peakWhilePlaying(1200);
+        QVERIFY2(reduced > 0.02F && reduced < 0.1F, qPrintable(QString::number(reduced)));
+        const auto levels = buses.takeEffectLevels();
+        const auto io = levels.find({micKey, 0});
+        QVERIFY(io != levels.end());
+        const float fxIn = std::max(io->second.inPeak[0], io->second.inPeak[1]);
+        const float fxOut = std::max(io->second.outPeak[0], io->second.outPeak[1]);
+        QVERIFY2(fxIn > 0.3F && std::abs((20.0F * std::log10(fxOut / fxIn)) + 20.0F) < 1.0F,
+                 qPrintable(QStringLiteral("%1 %2").arg(fxIn).arg(fxOut)));
+        buses.setEffectMetering({});
+
+        // A built-in after it, then before it: the series follows the chain.
+        const auto fx = effectsNodeName(inBus);
+        devices.addEffect(micRow(), QStringLiteral("gain"));
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return linkCount(m_graph, mic, plug) == 2 && linkCount(m_graph, plug, fx) == 2 &&
+                       linkCount(m_graph, fx, inBus) == 2 && linkCount(m_graph, plug, inBus) == 0;
+            },
+            10000));
+        devices.moveEffect(micRow(), 1, 0);
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return linkCount(m_graph, mic, fx) == 2 && linkCount(m_graph, fx, plug) == 2 &&
+                       linkCount(m_graph, plug, inBus) == 2 && linkCount(m_graph, mic, plug) == 0 &&
+                       linkCount(m_graph, fx, inBus) == 0;
+            },
+            10000));
+        QVERIFY(linksHold(m_graph, {{mic, fx}, {fx, plug}, {plug, inBus}}));
+
+        // It crashes (and again, each time it's restarted): the strip
+        // carries on without it, and after a few tries it's left off.
+        devices.setEffectParam(micRow(), 1, QStringLiteral("crash"), 1.0);
+        QVERIFY(QTest::qWaitFor([&] { return !buses.pluginErrors().empty(); }, 15000));
+        QCOMPARE(buses.pluginErrors().begin()->first, (std::pair{micKey, std::size_t{1}}));
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return nodeNamed(m_graph, plug) == nullptr && linkCount(m_graph, fx, inBus) == 2;
+            },
+            5000));
+        const float without = peakWhilePlaying(1200);
+        QVERIFY2(without > 0.3F, qPrintable(QString::number(without)));
+
+        // A changed setting gives it another go.
+        devices.setEffectParam(micRow(), 1, QStringLiteral("crash"), 0.0);
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return buses.pluginErrors().empty() && linkCount(m_graph, fx, plug) == 2 &&
+                       linkCount(m_graph, plug, inBus) == 2 && linkCount(m_graph, fx, inBus) == 0;
+            },
+            20000));
+        const float back = peakWhilePlaying(1200);
+        QVERIFY2(back > 0.02F && back < 0.1F, qPrintable(QString::number(back)));
+
+        // Without effects the mic goes straight to its bus, and the host goes.
+        devices.removeEffect(micRow(), 1);
+        devices.removeEffect(micRow(), 0);
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return linkCount(m_graph, mic, inBus) == 2 && nodeNamed(m_graph, plug) == nullptr &&
+                       nodeNamed(m_graph, fx) == nullptr;
+            },
+            10000));
+        buses.setMetering(false);
+    }
+
     void runsEffects()
     {
         // A fake mic sent to a mix bus, and the test sink as an output: each
@@ -847,6 +1047,7 @@ private Q_SLOTS:
                        sentThrough(m_graph, inBus, mixNode, send, 2);
             },
             5000));
+        QVERIFY(linksHold(m_graph, {{mic, micFx}, {micFx, inBus}}));
         const auto *fxNode = nodeNamed(m_graph, micFx);
         QCOMPARE(prop(*fxNode, "media.class"), std::string(effectsMediaClass));
         QCOMPARE(prop(*fxNode, "node.autoconnect"), "false");

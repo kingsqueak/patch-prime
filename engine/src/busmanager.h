@@ -7,6 +7,7 @@
 #include "effects.h"
 #include "endpoint.h"
 #include "graphtypes.h"
+#include "pluginrunner.h"
 
 #include <QObject>
 #include <QTimer>
@@ -14,6 +15,7 @@
 #include <chrono>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -62,8 +64,13 @@ std::map<std::string, std::string> migrateBusNames(DeviceStore &store);
 constexpr std::string_view effectsMediaClass = "Audio/Patchprime/Effects";
 
 // The effects node for the bus named busName: "patchprime.fx.<rest>"
-// ("patchprime.out.maudio-1" -> "patchprime.fx.out.maudio-1").
-std::string effectsNodeName(const std::string &busName);
+// ("patchprime.out.maudio-1" -> "patchprime.fx.out.maudio-1"). A chain
+// with plugins in it is cut into segments (see splitChain): the nth run of
+// built-in effects (from 1) runs in "patchprime.fx.<rest>" for the first,
+// "patchprime.fx.<rest>.<n>" for the others; the nth plugin in
+// "patchprime.plug.<rest>.<n>", a node of its own plugin host process.
+std::string effectsNodeName(const std::string &busName, int run = 1);
+std::string pluginNodeName(const std::string &busName, int plugin);
 
 // Whether audio from the strip `from` reaches the strip `to` through sends
 // (directly or via other strips), by endpoint key: a ducker on `from` keyed
@@ -181,6 +188,7 @@ private:
 //            while that output's own bus is muted
 //   effects  hardware source ──► [fx filter] ──► [bus]           (inputs)
 //            [bus] ──monitor──► [fx filter] ──► hardware, sends  (the rest)
+//            where [fx filter] may be a series: [fx] ──► [plugin] ──► [fx]...
 //
 // A strip with effects gets a processing node (patchprime.fx.*, a pw_filter
 // in this process running the chain on the realtime thread). On a hardware
@@ -191,6 +199,10 @@ private:
 // device's monitor get it without the effects. Meters show the bus. Unlike
 // buses, filters don't linger: while the daemon is down, a strip with effects
 // is silent; before its filter is up, it runs dry.
+//
+// Plugins run in processes of their own (PluginRunner), each a node in the
+// series. A plugin node that isn't up (starting, crashed) is left out: the
+// links go around it, so the strip carries on without that plugin.
 //
 // Each send has its own small gain node (patchprime.send.*), whose volume
 // is the send level, so one input can go to two places at different levels.
@@ -235,6 +247,9 @@ public:
     // with an effects window open), since measuring costs CPU.
     void setEffectMetering(std::set<std::string> keys);
     std::map<std::pair<std::string, std::size_t>, EffectLevels> takeEffectLevels();
+    // Plugins that are off because they failed (couldn't load, kept
+    // crashing): why, by endpoint key and effect index.
+    [[nodiscard]] std::map<std::pair<std::string, std::size_t>, std::string> pluginErrors() const;
 
     // Recording and playback nodes (see RecordingManager), linked here
     // since only the manager knows each strip's ports. Recorders, by node
@@ -256,6 +271,10 @@ public:
     // Removes every Patch Prime bus (and so its links) in the graph. Used by
     // `patchprimed --remove-buses`, which runs without a BusManager.
     static void removeAllBusesIn(PipeWireGraph &graph);
+
+Q_SIGNALS:
+    // A plugin host started, stopped or failed (see pluginErrors()).
+    void pluginsChanged();
 
 private:
     struct Wanted
@@ -294,15 +313,29 @@ private:
         std::vector<std::string> positions;
         bool keyed = false;                  // has the key input
         std::vector<EffectSettings> effects; // what the chain was last given
+        std::vector<std::size_t> indices;    // their positions in the strip's list
         int sampleRate = 0;
     };
 
+    // A strip's processing, from its first node that's up to its last.
     struct FxPorts
     {
         std::vector<PortRef> in;
         std::vector<PortRef> out;
-        std::vector<PortRef> key; // the key input, when the strip has a ducker
+        std::vector<PortRef> key; // the key inputs, when the strip has duckers
+        // Every node of the strip's series and their ports, up or not, so
+        // links left from an earlier shape of the series can be removed.
+        std::set<std::uint32_t> nodes;
+        std::set<std::uint32_t> allIn;
+        std::set<std::uint32_t> allOut;
     };
+    // Makes or updates the built-in effects node fxName; nullopt when it
+    // couldn't be made, else whether it was made just now.
+    std::optional<bool> ensureEffectsNode(const std::string &fxName, const Wanted &wanted,
+                                          std::vector<EffectSettings> effects,
+                                          std::vector<std::size_t> indices,
+                                          const std::vector<std::string> &positions, bool keyed,
+                                          int rate);
     // A hardware input: its effects go in front of its bus.
     [[nodiscard]] static bool effectsBeforeBus(const Wanted &wanted);
     // Makes, updates and removes effects nodes for the ready buses, and links
@@ -329,6 +362,7 @@ private:
                   const std::map<std::string, std::vector<PortRef>> &stripOuts,
                   const LinkMap &existingLinks);
     void linkSends(const std::map<std::string, std::uint32_t> &ready,
+                   const std::map<std::string, FxPorts> &fx,
                    const std::map<std::string, std::vector<PortRef>> &stripOuts,
                    const std::map<std::string, Wanted> &wanted,
                    const std::map<std::string, WantedSend> &sends,
@@ -365,6 +399,9 @@ private:
     // Meter per bus node name, and the endpoint key it reports for.
     std::map<std::string, std::pair<std::string, std::shared_ptr<MeterLevels>>> m_meters;
     std::map<std::string, Fx> m_effects;
+    PluginRunner *m_runner;
+    // Plugin nodes: node name -> (endpoint key, effect index).
+    std::map<std::string, std::pair<std::string, std::size_t>> m_plugins;
     // The hardware node cue last played to, so its links can be cleaned up
     // when cue moves elsewhere or is turned off.
     std::optional<std::uint32_t> m_cueHardware;

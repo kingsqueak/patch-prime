@@ -6,6 +6,7 @@
 #include "busmanager.h"
 #include "effects.h"
 #include "pipewiregraph.h"
+#include "plugins.h"
 
 #include <QLoggingCategory>
 
@@ -591,10 +592,17 @@ bool DeviceModel::editEffects(int row, const std::function<bool(std::vector<Effe
 
 void DeviceModel::addEffect(int row, const QString &type)
 {
-    const auto params = effectParams(type.toStdString());
-    if (params.empty()) {
+    const auto t = type.toStdString();
+    // A plugin must be installed and able to run here; a built-in known.
+    if (isPluginType(t)) {
+        const auto *info = m_pluginCatalog != nullptr ? m_pluginCatalog->find(t) : nullptr;
+        if (info == nullptr || !info->problem.empty()) {
+            return;
+        }
+    } else if (!makeEffect(t)) {
         return;
     }
+    const auto params = paramsFor(t, m_pluginCatalog);
     editEffects(row, [&](std::vector<EffectSettings> &effects) {
         if (effects.size() >= maxEffectsPerStrip) {
             return false;
@@ -650,13 +658,13 @@ void DeviceModel::setEffectEnabled(int row, int index, bool enabled)
 
 void DeviceModel::setEffectParam(int row, int index, const QString &name, double value)
 {
-    editEffects(row, [index, &name, value](std::vector<EffectSettings> &effects) {
+    editEffects(row, [this, index, &name, value](std::vector<EffectSettings> &effects) {
         if (index < 0 || std::cmp_greater_equal(index, effects.size())) {
             return false;
         }
         auto &e = effects[static_cast<std::size_t>(index)];
         const auto key = name.toStdString();
-        for (const auto &p : effectParams(e.type)) {
+        for (const auto &p : paramsFor(e.type, m_pluginCatalog)) {
             if (p.name == key) {
                 const double clamped = validParam(p, value);
                 if (e.params[key] == clamped) {

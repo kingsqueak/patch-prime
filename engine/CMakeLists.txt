@@ -48,6 +48,10 @@ add_library(patchprime-engine STATIC
     src/hotplugrecovery.h
     src/pipewiregraph.cpp
     src/pipewiregraph.h
+    src/pluginrunner.cpp
+    src/pluginrunner.h
+    src/plugins.cpp
+    src/plugins.h
     src/recording.cpp
     src/recording.h
     src/recordingmanager.cpp
@@ -60,5 +64,7 @@ target_include_directories(patchprime-engine PUBLIC src)
 target_link_libraries(patchprime-engine
     PUBLIC Qt6::Core patchprime-dsp
     PRIVATE PkgConfig::PipeWire PkgConfig::SndFile)
-target_compile_definitions(patchprime-engine PRIVATE QT_NO_CAST_FROM_ASCII)
+target_compile_definitions(patchprime-engine PRIVATE
+    QT_NO_CAST_FROM_ASCII
+    PATCHPRIME_PLUGINHOST_INSTALLED="${CMAKE_INSTALL_FULL_LIBEXECDIR}/patchprime-pluginhost")
 patchprime_set_warnings(patchprime-engine)

@@ -9,6 +9,7 @@
 #include "devicemodel.h"
 #include "endpoint.h"
 #include "pipewiregraph.h"
+#include "plugins.h"
 #include "recordingmanager.h"
 #include "scenes.h"
 
@@ -26,9 +27,9 @@
 PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *devices,
                                      pp::BusManager *buses, pp::AppRouter *apps,
                                      pp::SceneStore *scenes, pp::RecordingManager *recordings,
-                                     QObject *parent)
+                                     pp::PluginCatalog *plugins, QObject *parent)
     : QObject(parent), m_graph(graph), m_devices(devices), m_buses(buses), m_apps(apps),
-      m_recordings(recordings), m_scenes(scenes)
+      m_recordings(recordings), m_plugins(plugins), m_scenes(scenes)
 {
     m_stateTimer.setSingleShot(true);
     m_stateTimer.setInterval(30);
@@ -46,6 +47,8 @@ PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *
             &PatchPrimeService::scheduleState);
 
     connect(recordings, &pp::RecordingManager::changed, this, &PatchPrimeService::scheduleState);
+    connect(plugins, &pp::PluginCatalog::changed, this, &PatchPrimeService::scheduleState);
+    connect(buses, &pp::BusManager::pluginsChanged, this, &PatchPrimeService::scheduleState);
     connect(recordings, &pp::RecordingManager::filesChanged, this, [this] {
         ++m_recordingsRevision;
         scheduleState();
@@ -122,6 +125,18 @@ QString PatchPrimeService::GetState() const
     }
     const QJsonObject state{
         {QStringLiteral("effectTypes"), effectTypes},
+        {QStringLiteral("pluginsRevision"), m_plugins->revision()},
+        {QStringLiteral("pluginsScanning"), m_plugins->isScanning()},
+        {QStringLiteral("pluginErrors"), [this] {
+             QJsonObject errors;
+             for (const auto &[at, message] : m_buses->pluginErrors()) {
+                 const auto key = QString::fromStdString(at.first);
+                 auto forStrip = errors.value(key).toObject();
+                 forStrip.insert(QString::number(at.second), QString::fromStdString(message));
+                 errors.insert(key, forStrip);
+             }
+             return errors;
+         }()},
         {QStringLiteral("connected"), m_devices->isConnected()},
         {QStringLiteral("devices"), devices},
         {QStringLiteral("apps"), apps},
@@ -430,6 +445,17 @@ void PatchPrimeService::SetEffectParam(const QString &key, int index, const QStr
     if (const int row = rowFor(key); row >= 0) {
         m_devices->setEffectParam(row, index, name, value);
     }
+}
+
+QString PatchPrimeService::GetPlugins() const
+{
+    return QString::fromUtf8(pp::pluginsToJson(m_plugins->plugins()));
+}
+
+void PatchPrimeService::RescanPlugins()
+{
+    m_plugins->rescan();
+    scheduleState();
 }
 
 QString PatchPrimeService::StartRecording(const QString &key)

@@ -26,6 +26,8 @@ class PipeWireGraph;
 // When an endpoint appears under a node.name nothing is saved for, it's matched
 // against the offline saved endpoints by signature (see matchSignature) and,
 // when one clearly fits, that entry is moved to the new name.
+class PluginCatalog;
+
 class DeviceModel : public QAbstractListModel
 {
     Q_OBJECT
@@ -109,6 +111,10 @@ public:
     // The strip an effect listens to (a ducker's key): another strip's key,
     // or empty for none. Ignored for effects that don't take one.
     Q_INVOKABLE void setEffectKey(int row, int index, const QString &key);
+    // The installed plugins, for adding and checking plugin effects (types
+    // "lv2:<uri>"); without it, only built-in effects can be added.
+    void setPluginCatalog(const PluginCatalog *catalog) { m_pluginCatalog = catalog; }
+    [[nodiscard]] const PluginCatalog *pluginCatalog() const { return m_pluginCatalog; }
     // Cue: the hardware output it plays to (a key, or empty to turn cue off
     // and clear every cued strip), and whether a strip is cued. Cued strips
     // are temporary: not saved, not part of scenes.
@@ -174,6 +180,7 @@ Q_SIGNALS:
     void recordingSettingsChanged();
 
 private:
+    const PluginCatalog *m_pluginCatalog = nullptr;
     [[nodiscard]] static bool lessThan(const Row &a, const Row &b);
     [[nodiscard]] int rowForNode(std::uint32_t nodeId) const;
     [[nodiscard]] int findReattachCandidate(const Endpoint &live) const;
