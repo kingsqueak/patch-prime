@@ -63,7 +63,7 @@ QQC2.ApplicationWindow {
                                                            scroll.contentItem.contentHeight - scroll.height));
     }
 
-    title: qsTr("User Guide — Patch Prime")
+    title: qsTr("User Guide")
     minimumWidth: Kirigami.Units.gridUnit * 24
     minimumHeight: Kirigami.Units.gridUnit * 16
     color: Kirigami.Theme.backgroundColor

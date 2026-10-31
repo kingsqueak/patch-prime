@@ -43,7 +43,7 @@ QQC2.ApplicationWindow {
         requestActivate();
     }
 
-    title: qsTr("Effects: %1 — Patch Prime").arg(panel.label)
+    title: qsTr("Effects: %1").arg(panel.label)
     // The effects' input and output levels cost CPU: only while they're seen.
     onVisibleChanged: Devices.watchEffectLevels(panel.key, visible)
     Component.onDestruction: {
