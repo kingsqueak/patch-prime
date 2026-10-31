@@ -28,7 +28,7 @@ See the **[user guide](docs/HELP.md)** for how to use it.
 
 ## Status
 
-Version 0.10: under active development and in daily use on the author's machine. Phases 1–6 (devices, mixer, routing, apps, scenes, effects, monitoring) are done, with packages for Ubuntu 26.04. Next: plugin hosting (LV2 first) and hardware control.
+Version 0.10: under active development and in daily use on the author's machine. Phases 1–6 (devices, mixer, routing, apps, scenes, effects, monitoring) are done, with packages for Ubuntu 26.04, Fedora 44 and Arch Linux. Next: plugin hosting (LV2 first) and hardware control.
 
 ## Requirements
 
@@ -57,13 +57,17 @@ The noise suppression uses [RNNoise](https://github.com/xiph/rnnoise) (BSD-3-Cla
 
 ### From a package
 
-Each release has `.deb` packages for Ubuntu 26.04 on amd64 and arm64 (64-bit ARM), built by GitHub Actions; download the one for your machine from the [Releases](https://github.com/kingsqueak/patch-prime/releases) page and install it:
+Each release has packages built by GitHub Actions; download the one for your system from the [Releases](https://github.com/kingsqueak/patch-prime/releases) page:
 
-```sh
-sudo apt install ./patchprime_0.10-1_amd64.deb
-```
+| System | Package | Install |
+| --- | --- | --- |
+| Ubuntu 26.04 (amd64, arm64) | `patchprime_<version>-1_<arch>.deb` | `sudo apt install ./patchprime_0.10-1_amd64.deb` |
+| Fedora 44 (x86_64, aarch64) | `patchprime-<version>-1.fc44.<arch>.rpm` | `sudo dnf install ./patchprime-0.10-1.fc44.x86_64.rpm` |
+| Arch Linux (x86_64) | `patchprime-<version>-1-x86_64.pkg.tar.zst` | `sudo pacman -U patchprime-0.10-1-x86_64.pkg.tar.zst` |
 
-The engine starts at your next login (or right away when you open **Patch Prime** from the application menu). To build the packages yourself: configure with `-DCMAKE_INSTALL_PREFIX=/usr`, build, then `cpack -G DEB` in the build directory.
+On Arch you can also build it yourself: `makepkg -si` in [`packaging/arch`](packaging/arch). The engine starts at your next login (or right away when you open **Patch Prime** from the application menu). Patch Prime needs Qt 6.10 or newer, KDE Frameworks 6 and PipeWire 1.6, so older releases of these distributions can't run it.
+
+To build the .deb or .rpm yourself: configure with `-DCMAKE_INSTALL_PREFIX=/usr`, build, then `cpack -G DEB` or `cpack -G RPM` in the build directory.
 
 ### From source
 
