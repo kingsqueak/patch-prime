@@ -2,8 +2,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileCopyrightText: 2026 KC2RGW Chris
 set -e
-# The engine starts at every user's login (from the next one on).
 if [ "$1" = "configure" ] && command -v systemctl >/dev/null 2>&1; then
+    # The engine starts at every user's login (from the next one on).
     systemctl --global enable patchprimed.service || true
+    # Running user managers read the new unit file (else systemctl warns
+    # that it "changed on disk"). The running engine keeps going; it runs
+    # the new version once restarted.
+    for user in $(loginctl list-users --no-legend 2>/dev/null | awk '{print $2}'); do
+        systemctl --user --machine="$user@.host" daemon-reload >/dev/null 2>&1 || true
+    done
 fi
 exit 0

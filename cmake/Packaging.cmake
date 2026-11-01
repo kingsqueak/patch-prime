@@ -43,7 +43,7 @@ qml6-module-qtquick-dialogs")
 # Starts the engine at every user's login (it's also D-Bus activated when
 # the window opens).
 set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
-    "${PROJECT_SOURCE_DIR}/packaging/debian/postinst;${PROJECT_SOURCE_DIR}/packaging/debian/prerm")
+    "${PROJECT_SOURCE_DIR}/packaging/debian/postinst;${PROJECT_SOURCE_DIR}/packaging/debian/prerm;${PROJECT_SOURCE_DIR}/packaging/debian/postrm")
 set(CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION ON)
 
 # Fedora
@@ -61,6 +61,7 @@ set(CPACK_RPM_PACKAGE_REQUIRES
     "pipewire >= 1.6, wireplumber, kf6-kirigami, kf6-kdeclarative, kf6-qqc2-desktop-style, qt6-qtdeclarative, lilv-libs, alsa-lib, kf6-kstatusnotifieritem")
 set(CPACK_RPM_POST_INSTALL_SCRIPT_FILE "${PROJECT_SOURCE_DIR}/packaging/rpm/postinstall")
 set(CPACK_RPM_PRE_UNINSTALL_SCRIPT_FILE "${PROJECT_SOURCE_DIR}/packaging/rpm/preuninstall")
+set(CPACK_RPM_POST_UNINSTALL_SCRIPT_FILE "${PROJECT_SOURCE_DIR}/packaging/rpm/postuninstall")
 # Directories other packages own.
 list(APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
      /usr/share/applications /usr/share/dbus-1 /usr/share/dbus-1/services

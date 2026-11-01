@@ -1,11 +1,28 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileCopyrightText: 2026 KC2RGW Chris
 
+# Running user managers read the unit file again (else systemctl warns that
+# it "changed on disk").
+_reload_user_managers() {
+    for user in $(loginctl list-users --no-legend 2>/dev/null | awk '{print $2}'); do
+        systemctl --user --machine="$user@.host" daemon-reload >/dev/null 2>&1 || true
+    done
+}
+
 # The engine starts at every user's login (from the next one on).
 post_install() {
     systemctl --global enable patchprimed.service >/dev/null 2>&1 || true
+    _reload_user_managers
+}
+
+post_upgrade() {
+    _reload_user_managers
 }
 
 pre_remove() {
     systemctl --global disable patchprimed.service >/dev/null 2>&1 || true
+}
+
+post_remove() {
+    _reload_user_managers
 }
