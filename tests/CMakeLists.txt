@@ -26,6 +26,8 @@ patchprime_add_test(test_recording test_recording.cpp)
 patchprime_add_test(test_mackie test_mackie.cpp fakemidiport.h)
 patchprime_add_test(test_midimapper test_midimapper.cpp fakemidiport.h)
 patchprime_add_test(test_hotkeys test_hotkeys.cpp)
+patchprime_add_test(test_ctl test_ctl.cpp)
+target_link_libraries(test_ctl PRIVATE patchprime-ctl-plan)
 # The daemon's kglobalaccel backend, against the session's kglobalaccel.
 find_package(Qt6 6.10 REQUIRED COMPONENTS DBus)
 patchprime_add_test(test_globalshortcuts test_globalshortcuts.cpp ${PROJECT_SOURCE_DIR}/daemon/globalshortcuts.cpp

@@ -17,6 +17,7 @@ Patch Prime turns your computer's audio into a small mixing console. This guide 
 - [Control surface (Mackie Control)](#control-surface-mackie-control)
 - [MIDI controllers (MIDI Learn)](#midi-controllers-midi-learn)
 - [Global hotkeys](#global-hotkeys)
+- [Scripts and Stream Deck (patchprime-ctl)](#scripts-and-stream-deck-patchprime-ctl)
 - [Unplugging and plugging in devices](#unplugging-and-plugging-in-devices)
 - [Recipes](#recipes)
 - [Troubleshooting](#troubleshooting)
@@ -346,6 +347,29 @@ What a hotkey can do:
 - **Level up** and **Level down**: 1 dB per press. Hold the key to keep going.
 
 The **Hotkeys** list on the Devices page shows them all: click a key to change it, or remove a hotkey. They're KDE global shortcuts, so they also appear in **System Settings → Keyboard → Shortcuts → Patch Prime**, where keys can be changed too. They work on X11 and Wayland.
+
+## Scripts and Stream Deck (patchprime-ctl)
+
+`patchprime-ctl` controls the mixer from a terminal, a script, or any tool that runs commands: a Stream Deck through StreamController, a macro keyboard, a cron job. Strips are named by their label, in any case (put names with spaces in quotes). Switches take `on`, `off` or `toggle` (the default).
+
+```
+patchprime-ctl list                      # the strips, their levels and mutes
+patchprime-ctl mute Mic                  # mute on/off
+patchprime-ctl mute Mic off              # (push to talk: "off" on press, "on" on release)
+patchprime-ctl volume "Stream Mix" -6    # set a level in dB
+patchprime-ctl volume Desktop down 3     # nudge it (1 dB without a number)
+patchprime-ctl cue Mic
+patchprime-ctl send Mic "Stream Mix" on
+patchprime-ctl send-level Mic "Stream Mix" up
+patchprime-ctl effect Mic 2 off          # the strip's second effect
+patchprime-ctl record "Stream Mix"
+patchprime-ctl scene Podcast
+patchprime-ctl get Mic muted             # yes or no: for a button's state
+```
+
+`patchprime-ctl --help` lists everything. `list --json` gives the strips as JSON. Two strips with the same label are told apart by their key, which `list --json` shows.
+
+**Stream Deck:** in StreamController, give a button the **Run command** action with, for example, `patchprime-ctl mute Mic`. For push to talk, run `patchprime-ctl mute Mic off` on press and `patchprime-ctl mute Mic on` on release.
 
 ## Unplugging and plugging in devices
 

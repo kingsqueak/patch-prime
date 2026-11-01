@@ -47,6 +47,7 @@ pkg_check_modules(Lilv REQUIRED IMPORTED_TARGET lilv-0>=0.24 lv2>=1.18)
 
 add_subdirectory(engine)
 add_subdirectory(daemon)
+add_subdirectory(ctl)
 add_subdirectory(pluginhost)
 add_subdirectory(probe)
 
