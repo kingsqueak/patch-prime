@@ -343,6 +343,7 @@ void EffectChain::process(float *const *channels, int frames, const float *key,
         const float target = effect.enabled.load(std::memory_order_relaxed) ? 1.0F : 0.0F;
         if (mix == 0.0F && target == 0.0F) {
             // Bypassed: not processed at all, and its output is its input.
+            effect.bypassed(frames);
             if (measure) {
                 measureAt(m_points[e + 1], levels, frames, rmsStep, m_groups);
             }

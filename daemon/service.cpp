@@ -127,6 +127,14 @@ QString PatchPrimeService::GetState() const
         {QStringLiteral("effectTypes"), effectTypes},
         {QStringLiteral("pluginsRevision"), m_plugins->revision()},
         {QStringLiteral("pluginsScanning"), m_plugins->isScanning()},
+        {QStringLiteral("pluginsScan"), QJsonObject{
+             {QStringLiteral("done"), m_plugins->progress().done},
+             {QStringLiteral("total"), m_plugins->progress().total},
+             {QStringLiteral("found"), m_plugins->progress().found},
+         }},
+        {QStringLiteral("pluginsLastScan"), m_plugins->lastScan().isValid()
+                                                ? m_plugins->lastScan().toString(Qt::ISODate)
+                                                : QString()},
         {QStringLiteral("pluginWindows"), [this] {
              QJsonObject windows;
              for (const auto &[key, index] : m_buses->pluginWindows()) {

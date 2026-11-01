@@ -30,7 +30,8 @@ public:
     // Brings it to the front.
     virtual void raise() = 0;
 
-    // A parameter the editor changed: its name and value.
+    // A parameter the editor changed: its name and value (set before the
+    // editor starts, so its first changes are heard too).
     std::function<void(const std::string &, double)> onParam;
 };
 
@@ -48,11 +49,23 @@ public:
     // Whether its state changed since the last call (a plugin that says so;
     // others are asked from time to time while their window is open).
     virtual bool takeStateDirty() { return false; }
-    // Its editor (check the window's error()).
-    virtual std::unique_ptr<PluginWindow> openWindow(const std::string &title) = 0;
+    // Its editor (check the window's error()). onParam hears the parameters
+    // changed in it, from the start.
+    virtual std::unique_ptr<PluginWindow>
+    openWindow(const std::string &title, std::function<void(const std::string &, double)> onParam) = 0;
     // Parameters the plugin changed by itself (its editor, in CLAP), as
     // fn(name, value), on the main thread.
     virtual void takeParamChanges(const std::function<void(const std::string &, double)> & /*fn*/) {}
+    // On the main thread, about 30 times a second: what the plugin asked to
+    // have done there.
+    virtual void mainThreadTick() {}
+    // The plugin asked to be started afresh (its host exits; the engine
+    // starts it again).
+    [[nodiscard]] virtual bool wantsRestart() const { return false; }
+    // Before the node goes: lets the plugin stop processing on the audio
+    // thread (its next cycle), where some plugins expect that.
+    virtual void stopProcessingSoon() {}
+    [[nodiscard]] virtual bool processingStopped() const { return true; }
 };
 
 } // namespace pp

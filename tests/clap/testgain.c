@@ -11,6 +11,7 @@
 
 #include <signal.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -195,18 +196,37 @@ static const clap_plugin_audio_ports_t ports = {.count = ports_count, .get = por
 
 // --- state: the trim
 
+// Streams may move fewer bytes than asked: loop until all are through (0 is
+// the end, -1 an error).
 static bool state_save(const clap_plugin_t *plugin, const clap_ostream_t *stream)
 {
     const TestGain *self = plugin->plugin_data;
-    return stream->write(stream, &self->trim, sizeof(self->trim)) == sizeof(self->trim);
+    const char *at = (const char *)&self->trim;
+    uint64_t left = sizeof(self->trim);
+    while (left > 0) {
+        const int64_t n = stream->write(stream, at, left);
+        if (n <= 0) {
+            return false;
+        }
+        at += n;
+        left -= (uint64_t)n;
+    }
+    return true;
 }
 
 static bool state_load(const clap_plugin_t *plugin, const clap_istream_t *stream)
 {
     TestGain *self = plugin->plugin_data;
     float trim = 1.0f;
-    if (stream->read(stream, &trim, sizeof(trim)) != sizeof(trim)) {
-        return false;
+    char *at = (char *)&trim;
+    uint64_t left = sizeof(trim);
+    while (left > 0) {
+        const int64_t n = stream->read(stream, at, left);
+        if (n <= 0) {
+            return false;
+        }
+        at += n;
+        left -= (uint64_t)n;
     }
     self->trim = trim;
     return true;
@@ -349,6 +369,8 @@ static const clap_plugin_factory_t factory = {
 static bool entry_init(const char *path)
 {
     (void)path;
+    printf("testgain (CLAP): loading\n"); // chatter, as real plugins do
+    fflush(stdout);
     return true;
 }
 

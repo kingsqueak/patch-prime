@@ -7,8 +7,8 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 
-#include <cstdio>
-#include <print>
+#include <string_view>
+#include <unistd.h>
 #include <utility>
 
 namespace pp {
@@ -16,10 +16,11 @@ namespace pp {
 namespace {
 
 // X errors a plugin's window causes (one already gone, say) aren't fatal.
-int ignoreXError(Display * /*display*/, XErrorEvent *event)
+// Noted without allocating or locking: Xlib may call this holding its own.
+int ignoreXError(Display * /*display*/, XErrorEvent * /*event*/)
 {
-    std::println(stderr, "patchprime-pluginhost: X error {} (request {})", event->error_code,
-                 event->request_code);
+    constexpr std::string_view message = "patchprime-pluginhost: an X error (ignored)\n";
+    [[maybe_unused]] const auto n = ::write(STDERR_FILENO, message.data(), message.size());
     return 0;
 }
 
@@ -97,8 +98,65 @@ void X11Window::resize(int width, int height)
     }
     m_width = width;
     m_height = height;
+    applySizeHints();
     XResizeWindow(m_display, m_window, static_cast<unsigned>(width), static_cast<unsigned>(height));
     XFlush(m_display);
+}
+
+void X11Window::setEmbedder(bool on)
+{
+    m_embedder = on;
+    if (m_display != nullptr) {
+        XSelectInput(m_display, m_window, StructureNotifyMask | (on ? SubstructureNotifyMask : 0));
+    }
+}
+
+void X11Window::embed(XWindowId child)
+{
+    // XEmbed's handshake: embedded (we're the embedder, version 0), shown,
+    // active, focused.
+    const Atom xembed = XInternAtom(m_display, "_XEMBED", False);
+    const auto send = [&](long message, long detail, long data1) { // NOLINT(google-runtime-int): X's longs
+        XEvent event{};
+        event.xclient.type = ClientMessage;     // NOLINT(cppcoreguidelines-pro-type-union-access)
+        event.xclient.window = child;           // NOLINT(cppcoreguidelines-pro-type-union-access)
+        event.xclient.message_type = xembed;    // NOLINT(cppcoreguidelines-pro-type-union-access)
+        event.xclient.format = 32;              // NOLINT(cppcoreguidelines-pro-type-union-access)
+        event.xclient.data.l[0] = CurrentTime;  // NOLINT(cppcoreguidelines-pro-type-union-access)
+        event.xclient.data.l[1] = message;      // NOLINT(cppcoreguidelines-pro-type-union-access)
+        event.xclient.data.l[2] = detail;       // NOLINT(cppcoreguidelines-pro-type-union-access)
+        event.xclient.data.l[3] = data1;        // NOLINT(cppcoreguidelines-pro-type-union-access)
+        event.xclient.data.l[4] = 0;            // NOLINT(cppcoreguidelines-pro-type-union-access)
+        XSendEvent(m_display, child, False, NoEventMask, &event);
+    };
+    constexpr long embeddedNotify = 0; // NOLINT(google-runtime-int)
+    constexpr long windowActivate = 1; // NOLINT(google-runtime-int)
+    constexpr long focusIn = 4;        // NOLINT(google-runtime-int)
+    send(embeddedNotify, 0, static_cast<long>(m_window)); // NOLINT(google-runtime-int)
+    XMapWindow(m_display, child);
+    send(windowActivate, 0, 0);
+    send(focusIn, 0, 0);
+    XFlush(m_display);
+}
+
+void X11Window::setResizable(bool resizable)
+{
+    m_resizable = resizable;
+    applySizeHints();
+}
+
+void X11Window::applySizeHints()
+{
+    if (m_display == nullptr) {
+        return;
+    }
+    XSizeHints hints{};
+    if (!m_resizable) {
+        hints.flags = PMinSize | PMaxSize;
+        hints.min_width = hints.max_width = m_width;
+        hints.min_height = hints.max_height = m_height;
+    }
+    XSetWMNormalHints(m_display, m_window, &hints);
 }
 
 void X11Window::resize(XWindowId window, int width, int height)
@@ -140,6 +198,10 @@ bool X11Window::pump(const std::function<void(int, int)> &resized)
         if (event.type == ClientMessage &&
             std::cmp_equal(event.xclient.data.l[0], m_deleteAtom)) { // NOLINT(cppcoreguidelines-pro-type-union-access)
             open = false;
+        } else if (m_embedder && event.type == CreateNotify && event.xcreatewindow.parent == m_window) { // NOLINT(cppcoreguidelines-pro-type-union-access)
+            embed(event.xcreatewindow.window); // NOLINT(cppcoreguidelines-pro-type-union-access)
+        } else if (m_embedder && event.type == ReparentNotify && event.xreparent.parent == m_window) { // NOLINT(cppcoreguidelines-pro-type-union-access)
+            embed(event.xreparent.window); // NOLINT(cppcoreguidelines-pro-type-union-access)
         } else if (event.type == ConfigureNotify && event.xconfigure.window == m_window) { // NOLINT(cppcoreguidelines-pro-type-union-access)
             const int width = event.xconfigure.width;   // NOLINT(cppcoreguidelines-pro-type-union-access)
             const int height = event.xconfigure.height; // NOLINT(cppcoreguidelines-pro-type-union-access)

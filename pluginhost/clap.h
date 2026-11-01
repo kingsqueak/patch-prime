@@ -61,13 +61,19 @@ public:
     void prepare(double sampleRate, int channels) override;
     void process(float *const *channels, int channelCount, int frames) noexcept override;
     void setParam(const std::string &name, double value) override;
+    void bypassed(int frames) noexcept override;
+    void resume() noexcept override;
 
     [[nodiscard]] const std::string &error() const override { return m_error; }
     [[nodiscard]] std::string saveState() const override;
     void setInitialState(std::string state) override { m_initialState = std::move(state); }
     bool takeStateDirty() override { return m_stateDirty.exchange(false); }
-    std::unique_ptr<PluginWindow> openWindow(const std::string &title) override;
+    std::unique_ptr<PluginWindow>
+    openWindow(const std::string &title, std::function<void(const std::string &, double)> onParam) override;
     void takeParamChanges(const std::function<void(const std::string &, double)> &fn) override;
+    void mainThreadTick() override;
+    void stopProcessingSoon() override { m_stopRequested.store(true, std::memory_order_release); }
+    [[nodiscard]] bool processingStopped() const override { return m_stopped.load(std::memory_order_acquire); }
 
 private:
     friend class ClapWindow;
@@ -86,8 +92,10 @@ private:
         ClapEffect *effect = nullptr;
         clap_host_t host{};
         const clap_plugin_t *plugin = nullptr;
+        const clap_plugin_params_t *params = nullptr;
         bool active = false;
         bool processing = false; // start_processing called (realtime)
+        std::atomic<bool> callback{false}; // on_main_thread asked for
         std::vector<double> sent; // per param: what it was last sent (realtime)
         // This block's events in (parameter values) and the lists' vtables.
         std::vector<clap_event_param_value_t> events;
@@ -109,6 +117,9 @@ private:
     };
 
     std::unique_ptr<Instance> makeInstance();
+    void queueParams(Instance &inst) noexcept;
+    // Realtime: whether processing has been stopped (it stops it, the first time).
+    bool stoppedHere() noexcept;
     static void destroyInstance(Instance &instance);
     void readPorts(const clap_plugin_t *plugin);
     void loadState(const clap_plugin_t *plugin) const;
@@ -139,14 +150,25 @@ private:
     std::vector<double> m_block;
     std::int64_t m_steadyTime = 0;
     std::atomic<bool> m_stateDirty{false};
-    std::atomic<bool> m_callbackQueued{false};
+    std::atomic<bool> m_stopRequested{false};
+    std::atomic<bool> m_stopped{false};
     std::thread::id m_mainThread;
-    ClapWindow *m_window = nullptr;
+    // The open editor, and what the plugin asked of it from any thread.
+    std::atomic<ClapWindow *> m_window{nullptr};
+    std::atomic<std::uint64_t> m_resizeTo{0}; // width << 32 | height, or 0
+    std::atomic<bool> m_showRequested{false};
+    std::atomic<bool> m_guiClosed{false};
+    std::atomic<bool> m_guiDestroyed{false};
     // Timers and file descriptors the plugin asked for (its editor's), run
     // by Qt on the main thread.
     std::map<clap_id, QTimer *> m_timers;
     clap_id m_nextTimer = 1;
-    std::map<int, QSocketNotifier *> m_fds;
+    struct FdWatch
+    {
+        QSocketNotifier *read = nullptr;
+        QSocketNotifier *write = nullptr;
+    };
+    std::map<int, FdWatch> m_fds;
     QObject *m_context = nullptr; // owns the timers and notifiers
 };
 
@@ -164,10 +186,10 @@ public:
     [[nodiscard]] const std::string &error() const override { return m_error; }
     bool idle() override;
     void raise() override { m_window.raise(); }
+    // On the main thread: does what the plugin asked for (resize, show).
+    void tick();
 
 private:
-    friend class ClapEffect;
-    void resizeTo(std::uint32_t width, std::uint32_t height);
 
     ClapEffect &m_effect;
     std::string m_error;
@@ -175,7 +197,7 @@ private:
     const clap_plugin_t *m_plugin = nullptr;
     const clap_plugin_gui_t *m_gui = nullptr;
     bool m_created = false;
-    bool m_closed = false;
+    bool m_shown = false;
 };
 
 } // namespace pp

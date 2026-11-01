@@ -11,6 +11,7 @@
 
 #include <dlfcn.h>
 
+#include <cmath>
 #include <cstring>
 #include <limits>
 #include <set>
@@ -67,7 +68,20 @@ std::optional<UiChoice> findX11Ui(LilvWorld *world, const LilvPlugin *plugin)
         lilv_nodes_free(needs);
         UiChoice c{.uri = lilv_node_as_uri(lilv_ui_get_uri(ui)),
                    .binary = pathOf(lilv_ui_get_binary_uri(ui)),
-                   .bundle = pathOf(lilv_ui_get_bundle_uri(ui)),};
+                   .bundle = pathOf(lilv_ui_get_bundle_uri(ui)),
+                   .fixedSize = false};
+        // Declared as a feature (required or optional) of the UI.
+        for (const char *predicate : {LV2_CORE__requiredFeature, LV2_CORE__optionalFeature}) {
+            LilvNode *p = lilv_new_uri(world, predicate);
+            LilvNodes *features = lilv_world_find_nodes(world, lilv_ui_get_uri(ui), p, nullptr);
+            LILV_FOREACH (nodes, f, features) {
+                const LilvNode *feature = lilv_nodes_get(features, f);
+                const std::string name = lilv_node_is_uri(feature) ? lilv_node_as_uri(feature) : "";
+                c.fixedSize = c.fixedSize || name == LV2_UI__noUserResize || name == LV2_UI__fixedSize;
+            }
+            lilv_nodes_free(features);
+            lilv_node_free(p);
+        }
         if (usable && !c.binary.empty()) {
             if (!c.bundle.ends_with('/')) {
                 c.bundle += '/';
@@ -82,9 +96,11 @@ std::optional<UiChoice> findX11Ui(LilvWorld *world, const LilvPlugin *plugin)
     return choice;
 }
 
-Lv2Ui::Lv2Ui(Lv2World &world, Lv2Effect &effect, const std::string &title)
+Lv2Ui::Lv2Ui(Lv2World &world, Lv2Effect &effect, const std::string &title,
+             std::function<void(const std::string &, double)> onParamChanged)
     : m_effect(effect)
 {
+    onParam = std::move(onParamChanged); // before the UI starts: it may set values at once
     const auto choice = findX11Ui(world.world(), effect.plugin());
     if (!choice) {
         m_error = "this plugin has no window Patch Prime can show";
@@ -117,7 +133,8 @@ Lv2Ui::Lv2Ui(Lv2World &world, Lv2Effect &effect, const std::string &title)
     m_idleFeature = {.URI = LV2_UI__idleInterface, .data = nullptr};
     m_instanceFeature = {.URI = LV2_INSTANCE_ACCESS_URI, .data = effect.handle()};
     m_dataFeature = {.URI = LV2_DATA_ACCESS_URI, .data = &m_dataAccess};
-    m_features = world.features(m_options.data());
+    m_optionsFeature = {.URI = LV2_OPTIONS__options, .data = m_options.data()};
+    m_features = world.features(&m_optionsFeature);
     m_features.pop_back(); // its terminating null
     for (const LV2_Feature *f : {&m_parentFeature, &m_resizeFeature, &m_idleFeature,
                                  &m_instanceFeature, &m_dataFeature}) {
@@ -150,6 +167,7 @@ Lv2Ui::Lv2Ui(Lv2World &world, Lv2Effect &effect, const std::string &title)
     }
     m_sent.assign(m_effect.controlPorts().empty() ? 0 : m_effect.controlPorts().back() + 1,
                   std::numeric_limits<float>::quiet_NaN());
+    m_told.assign(m_sent.size(), false);
     LV2UI_Widget widget = nullptr;
     m_handle = m_descriptor->instantiate(
         m_descriptor, lilv_node_as_uri(lilv_plugin_get_uri(effect.plugin())),
@@ -167,11 +185,13 @@ Lv2Ui::Lv2Ui(Lv2World &world, Lv2Effect &effect, const std::string &title)
     }
     m_effect.setForwarding(true);
 
-    // Sized to the UI: by its resize request, or else by its window.
+    // Sized to the UI: by its resize request, or else by its window. A UI
+    // marked as not resizable by the user keeps that size.
     idle();
     if (const auto size = m_window.sizeOf(m_child); size && size->first > 16 && size->second > 16) {
         m_window.resize(size->first, size->second);
     }
+    m_window.setResizable(!choice->fixedSize);
     m_window.show();
 }
 
@@ -210,20 +230,29 @@ bool Lv2Ui::idle()
         return false;
     }
 
-    // What changed since: control values (and meters), then events.
+    // What changed since: control values (and meters), then events (a UI
+    // that doesn't listen to ports has no port_event). A value that's NaN
+    // is told once, not on every tick.
+    const auto same = [](float a, float b) { return a == b || (std::isnan(a) && std::isnan(b)); };
     for (const auto index : m_effect.controlPorts()) {
         const float value = m_effect.controlValue(index);
-        if (index < m_sent.size() && !(m_sent[index] == value)) {
-            m_sent[index] = value;
+        if (index >= m_sent.size() || (m_told[index] && same(m_sent[index], value))) {
+            continue;
+        }
+        m_sent[index] = value;
+        m_told[index] = true;
+        if (m_descriptor->port_event != nullptr) {
             m_descriptor->port_event(m_handle, index, sizeof(float), 0, &value);
         }
     }
     m_effect.takeEvents([this](std::uint32_t port, const LV2_Atom &atom) {
-        m_descriptor->port_event(m_handle, port,
-                                 static_cast<std::uint32_t>(sizeof(LV2_Atom) + atom.size),
-                                 m_eventTransfer, &atom);
+        if (m_descriptor->port_event != nullptr) {
+            m_descriptor->port_event(m_handle, port,
+                                     static_cast<std::uint32_t>(sizeof(LV2_Atom) + atom.size),
+                                     m_eventTransfer, &atom);
+        }
     });
-    if (m_idle != nullptr && m_idle->idle(m_handle) != 0) {
+    if (m_idle != nullptr && m_idle->idle != nullptr && m_idle->idle(m_handle) != 0) {
         return false; // the UI closed itself
     }
     m_window.flush();
@@ -241,6 +270,7 @@ void Lv2Ui::write(LV2UI_Controller controller, std::uint32_t port, std::uint32_t
         if (!symbol.empty()) {
             if (port < self->m_sent.size()) {
                 self->m_sent[port] = self->m_effect.controlValue(port); // no echo
+                self->m_told[port] = true;
             }
             if (self->onParam) {
                 self->onParam(symbol, static_cast<double>(self->m_effect.controlValue(port)));

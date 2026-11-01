@@ -111,7 +111,10 @@ public Q_SLOTS:
     void SetEffectKey(const QString &key, int index, const QString &sourceKey);
     // The installed plugins as JSON (see pluginsToJson); the state's
     // "pluginsRevision" changes when the list does, "pluginsScanning" says
-    // whether a scan runs. Rescan looks for newly installed ones.
+    // whether a scan runs, "pluginsScan" = {done, total, found} how far it
+    // is, and "pluginsLastScan" when the list was made (ISO; "" for never).
+    // RescanPlugins looks for plugins installed since (the engine doesn't
+    // scan at every start: with many plugins that takes a while).
     QString GetPlugins() const;
     void RescanPlugins();
     // A plugin's own window (plugins with "hasUi"): open (or bring forward)

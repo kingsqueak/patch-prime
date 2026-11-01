@@ -5,7 +5,8 @@
 // that kills its process (to test that a crashing plugin doesn't take its
 // strip down), and a "halve" switch that halves its output from then on,
 // for good: a trim kept only in its own state (state:interface), to test
-// that state is saved and restored.
+// that state is saved and restored. It also chatters on stdout, as real
+// plugins do, which mustn't disturb its host's talk with the engine.
 
 #include <lv2/atom/atom.h>
 #include <lv2/core/lv2.h>
@@ -14,6 +15,7 @@
 
 #include <signal.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -42,6 +44,8 @@ static LV2_Handle instantiate(const LV2_Descriptor *descriptor, double rate, con
     if (self == NULL) {
         return NULL;
     }
+    printf("testgain: hello"); // no line end, on purpose
+    fflush(stdout);
     self->trim = 1.0f;
     for (int i = 0; features != NULL && features[i] != NULL; ++i) {
         if (strcmp(features[i]->URI, LV2_URID__map) == 0) {

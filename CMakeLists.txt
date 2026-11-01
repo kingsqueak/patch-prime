@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 project(PatchPrime
-    VERSION 0.11
+    VERSION 0.12
     DESCRIPTION "Virtual audio mixer and router for KDE Plasma on PipeWire"
     LANGUAGES C CXX)
 
@@ -31,6 +31,7 @@ if(PATCHPRIME_RNNOISE)
     include(cmake/RNNoise.cmake)
 endif()
 include(cmake/Clap.cmake)
+include(cmake/Vst3.cmake)
 
 # systemd also searches $XDG_DATA_DIRS/systemd/user, so this works for both a
 # /usr and a ~/.local install.

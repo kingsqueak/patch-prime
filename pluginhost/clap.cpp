@@ -20,6 +20,7 @@
 #include <cstring>
 #include <filesystem>
 #include <limits>
+#include <new>
 #include <print>
 #include <set>
 #include <span>
@@ -92,7 +93,7 @@ std::string valueText(const clap_plugin_t *plugin, const clap_plugin_params_t *p
         !params->value_to_text(plugin, id, value, text.data(), static_cast<std::uint32_t>(text.size()))) {
         return {};
     }
-    return {text.data()};
+    return {text.data(), strnlen(text.data(), text.size())}; // a full buffer has no end mark
 }
 
 // The unit in a value's text: what follows the number ("dB" in "-6.0 dB").
@@ -122,7 +123,7 @@ ParamInfo describeParam(const clap_plugin_t *plugin, const clap_plugin_params_t 
 {
     ParamInfo info;
     info.name = std::to_string(p.id);
-    info.label = p.name;
+    info.label = std::string(p.name, strnlen(p.name, CLAP_NAME_SIZE));
     info.minimum = std::min(p.min_value, p.max_value);
     info.maximum = std::max(p.min_value, p.max_value);
     info.initial = std::clamp(p.default_value, info.minimum, info.maximum);
@@ -428,7 +429,9 @@ void ClapEffect::destroyInstance(Instance &instance)
     if (instance.plugin == nullptr) {
         return;
     }
-    // The realtime thread has stopped by now (the node is gone).
+    // The realtime thread has stopped by now (the node is gone). It normally
+    // stopped processing there too (stopProcessingSoon); if it couldn't (the
+    // graph wasn't running), here.
     if (instance.processing) {
         instance.plugin->stop_processing(instance.plugin);
     }
@@ -448,11 +451,16 @@ void ClapEffect::readPorts(const clap_plugin_t *plugin)
     }
     for (const bool input : {true, false}) {
         auto &layout = input ? m_inLayout : m_outLayout;
+        layout.clear();
         bool mainSeen = false;
         for (std::uint32_t i = 0; i < ports->count(plugin, input); ++i) {
             clap_audio_port_info_t info{};
-            if (!ports->get(plugin, i, input, &info)) {
-                continue;
+            // Every port, as the plugin counts them (it indexes the buffers
+            // the same way), and none too wide.
+            if (!ports->get(plugin, i, input, &info) || info.channel_count > maxEffectChannels) {
+                m_error = "its audio ports couldn't be read";
+                layout.clear();
+                return;
             }
             const bool main = !mainSeen && (info.flags & CLAP_AUDIO_PORT_IS_MAIN) != 0;
             mainSeen = mainSeen || main;
@@ -480,13 +488,17 @@ void ClapEffect::loadState(const clap_plugin_t *plugin) const
         .ctx = &reader,
         .read = [](const clap_istream_t *s, void *buffer, std::uint64_t size) -> std::int64_t {
             auto *r = static_cast<Reader *>(s->ctx);
-            const auto n = std::min<qsizetype>(static_cast<qsizetype>(size), r->data.size() - r->at);
+            const auto left = static_cast<std::uint64_t>(r->data.size() - r->at);
+            const auto n = std::min(size, left);
             std::memcpy(buffer, r->data.constData() + r->at, static_cast<std::size_t>(n)); // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-            r->at += n;
-            return n;
+            r->at += static_cast<qsizetype>(n);
+            return static_cast<std::int64_t>(n);
         },
     };
-    state->load(plugin, &stream);
+    if (!state->load(plugin, &stream)) {
+        // It carries on as it was: better than not at all.
+        std::println(stderr, "patchprime-pluginhost: the plugin couldn't take its saved state");
+    }
 }
 
 void ClapEffect::prepare(double sampleRate, int channels)
@@ -514,11 +526,22 @@ void ClapEffect::prepare(double sampleRate, int channels)
         m_instances.push_back(std::move(instance));
     }
 
+    // Its state first: that may change its ports, which are read again
+    // before any buffer is made.
+    for (auto &inst : m_instances) {
+        loadState(inst->plugin);
+    }
+    readPorts(m_instances.front()->plugin);
+    if (!m_error.empty()) {
+        return;
+    }
+
     const auto frames = static_cast<std::size_t>(maxEffectFrames);
     m_silence.assign(frames, 0.0F);
     m_block.assign(m_params.size(), 0.0);
     for (auto &inst : m_instances) {
-        loadState(inst->plugin);
+        inst->params = static_cast<const clap_plugin_params_t *>(
+            inst->plugin->get_extension(inst->plugin, CLAP_EXT_PARAMS));
         inst->sent.assign(m_params.size(), std::numeric_limits<double>::quiet_NaN());
         inst->events.assign(m_params.size(), clap_event_param_value_t{});
         inst->eventCount = 0;
@@ -544,6 +567,9 @@ void ClapEffect::prepare(double sampleRate, int channels)
                 const auto at = self.m_paramIndex.find(value->param_id);
                 if (at == self.m_paramIndex.end() || i != self.m_instances.front().get()) {
                     return true;
+                }
+                if (!std::isfinite(value->value)) {
+                    return true; // nothing to keep
                 }
                 // The plugin changed it (in its editor): keep it, and tell the engine.
                 self.m_targets[at->second].store(value->value);
@@ -586,7 +612,7 @@ void ClapEffect::prepare(double sampleRate, int channels)
 
 void ClapEffect::process(float *const *channels, int channelCount, int frames) noexcept
 {
-    if (!m_error.empty() || m_instances.empty() || frames <= 0) {
+    if (!m_error.empty() || m_instances.empty() || frames <= 0 || stoppedHere()) {
         return;
     }
     t_audioThread = true;
@@ -609,29 +635,7 @@ void ClapEffect::process(float *const *channels, int channelCount, int frames) n
             }
             inst.processing = true;
         }
-        // Parameters that changed since the last block.
-        inst.eventCount = 0;
-        for (std::size_t i = 0; i < m_params.size(); ++i) {
-            const double value = m_block[i];
-            if (inst.sent[i] == value) {
-                continue;
-            }
-            inst.sent[i] = value;
-            inst.events[inst.eventCount++] = {
-                .header = {.size = sizeof(clap_event_param_value_t),
-                           .time = 0,
-                           .space_id = CLAP_CORE_EVENT_SPACE_ID,
-                           .type = CLAP_EVENT_PARAM_VALUE,
-                           .flags = 0},
-                .param_id = m_params[i].id,
-                .cookie = m_params[i].cookie,
-                .note_id = -1,
-                .port_index = -1,
-                .channel = -1,
-                .key = -1,
-                .value = value,
-            };
-        }
+        queueParams(inst);
 
         // The strip into the main input, and back from the main output.
         std::size_t mainIn = 0;
@@ -674,6 +678,97 @@ void ClapEffect::process(float *const *channels, int channelCount, int frames) n
     m_steadyTime += frames;
 }
 
+void ClapEffect::queueParams(Instance &inst) noexcept
+{
+    // Parameters that changed since the last block.
+    inst.eventCount = 0;
+    for (std::size_t i = 0; i < m_params.size(); ++i) {
+        const double value = m_block[i];
+        if (inst.sent[i] == value) {
+            continue;
+        }
+        inst.sent[i] = value;
+        inst.events[inst.eventCount++] = {
+            .header = {.size = sizeof(clap_event_param_value_t),
+                       .time = 0,
+                       .space_id = CLAP_CORE_EVENT_SPACE_ID,
+                       .type = CLAP_EVENT_PARAM_VALUE,
+                       .flags = 0},
+            .param_id = m_params[i].id,
+            .cookie = m_params[i].cookie,
+            .note_id = -1,
+            .port_index = -1,
+            .channel = -1,
+            .key = -1,
+            .value = value,
+        };
+    }
+}
+
+void ClapEffect::bypassed(int /*frames*/) noexcept
+{
+    // Not processing, so its parameter changes (from the engine, or its own
+    // editor) go through flush, which is allowed here: the audio thread,
+    // while it's active, and not during process.
+    if (!m_error.empty() || m_instances.empty() || stoppedHere()) {
+        return;
+    }
+    t_audioThread = true;
+    for (std::size_t i = 0; i < m_params.size(); ++i) {
+        m_block[i] = m_targets[i].load(std::memory_order_relaxed);
+    }
+    for (auto &instance : m_instances) {
+        Instance &inst = *instance;
+        if (!inst.active || inst.params == nullptr || inst.params->flush == nullptr) {
+            continue;
+        }
+        queueParams(inst);
+        inst.params->flush(inst.plugin, &inst.in, &inst.out);
+    }
+}
+
+void ClapEffect::resume() noexcept
+{
+    // Back from bypass: what it held from before (a reverb's tail) goes.
+    for (auto &instance : m_instances) {
+        if (instance->active && instance->processing) {
+            instance->plugin->reset(instance->plugin);
+        }
+    }
+}
+
+bool ClapEffect::stoppedHere() noexcept
+{
+    if (!m_stopRequested.load(std::memory_order_acquire)) {
+        return false;
+    }
+    // Asked to stop (the host is closing): stop processing here, on the
+    // audio thread, as CLAP wants, once.
+    if (!m_stopped.load(std::memory_order_relaxed)) {
+        for (auto &instance : m_instances) {
+            if (instance->processing) {
+                instance->plugin->stop_processing(instance->plugin);
+                instance->processing = false;
+            }
+        }
+        m_stopped.store(true, std::memory_order_release);
+    }
+    return true;
+}
+
+void ClapEffect::mainThreadTick()
+{
+    // Callbacks the plugin asked for (from any thread), here on the main one.
+    for (auto &instance : m_instances) {
+        if (instance->callback.exchange(false)) {
+            instance->plugin->on_main_thread(instance->plugin);
+        }
+    }
+    if (ClapWindow *window = m_window.load()) {
+        window->tick();
+    }
+}
+
 void ClapEffect::setParam(const std::string &name, double value)
 {
     clap_id id = 0;
@@ -713,8 +808,18 @@ std::string ClapEffect::saveState() const
     const clap_ostream_t stream{
         .ctx = &data,
         .write = [](const clap_ostream_t *s, const void *buffer, std::uint64_t size) -> std::int64_t {
-            static_cast<QByteArray *>(s->ctx)->append(static_cast<const char *>(buffer),
-                                                       static_cast<qsizetype>(size));
+            // A state past this (a plugin gone wrong), or one there's no
+            // memory for, is an error the plugin hears about, not a crash.
+            constexpr std::uint64_t maxState = std::uint64_t{256} << 20;
+            auto *bytes = static_cast<QByteArray *>(s->ctx);
+            if (size > maxState - static_cast<std::uint64_t>(bytes->size())) {
+                return -1;
+            }
+            try {
+                bytes->append(static_cast<const char *>(buffer), static_cast<qsizetype>(size));
+            } catch (const std::bad_alloc &) {
+                return -1;
+            }
             return static_cast<std::int64_t>(size);
         },
     };
@@ -724,9 +829,12 @@ std::string ClapEffect::saveState() const
     return data.toBase64().toStdString();
 }
 
-std::unique_ptr<PluginWindow> ClapEffect::openWindow(const std::string &title)
+std::unique_ptr<PluginWindow>
+ClapEffect::openWindow(const std::string &title, std::function<void(const std::string &, double)> onParam)
 {
-    return std::make_unique<ClapWindow>(*this, title);
+    auto window = std::make_unique<ClapWindow>(*this, title);
+    window->onParam = std::move(onParam); // its changes come as parameter events, though
+    return window;
 }
 
 ClapEffect &ClapEffect::of(const clap_host_t *host)
@@ -736,32 +844,29 @@ ClapEffect &ClapEffect::of(const clap_host_t *host)
 
 void ClapEffect::requestRestart(const clap_host_t * /*host*/)
 {
-    // It would need the audio stopped, which isn't ours to do; carry on.
-    std::println(stderr, "patchprime-pluginhost: the plugin asked to be restarted (ignored)");
+    // It would need the audio stopped, which isn't ours to do; it carries on
+    // as it is. (Not reported from the audio thread, where nothing may block.)
+    if (!t_audioThread) {
+        std::println(stderr, "patchprime-pluginhost: the plugin asked to be restarted (ignored)");
+    }
 }
 
-void ClapEffect::requestProcess(const clap_host_t * /*host*/) {} // always processing
+void ClapEffect::requestProcess(const clap_host_t * /*host*/) {} // processing, or flushed when bypassed
 
 void ClapEffect::requestCallback(const clap_host_t *host)
 {
-    auto *instance = static_cast<Instance *>(host->host_data);
-    ClapEffect &self = *instance->effect;
-    if (self.m_context == nullptr || self.m_callbackQueued.exchange(true)) {
-        return;
-    }
-    QMetaObject::invokeMethod(
-        self.m_context,
-        [instance] {
-            instance->effect->m_callbackQueued.store(false);
-            instance->plugin->on_main_thread(instance->plugin);
-        },
-        Qt::QueuedConnection);
+    // Any thread, the audio one included: only a flag, picked up by the main
+    // thread's tick (each instance its own).
+    static_cast<Instance *>(host->host_data)->callback.store(true);
 }
 
 const void *ClapEffect::hostExtension(const clap_host_t * /*host*/, const char *id)
 {
     static const clap_host_log_t log{
         .log = [](const clap_host_t *, clap_log_severity severity, const char *message) {
+            if (t_audioThread) {
+                return; // nothing that may block, there
+            }
             std::println(stderr, "patchprime-pluginhost: plugin log ({}): {}", static_cast<int>(severity),
                          message != nullptr ? message : "");
         },
@@ -788,18 +893,37 @@ const void *ClapEffect::hostExtension(const clap_host_t * /*host*/, const char *
     static const clap_host_gui_t gui{
         .resize_hints_changed = [](const clap_host_t *) {},
         .request_resize = [](const clap_host_t *h, std::uint32_t width, std::uint32_t height) {
-            if (ClapWindow *window = of(h).m_window) {
-                window->resizeTo(width, height);
-                return true;
+            // Any thread: noted, and done on the main thread's next tick
+            // (the window only; the editor has resized itself).
+            ClapEffect &self = of(h);
+            if (self.m_window.load() == nullptr || width == 0 || height == 0) {
+                return false;
             }
-            return false;
+            self.m_resizeTo.store((std::uint64_t{width} << 32) | height);
+            return true;
         },
-        .request_show = [](const clap_host_t *) { return true; },
-        .request_hide = [](const clap_host_t *) { return true; },
-        .closed = [](const clap_host_t *h, bool /*wasDestroyed*/) {
-            if (ClapWindow *window = of(h).m_window) {
-                window->m_closed = true;
+        .request_show = [](const clap_host_t *h) {
+            ClapEffect &self = of(h);
+            if (self.m_window.load() == nullptr) {
+                return false;
             }
+            self.m_showRequested.store(true);
+            return true;
+        },
+        .request_hide = [](const clap_host_t *h) {
+            ClapEffect &self = of(h);
+            if (self.m_window.load() == nullptr) {
+                return false;
+            }
+            self.m_guiClosed.store(true); // its window closes
+            return true;
+        },
+        .closed = [](const clap_host_t *h, bool wasDestroyed) {
+            ClapEffect &self = of(h);
+            if (wasDestroyed) {
+                self.m_guiDestroyed.store(true);
+            }
+            self.m_guiClosed.store(true);
         },
     };
     static const clap_host_timer_support_t timers{
@@ -839,14 +963,21 @@ const void *ClapEffect::hostExtension(const clap_host_t * /*host*/, const char *
             ClapEffect &self = *instance->effect;
             const auto *ext = static_cast<const clap_plugin_posix_fd_support_t *>(
                 instance->plugin->get_extension(instance->plugin, CLAP_EXT_POSIX_FD_SUPPORT));
-            if (ext == nullptr || self.m_context == nullptr || self.m_fds.contains(fd) ||
-                (flags & CLAP_POSIX_FD_READ) == 0) {
+            if (ext == nullptr || self.m_context == nullptr || self.m_fds.contains(fd)) {
                 return false;
             }
-            auto *notifier = new QSocketNotifier(fd, QSocketNotifier::Read, self.m_context);
-            QObject::connect(notifier, &QSocketNotifier::activated, self.m_context,
-                             [instance, ext, fd] { ext->on_fd(instance->plugin, fd, CLAP_POSIX_FD_READ); });
-            self.m_fds[fd] = notifier;
+            // A notifier for reading and one for writing, each on when asked.
+            FdWatch watch;
+            const std::pair<QSocketNotifier::Type, clap_posix_fd_flags_t> kinds[] = { // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
+                {QSocketNotifier::Read, CLAP_POSIX_FD_READ}, {QSocketNotifier::Write, CLAP_POSIX_FD_WRITE}};
+            for (const auto &[type, flag] : kinds) {
+                auto *notifier = new QSocketNotifier(fd, type, self.m_context);
+                notifier->setEnabled((flags & flag) != 0);
+                QObject::connect(notifier, &QSocketNotifier::activated, self.m_context,
+                                 [instance, ext, fd, flag] { ext->on_fd(instance->plugin, fd, flag); });
+                (type == QSocketNotifier::Read ? watch.read : watch.write) = notifier;
+            }
+            self.m_fds[fd] = watch;
             return true;
         },
         .modify_fd = [](const clap_host_t *h, int fd, clap_posix_fd_flags_t flags) {
@@ -854,7 +985,8 @@ const void *ClapEffect::hostExtension(const clap_host_t * /*host*/, const char *
             if (it == of(h).m_fds.end()) {
                 return false;
             }
-            it->second->setEnabled((flags & CLAP_POSIX_FD_READ) != 0);
+            it->second.read->setEnabled((flags & CLAP_POSIX_FD_READ) != 0);
+            it->second.write->setEnabled((flags & CLAP_POSIX_FD_WRITE) != 0);
             return true;
         },
         .unregister_fd = [](const clap_host_t *h, int fd) {
@@ -863,8 +995,12 @@ const void *ClapEffect::hostExtension(const clap_host_t * /*host*/, const char *
             if (it == self.m_fds.end()) {
                 return false;
             }
-            it->second->setEnabled(false);
-            it->second->deleteLater();
+            // Off now (so another may be made for this fd at once), gone soon
+            // (it may be what called the plugin).
+            for (QSocketNotifier *notifier : {it->second.read, it->second.write}) {
+                notifier->setEnabled(false);
+                notifier->deleteLater();
+            }
             self.m_fds.erase(it);
             return true;
         },
@@ -919,13 +1055,16 @@ ClapWindow::ClapWindow(ClapEffect &effect, const std::string &title) : m_effect(
         m_error = "there's no display to show it on";
         return;
     }
+    effect.m_guiClosed.store(false);
+    effect.m_guiDestroyed.store(false);
+    effect.m_resizeTo.store(0);
     if (!m_gui->create(m_plugin, CLAP_WINDOW_API_X11, false)) {
         m_error = "its window couldn't be started";
         m_window.destroy();
         return;
     }
     m_created = true;
-    effect.m_window = this;
+    effect.m_window.store(this);
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     if (m_gui->get_size(m_plugin, &width, &height) && width > 0 && height > 0) {
@@ -936,23 +1075,42 @@ ClapWindow::ClapWindow(ClapEffect &effect, const std::string &title) : m_effect(
         m_error = "its window couldn't be embedded";
         return;
     }
-    m_gui->show(m_plugin);
+    m_window.setResizable(m_gui->can_resize(m_plugin));
+    if (!m_gui->show(m_plugin)) {
+        m_error = "its window couldn't be shown";
+        return;
+    }
+    m_shown = true;
     m_window.show();
 }
 
 ClapWindow::~ClapWindow()
 {
-    m_effect.m_window = nullptr;
+    m_effect.m_window.store(nullptr);
     if (m_created) {
-        m_gui->hide(m_plugin);
+        // A GUI the plugin has destroyed itself is only acknowledged.
+        if (m_shown && !m_effect.m_guiDestroyed.load()) {
+            m_gui->hide(m_plugin);
+        }
         m_gui->destroy(m_plugin);
     }
     m_window.destroy();
 }
 
+void ClapWindow::tick()
+{
+    // What the plugin asked for from any thread, done here on the main one.
+    if (const auto size = m_effect.m_resizeTo.exchange(0); size != 0) {
+        m_window.resize(static_cast<int>(size >> 32U), static_cast<int>(size & 0xFFFFFFFFU));
+    }
+    if (m_effect.m_showRequested.exchange(false)) {
+        m_window.raise();
+    }
+}
+
 bool ClapWindow::idle()
 {
-    if (!m_created || m_closed || !m_window.isOpen()) {
+    if (!m_created || !m_shown || m_effect.m_guiClosed.load() || !m_window.isOpen()) {
         return false;
     }
     const bool open = m_window.pump([this](int width, int height) {
@@ -971,15 +1129,7 @@ bool ClapWindow::idle()
         }
     });
     m_window.flush();
-    return open && !m_closed;
-}
-
-void ClapWindow::resizeTo(std::uint32_t width, std::uint32_t height)
-{
-    m_window.resize(static_cast<int>(width), static_cast<int>(height));
-    if (m_created) {
-        m_gui->set_size(m_plugin, width, height);
-    }
+    return open && !m_effect.m_guiClosed.load();
 }
 
 } // namespace pp

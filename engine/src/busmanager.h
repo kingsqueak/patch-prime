@@ -313,6 +313,9 @@ private:
     [[nodiscard]] static std::map<std::string, WantedSend>
     wantedSends(const std::map<std::string, Wanted> &buses);
     void applyVolume(std::uint32_t nodeId, std::size_t channels, double db, bool muted);
+    // The row of the strip whose effect the plugin node runs, when that
+    // effect is still a plugin of this type; -1 otherwise.
+    [[nodiscard]] int pluginRow(const std::string &node, const std::string &type) const;
     // Asks the limiter; warns the first time a node is refused.
     bool mayCreate(const std::string &name, CreationLimiter::Clock::time_point now);
     using LinkMap = std::map<std::pair<std::uint32_t, std::uint32_t>, std::uint32_t>;

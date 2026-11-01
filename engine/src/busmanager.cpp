@@ -330,22 +330,24 @@ BusManager::BusManager(PipeWireGraph *graph, DeviceModel *devices, QObject *pare
     });
     // What a plugin's window changes is kept like any change of its settings.
     connect(m_runner, &PluginRunner::paramChanged, this,
-            [this](const std::string &node, const std::string &name, double value) {
-                const auto at = m_plugins.find(node);
-                if (const int row = at != m_plugins.end() ? m_devices->rowForKey(at->second.first) : -1;
-                    row >= 0) {
-                    m_devices->setEffectParam(row, static_cast<int>(at->second.second),
+            [this](const std::string &node, const std::string &type, const std::string &name,
+                   double value) {
+                if (const int row = pluginRow(node, type); row >= 0) {
+                    m_devices->setEffectParam(row, static_cast<int>(m_plugins.at(node).second),
                                               QString::fromStdString(name), value);
                 }
             });
     connect(m_runner, &PluginRunner::stateChanged, this,
-            [this](const std::string &node, const std::string &state) {
-                const auto at = m_plugins.find(node);
-                if (const int row = at != m_plugins.end() ? m_devices->rowForKey(at->second.first) : -1;
-                    row >= 0) {
-                    m_devices->setEffectState(row, static_cast<int>(at->second.second), state);
+            [this](const std::string &node, const std::string &type, const std::string &state) {
+                if (const int row = pluginRow(node, type); row >= 0) {
+                    m_devices->setEffectState(row, static_cast<int>(m_plugins.at(node).second), state);
                 }
             });
+    // A scan that finished (or a cache that loaded) can let plugins start
+    // that couldn't be found before.
+    if (const auto *catalog = devices->pluginCatalog()) {
+        connect(catalog, &PluginCatalog::changed, this, &BusManager::scheduleReconcile);
+    }
     // Graph events come in bursts (a device brings a node and its ports);
     // reconcile once after the burst.
     m_reconcileTimer.setSingleShot(true);
@@ -541,6 +543,22 @@ std::map<std::pair<std::string, std::size_t>, EffectLevels> BusManager::takeEffe
         }
     }
     return out;
+}
+
+int BusManager::pluginRow(const std::string &node, const std::string &type) const
+{
+    const auto at = m_plugins.find(node);
+    if (at == m_plugins.end()) {
+        return -1;
+    }
+    const int row = m_devices->rowForKey(at->second.first);
+    const auto *settings = row >= 0 ? m_devices->store().find(at->second.first) : nullptr;
+    // Still that plugin at that place (not another moved there since).
+    if (settings == nullptr || at->second.second >= settings->effects.size() ||
+        settings->effects[at->second.second].type != type) {
+        return -1;
+    }
+    return row;
 }
 
 void BusManager::setPluginWindow(const std::string &key, std::size_t index, bool open)
@@ -1064,7 +1082,13 @@ BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
                 const auto &e = w.settings->effects[index];
                 nodeName = pluginNodeName(name, ++pluginCount);
                 const auto *info = catalog != nullptr ? catalog->find(e.type) : nullptr;
-                m_runner->want(nodeName,
+                if (info == nullptr && pluginFormat(e.type) != "lv2") {
+                    // A CLAP or VST3 plugin is loaded from the file the
+                    // catalog found it in: until a scan has, it waits (a
+                    // finished scan reconciles again).
+                    continue;
+                }
+                created = m_runner->want(nodeName,
                                PluginSpec{.type = e.type,
                                           .binary = info != nullptr ? info->binary : std::string(),
                                           .positions = positions,
@@ -1077,6 +1101,8 @@ BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
                                           .title = (info != nullptr ? info->name : pluginUri(e.type)) +
                                                    " · " + description,
                                           .state = e.state});
+                // A host (re)started just now: a node of that name in the
+                // graph is the old one, on its way out.
                 m_runner->setMetering(nodeName, m_effectMetering.contains(w.key));
                 plugins[nodeName] = {w.key, index};
             } else {

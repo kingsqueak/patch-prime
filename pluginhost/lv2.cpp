@@ -135,9 +135,16 @@ std::string category(LilvWorld *world, const LilvPlugin *plugin)
     return label.empty() ? std::string("Other") : label;
 }
 
-// log:log, to stderr (which the engine forwards to its journal).
+// Set on the audio thread while a plugin runs: nothing there may block.
+thread_local bool t_audioThread = false; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+
+// log:log, to stderr (which the engine forwards to its journal); not from
+// the audio thread (log:Trace may be called there), where it's dropped.
 int logVprintf(LV2_Log_Handle /*handle*/, LV2_URID /*type*/, const char *format, va_list args) // NOLINT(cppcoreguidelines-pro-type-vararg)
 {
+    if (t_audioThread) {
+        return 0;
+    }
     return std::vfprintf(stderr, format, args); // NOLINT(cppcoreguidelines-pro-type-vararg,clang-analyzer-valist.Uninitialized)
 }
 
@@ -186,7 +193,6 @@ Lv2World::Lv2World() : m_world(lilv_world_new())
     m_unmapFeature = {.URI = LV2_URID__unmap, .data = &m_unmap};
     m_logFeature = {.URI = LV2_LOG__log, .data = &m_log};
     m_boundedFeature = {.URI = LV2_BUF_SIZE__boundedBlockLength, .data = nullptr};
-    m_optionsFeature = {.URI = LV2_OPTIONS__options, .data = nullptr};
 }
 
 Lv2World::~Lv2World()
@@ -202,6 +208,9 @@ Lv2World::~Lv2World()
 
 LV2_URID Lv2World::map(const char *uri)
 {
+    if (uri == nullptr) {
+        return 0;
+    }
     const std::scoped_lock lock(m_mapLock);
     const auto [it, added] = m_ids.try_emplace(uri, static_cast<LV2_URID>(m_names.size() + 1));
     if (added) {
@@ -216,11 +225,9 @@ const char *Lv2World::unmap(LV2_URID urid)
     return urid == 0 || urid > m_names.size() ? nullptr : m_names[urid - 1].c_str();
 }
 
-std::vector<const LV2_Feature *> Lv2World::features(const LV2_Options_Option *options)
+std::vector<const LV2_Feature *> Lv2World::features(const LV2_Feature *options)
 {
-    m_optionsFeature.data = const_cast<LV2_Options_Option *>(options); // NOLINT(cppcoreguidelines-pro-type-const-cast): LV2's feature data isn't const
-    return {&m_mapFeature, &m_unmapFeature, &m_logFeature, &m_boundedFeature, &m_optionsFeature,
-            nullptr};
+    return {&m_mapFeature, &m_unmapFeature, &m_logFeature, &m_boundedFeature, options, nullptr};
 }
 
 const LilvPlugin *Lv2World::find(const std::string &uri) const
@@ -231,8 +238,27 @@ const LilvPlugin *Lv2World::find(const std::string &uri) const
     return plugin;
 }
 
-std::string Lv2World::problem(const LilvPlugin *plugin)
+std::string Lv2World::problem(const LilvPlugin *plugin) const
 {
+    // Options it must be given (we give these).
+    static const std::set<std::string> options{
+        LV2_BUF_SIZE__maxBlockLength, LV2_BUF_SIZE__minBlockLength, LV2_BUF_SIZE__nominalBlockLength,
+        LV2_BUF_SIZE__sequenceSize, LV2_PARAMETERS__sampleRate};
+    LilvNode *requiredOption = lilv_new_uri(m_world, LV2_OPTIONS__requiredOption);
+    LilvNodes *needs = lilv_world_find_nodes(m_world, lilv_plugin_get_uri(plugin), requiredOption, nullptr);
+    lilv_node_free(requiredOption);
+    std::string missingOption;
+    LILV_FOREACH (nodes, i, needs) {
+        const LilvNode *option = lilv_nodes_get(needs, i);
+        if (!lilv_node_is_uri(option) || !options.contains(lilv_node_as_uri(option))) {
+            missingOption = lilv_node_is_uri(option) ? lilv_node_as_uri(option) : "?";
+            break;
+        }
+    }
+    lilv_nodes_free(needs);
+    if (!missingOption.empty()) {
+        return "it needs an option Patch Prime doesn't provide (" + missingOption + ")";
+    }
     LilvNodes *required = lilv_plugin_get_required_features(plugin);
     std::string missing;
     LILV_FOREACH (nodes, i, required) {
@@ -360,6 +386,7 @@ Lv2Effect::Lv2Effect(Lv2World &world, const LilvPlugin *plugin)
         Port p{.index = i,
                .kind = PortKind::Other,
                .symbol = text(lilv_port_get_symbol(plugin, port)),
+               .input = input,
                .initial = 0.0F,
                .minimum = 0.0F,
                .maximum = 1.0F};
@@ -448,7 +475,12 @@ void Lv2Effect::prepare(double sampleRate, int channels)
     }
     const LV2_URID intType = m_world.map(LV2_ATOM__Int);
     const LV2_URID floatType = m_world.map(LV2_ATOM__Float);
+    m_sequenceSize = static_cast<std::int32_t>(atomCapacity);
     m_options = {
+        {LV2_OPTIONS_INSTANCE, 0, m_world.map(LV2_BUF_SIZE__nominalBlockLength), sizeof(std::int32_t),
+         intType, &m_blockNominal},
+        {LV2_OPTIONS_INSTANCE, 0, m_world.map(LV2_BUF_SIZE__sequenceSize), sizeof(std::int32_t),
+         intType, &m_sequenceSize},
         {LV2_OPTIONS_INSTANCE, 0, m_world.map(LV2_BUF_SIZE__maxBlockLength), sizeof(std::int32_t),
          intType, &m_blockMax},
         {LV2_OPTIONS_INSTANCE, 0, m_world.map(LV2_BUF_SIZE__minBlockLength), sizeof(std::int32_t),
@@ -457,11 +489,10 @@ void Lv2Effect::prepare(double sampleRate, int channels)
          &m_rate},
         {LV2_OPTIONS_INSTANCE, 0, 0, 0, 0, nullptr},
     };
-    const auto features = m_world.features(m_options.data());
+    m_optionsFeature = {.URI = LV2_OPTIONS__options, .data = m_options.data()};
+    const auto features = m_world.features(&m_optionsFeature);
 
     const auto frames = static_cast<std::size_t>(maxEffectFrames);
-    m_silence.assign(frames, 0.0F);
-    m_scratch.assign(frames, 0.0F);
     // A mono plugin on a stereo strip: one per channel.
     const bool perChannel = m_audioIn.size() == 1 && m_audioOut.size() == 1 && channels > 1;
     const int count = perChannel ? channels : 1;
@@ -488,7 +519,8 @@ void Lv2Effect::prepare(double sampleRate, int channels)
                 buffer = inst.audioOut[audioOut++].data();
                 break;
             case PortKind::SideIn:
-                buffer = m_silence.data();
+                buffer = inst.other.emplace_back(frames).data();
+                inst.clearEach.push_back(static_cast<float *>(buffer)); // silence
                 break;
             case PortKind::ControlIn:
             case PortKind::ControlOut:
@@ -502,7 +534,10 @@ void Lv2Effect::prepare(double sampleRate, int channels)
                 buffer = inst.atomOut.emplace_back(atomCapacity).data();
                 break;
             case PortKind::Other:
-                buffer = m_scratch.data();
+                buffer = inst.other.emplace_back(frames).data();
+                if (p.input) {
+                    inst.clearEach.push_back(static_cast<float *>(buffer));
+                }
                 break;
             }
             lilv_instance_connect_port(inst.instance, p.index, buffer);
@@ -535,6 +570,46 @@ void Lv2Effect::process(float *const *channels, int channelCount, int frames) no
     const auto n = static_cast<std::size_t>(frames);
     const std::span<float *const> planes(channels, static_cast<std::size_t>(channelCount));
     const bool perChannel = m_instances.size() > 1;
+    t_audioThread = true;
+
+    // Atom ports: empty event sequences in, room for the plugin's events
+    // out; then the UI's events, to every instance (a mono plugin running
+    // once per channel hears them on both).
+    for (auto &inst : m_instances) {
+        for (auto &buffer : inst.atomIn) {
+            auto *seq = reinterpret_cast<LV2_Atom_Sequence *>(buffer.data()); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+            seq->atom.size = sizeof(LV2_Atom_Sequence_Body);
+            seq->atom.type = m_sequence;
+            seq->body.unit = 0;
+            seq->body.pad = 0;
+        }
+        for (auto &buffer : inst.atomOut) {
+            auto *atom = reinterpret_cast<LV2_Atom *>(buffer.data()); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+            atom->size = static_cast<std::uint32_t>(atomCapacity - sizeof(LV2_Atom));
+            atom->type = m_chunk;
+        }
+    }
+    m_toPlugin.drain(m_rtScratch, [&](std::uint32_t port, std::span<const std::uint8_t> bytes) {
+        if (port >= m_atomSlot.size() || m_atomSlot[port] < 0 || bytes.size() < sizeof(LV2_Atom)) {
+            return;
+        }
+        // Only an atom that's all there (sendAtom checked; this is cheap).
+        LV2_Atom header{};
+        std::memcpy(&header, bytes.data(), sizeof(header));
+        if (sizeof(LV2_Atom) + header.size > bytes.size() ||
+            sizeof(LV2_Atom_Event) + header.size > m_eventScratch.size()) {
+            return;
+        }
+        auto *event = reinterpret_cast<LV2_Atom_Event *>(m_eventScratch.data()); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+        event->time.frames = 0; // NOLINT(cppcoreguidelines-pro-type-union-access)
+        std::memcpy(&event->body, bytes.data(), sizeof(LV2_Atom) + header.size);
+        for (auto &inst : m_instances) {
+            auto &buffer = inst.atomIn[static_cast<std::size_t>(m_atomSlot[port])];
+            lv2_atom_sequence_append_event(
+                reinterpret_cast<LV2_Atom_Sequence *>(buffer.data()), // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+                static_cast<std::uint32_t>(atomCapacity - sizeof(LV2_Atom)), event);
+        }
+    });
 
     for (std::size_t k = 0; k < m_instances.size(); ++k) {
         auto &inst = m_instances[k];
@@ -543,31 +618,8 @@ void Lv2Effect::process(float *const *channels, int channelCount, int frames) no
                 inst.controls[p.index] = m_targets[p.index].load(std::memory_order_relaxed);
             }
         }
-        for (auto &buffer : inst.atomIn) { // an empty event sequence
-            auto *seq = reinterpret_cast<LV2_Atom_Sequence *>(buffer.data()); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-            seq->atom.size = sizeof(LV2_Atom_Sequence_Body);
-            seq->atom.type = m_sequence;
-            seq->body.unit = 0;
-            seq->body.pad = 0;
-        }
-        for (auto &buffer : inst.atomOut) { // room for the plugin's events
-            auto *atom = reinterpret_cast<LV2_Atom *>(buffer.data()); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-            atom->size = static_cast<std::uint32_t>(atomCapacity - sizeof(LV2_Atom));
-            atom->type = m_chunk;
-        }
-        if (k == 0) { // events from the UI, at the start of the block
-            m_toPlugin.drain(m_rtScratch, [&](std::uint32_t port, std::span<const std::uint8_t> bytes) {
-                if (port >= m_atomSlot.size() || m_atomSlot[port] < 0 || bytes.size() < sizeof(LV2_Atom)) {
-                    return;
-                }
-                auto &buffer = inst.atomIn[static_cast<std::size_t>(m_atomSlot[port])];
-                auto *event = reinterpret_cast<LV2_Atom_Event *>(m_eventScratch.data()); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-                event->time.frames = 0; // NOLINT(cppcoreguidelines-pro-type-union-access)
-                std::memcpy(&event->body, bytes.data(), bytes.size());
-                lv2_atom_sequence_append_event(
-                    reinterpret_cast<LV2_Atom_Sequence *>(buffer.data()), // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-                    static_cast<std::uint32_t>(atomCapacity - sizeof(LV2_Atom)), event);
-            });
+        for (float *buffer : inst.clearEach) {
+            std::fill_n(buffer, n, 0.0F);
         }
 
         // Inputs: this instance's channel, or the channels spread over the
@@ -614,15 +666,26 @@ void Lv2Effect::process(float *const *channels, int channelCount, int frames) no
                     if (p.kind != PortKind::AtomOut) {
                         continue;
                     }
-                    auto *seq = reinterpret_cast<LV2_Atom_Sequence *>( // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-                        inst.atomOut[static_cast<std::size_t>(m_atomSlot[p.index])].data());
-                    if (seq->atom.type != m_sequence) {
+                    const auto &buffer = inst.atomOut[static_cast<std::size_t>(m_atomSlot[p.index])];
+                    LV2_Atom header{};
+                    std::memcpy(&header, buffer.data(), sizeof(header));
+                    if (header.type != m_sequence) {
                         continue; // nothing written
                     }
-                    LV2_ATOM_SEQUENCE_FOREACH (seq, ev) {
-                        // The atom's body follows its header in the sequence.
-                        m_toUi.push(p.index, std::span(reinterpret_cast<const std::uint8_t *>(&ev->body), // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast,clang-analyzer-security.ArrayBound)
-                                                       sizeof(LV2_Atom) + ev->body.size));
+                    // The events, trusting the plugin's sizes only as far as
+                    // the buffer goes.
+                    const std::size_t used = std::min<std::size_t>(header.size, atomCapacity - sizeof(LV2_Atom));
+                    const std::size_t end = sizeof(LV2_Atom) + used;
+                    std::size_t at = sizeof(LV2_Atom) + sizeof(LV2_Atom_Sequence_Body);
+                    while (at + sizeof(LV2_Atom_Event) <= end) {
+                        LV2_Atom body{};
+                        std::memcpy(&body, buffer.data() + at + sizeof(std::int64_t), sizeof(body)); // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+                        const std::size_t atomBytes = sizeof(LV2_Atom) + body.size;
+                        if (at + sizeof(std::int64_t) + atomBytes > end) {
+                            break;
+                        }
+                        m_toUi.push(p.index, std::span(buffer.data() + at + sizeof(std::int64_t), atomBytes)); // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+                        at += lv2_atom_pad_size(static_cast<std::uint32_t>(sizeof(LV2_Atom_Event) + body.size));
                     }
                 }
             }
@@ -659,9 +722,10 @@ void Lv2Effect::process(float *const *channels, int channelCount, int frames) no
     }
 }
 
-std::unique_ptr<PluginWindow> Lv2Effect::openWindow(const std::string &title)
+std::unique_ptr<PluginWindow>
+Lv2Effect::openWindow(const std::string &title, std::function<void(const std::string &, double)> onParam)
 {
-    return std::make_unique<Lv2Ui>(m_world, *this, title);
+    return std::make_unique<Lv2Ui>(m_world, *this, title, std::move(onParam));
 }
 
 LV2_Handle Lv2Effect::handle() const
@@ -708,6 +772,11 @@ bool Lv2Effect::sendAtom(std::uint32_t index, std::span<const std::uint8_t> atom
         atom.size() < sizeof(LV2_Atom) || atom.size() > atomCapacity / 2) {
         return false;
     }
+    LV2_Atom header{};
+    std::memcpy(&header, atom.data(), sizeof(header));
+    if (sizeof(LV2_Atom) + header.size > atom.size()) {
+        return false; // says it's bigger than it is
+    }
     return m_toPlugin.push(index, atom);
 }
 
@@ -733,7 +802,7 @@ std::string Lv2Effect::saveState() const
     if (m_instances.empty() || !hasState()) {
         return {};
     }
-    const auto features = m_world.features(m_options.data());
+    const auto features = m_world.features(&m_optionsFeature);
     // Only the plugin's own state: no port values (those are the parameters).
     LilvState *state = lilv_state_new_from_instance(
         m_plugin, m_instances.front().instance, m_world.mapFeature(), nullptr, nullptr, nullptr,

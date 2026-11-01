@@ -4,6 +4,7 @@
 import QtCore
 import QtQuick
 import QtQuick.Controls as QQC2
+import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
@@ -206,6 +207,25 @@ Kirigami.ApplicationWindow {
                     spdx: "GPL-3.0-or-later"
                 }]
             })
+
+            // Below the authors (there are no credits or translators): a word
+            // on supporting the work, in the page's own style.
+            Kirigami.Heading {
+                Layout.fillWidth: true
+                Kirigami.FormData.isSection: true
+                text: qsTr("Do You Find This Useful?")
+                wrapMode: Text.WordWrap
+            }
+            QQC2.Label {
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.gridUnit
+                text: qsTr("I am unemployed and any support goes toward my expenses and equipment.")
+                wrapMode: Text.WordWrap
+            }
+            Kirigami.UrlButton {
+                Layout.leftMargin: Kirigami.Units.gridUnit
+                url: "https://github.com/sponsors/kingsqueak/"
+            }
         }
     }
 

@@ -7,7 +7,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kingsqueak.patchprime.engine
 
-// Choose a plugin to add to a strip: the installed LV2 and CLAP plugins,
+// Choose a plugin to add to a strip: the installed LV2, CLAP and VST3 plugins,
 // searchable by name, maker, category or format, and filterable by category. Plugins that
 // can't run here (instruments, ones needing something Patch Prime doesn't
 // provide) are listed greyed out, with the reason.
@@ -36,7 +36,7 @@ QQC2.Dialog {
     }
 
     function format(plugin) {
-        return plugin.type.startsWith("clap:") ? "CLAP" : "LV2";
+        return plugin.type.split(":")[0].toUpperCase(); // LV2, CLAP, VST3
     }
     function choose(plugin) {
         if (plugin.problem.length > 0)
@@ -137,7 +137,7 @@ QQC2.Dialog {
                           : Devices.plugins.length === 0 ? qsTr("No plugins installed")
                           : qsTr("No plugin matches")
                     explanation: Devices.plugins.length === 0 && !Devices.pluginsScanning
-                                 ? qsTr("Install LV2 or CLAP plugins from your distribution, for example LSP, x42, Calf or ZAM plugins, then press Rescan.")
+                                 ? qsTr("Install LV2, CLAP or VST3 plugins from your distribution, for example LSP, x42, Calf or ZAM plugins, then press Scan Plugins.")
                                  : ""
                 }
             }
@@ -154,15 +154,7 @@ QQC2.Dialog {
             Item {
                 Layout.fillWidth: true
             }
-            QQC2.Button {
-                icon.name: "view-refresh"
-                text: Devices.pluginsScanning ? qsTr("Scanning…") : qsTr("Rescan")
-                enabled: !Devices.pluginsScanning
-                onClicked: Devices.rescanPlugins()
-                QQC2.ToolTip.text: qsTr("Look for plugins installed since")
-                QQC2.ToolTip.visible: hovered
-                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
-            }
+            PluginScan {}
             QQC2.Button {
                 icon.name: "list-add"
                 text: qsTr("Add")

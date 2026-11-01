@@ -7,6 +7,7 @@
 #include <QDBusServiceWatcher>
 #include <QHash>
 #include <QSortFilterProxyModel>
+#include <QDateTime>
 #include <QVariantMap>
 
 class QDBusPendingCallWatcher;
@@ -48,6 +49,10 @@ class DaemonClient : public QAbstractListModel
     // author, category, audioIn, audioOut, params, problem}], by name.
     Q_PROPERTY(QVariantList plugins READ plugins NOTIFY pluginsChanged)
     Q_PROPERTY(bool pluginsScanning READ pluginsScanning NOTIFY pluginsChanged)
+    // How far a scan is: {done, total, found} (files read of all, plugins
+    // found); and when the list was made (empty for never).
+    Q_PROPERTY(QVariantMap pluginsScan READ pluginsScan NOTIFY pluginsChanged)
+    Q_PROPERTY(QDateTime pluginsLastScan READ pluginsLastScan NOTIFY pluginsChanged)
     // Plugins that are off because they failed: {stripKey: {index: message}}.
     Q_PROPERTY(QVariantMap pluginErrors READ pluginErrors NOTIFY pluginsChanged)
     // Plugins' own windows: open ones, {stripKey: [index]}; and why ones
@@ -111,6 +116,8 @@ public:
     [[nodiscard]] QVariantList effectTypes() const { return m_effectTypes; }
     [[nodiscard]] QVariantList plugins() const { return m_plugins; }
     [[nodiscard]] bool pluginsScanning() const { return m_pluginsScanning; }
+    [[nodiscard]] QVariantMap pluginsScan() const { return m_pluginsScan; }
+    [[nodiscard]] QDateTime pluginsLastScan() const { return m_pluginsLastScan; }
     [[nodiscard]] QVariantMap pluginErrors() const { return m_pluginErrors; }
     [[nodiscard]] QVariantMap pluginWindows() const { return m_pluginWindows; }
     [[nodiscard]] QVariantMap pluginWindowErrors() const { return m_pluginWindowErrors; }
@@ -270,6 +277,8 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QHash<QString, int> m_pluginIndex; // type -> position in m_plugins
     int m_pluginsRevision = -1;
     bool m_pluginsScanning = false;
+    QVariantMap m_pluginsScan;
+    QDateTime m_pluginsLastScan;
     QVariantMap m_pluginErrors;
     QVariantMap m_pluginWindows;
     QVariantMap m_pluginWindowErrors;

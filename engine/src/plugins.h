@@ -7,10 +7,12 @@
 #include "effects.h"
 
 #include <QByteArray>
+#include <QDateTime>
 #include <QObject>
 #include <QProcess>
 #include <QString>
 
+#include <chrono>
 #include <cstddef>
 #include <map>
 #include <string>
@@ -20,19 +22,21 @@
 namespace pp {
 
 // Plugins in a strip's chain: an effect whose type is "lv2:<plugin URI>"
-// (parameters keyed by control port symbol) or "clap:<plugin id>"
-// (parameters keyed by CLAP param id, in decimal). Each one runs in its own
+// (parameters keyed by control port symbol), "clap:<plugin id>" (keyed by
+// CLAP param id, in decimal) or "vst3:<class id, hex>" (keyed by VST3
+// ParamID, in decimal). Each one runs in its own
 // patchprime-pluginhost process (see PluginRunner), so a crashing plugin
 // can't take the engine down.
 
 constexpr std::string_view lv2TypePrefix = "lv2:";
 constexpr std::string_view clapTypePrefix = "clap:";
+constexpr std::string_view vst3TypePrefix = "vst3:";
 
 bool isPluginType(std::string_view type);
 std::string pluginType(std::string_view uri); // "lv2:" + uri
 // The plugin's URI or id (what follows the format), or "" for a built-in type.
 std::string pluginUri(std::string_view type);
-// "lv2" or "clap", or "" for a built-in type.
+// "lv2", "clap" or "vst3", or "" for a built-in type.
 std::string pluginFormat(std::string_view type);
 
 // What the scan found out about a plugin.
@@ -42,7 +46,7 @@ struct PluginInfo
     std::string name;
     std::string author;
     std::string category; // "Compressor", "Reverb", ... ("Plugin" when unknown)
-    std::string binary;   // CLAP: the .clap file it's in
+    std::string binary;   // CLAP: the .clap file it's in; VST3: its bundle
     int audioIn = 0;      // audio ports, not counting sidechains
     int audioOut = 0;
     std::vector<ParamInfo> params;
@@ -55,9 +59,11 @@ struct PluginInfo
 QByteArray pluginsToJson(const std::vector<PluginInfo> &plugins);
 std::vector<PluginInfo> pluginsFromJson(const QByteArray &json);
 
-// The plugins installed, from `patchprime-pluginhost --scan`. The last scan
-// is cached (~/.cache/patchprime/plugins.json), so the list is there at
-// once on the next start while a fresh scan runs.
+// The plugins installed, from `patchprime-pluginhost --scan`. Scanning
+// loads every CLAP and VST3 plugin, which takes a while with many: it's done
+// when asked (rescan, the Scan Plugins button), or when there's no list yet.
+// The list is cached (~/.cache/patchprime/plugins.json) with the time of
+// the scan; a cache from another version of the list is scanned again.
 class PluginCatalog : public QObject
 {
     Q_OBJECT
@@ -65,11 +71,35 @@ class PluginCatalog : public QObject
 public:
     // cachePath: where the list is cached; empty means the default.
     explicit PluginCatalog(QString cachePath = {}, QObject *parent = nullptr);
+    // A scan still running is stopped.
+    ~PluginCatalog() override;
+    PluginCatalog(const PluginCatalog &) = delete;
+    PluginCatalog &operator=(const PluginCatalog &) = delete;
+    PluginCatalog(PluginCatalog &&) = delete;
+    PluginCatalog &operator=(PluginCatalog &&) = delete;
 
-    // Loads the cache, then scans in the background.
+    // A scan that takes longer than this is stopped.
+    static constexpr auto scanTimeout = std::chrono::minutes(10);
+
+    // The cache's format; a different one is scanned again.
+    static constexpr int cacheVersion = 2;
+
+    // Loads the cache; scans in the background when there's none (or one
+    // from another version).
     void start();
     void rescan();
     [[nodiscard]] bool isScanning() const { return m_scan != nullptr; }
+    // While scanning: files read of all there are to read (the LV2 ones count
+    // as one), and plugins found so far.
+    struct Progress
+    {
+        int done = 0;
+        int total = 0;
+        int found = 0;
+    };
+    [[nodiscard]] Progress progress() const { return m_progress; }
+    // When the list was scanned (invalid when never).
+    [[nodiscard]] QDateTime lastScan() const { return m_lastScan; }
 
     [[nodiscard]] const std::vector<PluginInfo> &plugins() const { return m_plugins; }
     [[nodiscard]] const PluginInfo *find(const std::string &type) const;
@@ -84,11 +114,16 @@ Q_SIGNALS:
 
 private:
     void scanFinished(int exitCode, QProcess::ExitStatus status);
+    void scanOutput();
 
     QString m_cachePath;
     std::vector<PluginInfo> m_plugins;
     std::map<std::string, std::size_t> m_index; // type -> position in m_plugins
     QProcess *m_scan = nullptr;
+    QByteArray m_output; // the scan's, so far
+    qsizetype m_parsed = 0; // how much of it has been read as lines
+    Progress m_progress;
+    QDateTime m_lastScan;
     int m_revision = 0;
 };
 

@@ -13,6 +13,7 @@
 #include <QLoggingCategory>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QTimer>
 
 #include <algorithm>
 
@@ -95,6 +96,9 @@ std::string pluginFormat(std::string_view type)
     if (type.starts_with(clapTypePrefix) && type.size() > clapTypePrefix.size()) {
         return "clap";
     }
+    if (type.starts_with(vst3TypePrefix) && type.size() > vst3TypePrefix.size()) {
+        return "vst3";
+    }
     return {};
 }
 
@@ -164,12 +168,29 @@ PluginCatalog::PluginCatalog(QString cachePath, QObject *parent)
 {
 }
 
+PluginCatalog::~PluginCatalog()
+{
+    if (m_scan != nullptr) {
+        m_scan->disconnect();
+        m_scan->kill();
+        m_scan->waitForFinished(1000);
+    }
+}
+
 void PluginCatalog::start()
 {
-    if (QFile cache(m_cachePath); cache.open(QIODevice::ReadOnly)) {
-        setPlugins(pluginsFromJson(cache.readAll()));
+    // The cache: {"version", "scannedAt", "plugins": [...]}.
+    QFile cache(m_cachePath);
+    const auto json = cache.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(cache.readAll()).object()
+                                                      : QJsonObject();
+    if (json.value(QLatin1String("version")).toInt() != cacheVersion) {
+        rescan(); // none yet, or from another version
+        return;
     }
-    rescan();
+    m_lastScan = QDateTime::fromString(json.value(QLatin1String("scannedAt")).toString(), Qt::ISODate);
+    setPlugins(pluginsFromJson(QJsonDocument(json.value(QLatin1String("plugins")).toArray())
+                                   .toJson(QJsonDocument::Compact)));
+    Q_EMIT changed(); // the time of the scan, at least
 }
 
 void PluginCatalog::rescan()
@@ -182,36 +203,88 @@ void PluginCatalog::rescan()
         qCWarning(lcPlugins, "patchprime-pluginhost not found: no plugins");
         return;
     }
+    m_output.clear();
+    m_parsed = 0;
+    m_progress = {};
     m_scan = new QProcess(this);
     m_scan->setProcessChannelMode(QProcess::SeparateChannels);
     m_scan->setStandardErrorFile(QProcess::nullDevice());
+    connect(m_scan, &QProcess::readyReadStandardOutput, this, &PluginCatalog::scanOutput);
     connect(m_scan, &QProcess::finished, this, &PluginCatalog::scanFinished);
     connect(m_scan, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         if (error == QProcess::FailedToStart) {
             qCWarning(lcPlugins, "couldn't start the plugin scan");
             m_scan->deleteLater();
             m_scan = nullptr;
+            Q_EMIT changed();
         }
     });
     m_scan->start(program, {QStringLiteral("--scan")});
+    // A scan that hangs (a plugin stuck loading) is given up on, so a later
+    // rescan can run.
+    QTimer::singleShot(scanTimeout, m_scan, [scan = m_scan] {
+        qCWarning(lcPlugins, "the plugin scan took too long; stopping it");
+        scan->kill();
+    });
     Q_EMIT changed(); // scanning
+}
+
+void PluginCatalog::scanOutput()
+{
+    // Progress lines as it goes ({"progress": {"done", "total", "found"}}),
+    // then the list on the last line.
+    m_output += m_scan->readAllStandardOutput();
+    bool moved = false;
+    qsizetype end = 0;
+    while ((end = m_output.indexOf('\n', m_parsed)) >= 0) {
+        const QByteArray line = m_output.mid(m_parsed, end - m_parsed);
+        m_parsed = end + 1;
+        if (line.startsWith("{\"progress\"")) {
+            const auto p = QJsonDocument::fromJson(line).object().value(QLatin1String("progress")).toObject();
+            m_progress = {.done = p.value(QLatin1String("done")).toInt(),
+                          .total = p.value(QLatin1String("total")).toInt(),
+                          .found = p.value(QLatin1String("found")).toInt()};
+            moved = true;
+        }
+    }
+    if (moved) {
+        Q_EMIT changed();
+    }
 }
 
 void PluginCatalog::scanFinished(int exitCode, QProcess::ExitStatus status)
 {
-    const auto output = m_scan->readAllStandardOutput();
+    scanOutput();
     m_scan->deleteLater();
     m_scan = nullptr;
+    m_progress = {};
+    const QByteArray output = std::move(m_output);
+    m_output.clear();
     if (status != QProcess::NormalExit || exitCode != 0) {
         qCWarning(lcPlugins, "the plugin scan failed (exit code %d)", exitCode);
         Q_EMIT changed(); // no longer scanning
         return;
     }
-    auto plugins = pluginsFromJson(output);
+    // Only a list: anything else (a scan cut short) keeps the list and the
+    // cache as they were.
+    const auto lines = output.trimmed().split('\n');
+    const auto document = QJsonDocument::fromJson(lines.isEmpty() ? QByteArray() : lines.last());
+    if (!document.isArray()) {
+        qCWarning(lcPlugins, "the plugin scan's output wasn't a list; keeping the last one");
+        Q_EMIT changed(); // no longer scanning
+        return;
+    }
+    auto plugins = pluginsFromJson(document.toJson(QJsonDocument::Compact));
     qCInfo(lcPlugins, "found %zu plugins", plugins.size());
+    m_lastScan = QDateTime::currentDateTime();
     QDir().mkpath(QFileInfo(m_cachePath).absolutePath());
     if (QSaveFile cache(m_cachePath); cache.open(QIODevice::WriteOnly)) {
-        cache.write(pluginsToJson(plugins));
+        cache.write(QJsonDocument(QJsonObject{
+                                      {QStringLiteral("version"), cacheVersion},
+                                      {QStringLiteral("scannedAt"), m_lastScan.toString(Qt::ISODate)},
+                                      {QStringLiteral("plugins"), QJsonDocument::fromJson(pluginsToJson(plugins)).array()},
+                                  })
+                        .toJson(QJsonDocument::Compact));
         cache.commit();
     }
     const int before = m_revision;
@@ -226,11 +299,9 @@ void PluginCatalog::setPlugins(std::vector<PluginInfo> plugins)
     std::ranges::sort(plugins, [](const PluginInfo &a, const PluginInfo &b) {
         return QString::compare(qs(a.name), qs(b.name), Qt::CaseInsensitive) < 0;
     });
-    const auto same = [](const PluginInfo &a, const PluginInfo &b) {
-        return a.type == b.type && a.name == b.name && a.problem == b.problem &&
-               a.hasUi == b.hasUi && a.params.size() == b.params.size();
-    };
-    if (std::ranges::equal(plugins, m_plugins, same)) {
+    // Every detail counts (a plugin moved to another file, a parameter's
+    // new range): compared as the cache would store them.
+    if (pluginsToJson(plugins) == pluginsToJson(m_plugins)) {
         return;
     }
     m_plugins = std::move(plugins);

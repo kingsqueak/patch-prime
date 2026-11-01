@@ -28,7 +28,8 @@ QQC2.ApplicationWindow {
     function open() {
         if (!visible) {
             const wide = panel.effects.some(e => e.type === "eq" || e.type === "multiband"
-                                                 || e.type.startsWith("lv2:") || e.type.startsWith("clap:"));
+                                                 || e.type.startsWith("lv2:") || e.type.startsWith("clap:")
+                                                 || e.type.startsWith("vst3:"));
             width = Kirigami.Units.gridUnit * (wide ? 60 : 36);
             height = Math.min(Screen.desktopAvailableHeight * 0.85, Kirigami.Units.gridUnit * 44);
         }
@@ -138,7 +139,7 @@ QQC2.ApplicationWindow {
                         }
                         QQC2.Label {
                             visible: slot.plugin
-                            text: slot.modelData.type.startsWith("clap:") ? "CLAP" : "LV2"
+                            text: slot.modelData.type.split(":")[0].toUpperCase()
                             font: Kirigami.Theme.smallFont
                             color: Style.dimText
                             QQC2.ToolTip.text: qsTr("A plugin: it runs in a process of its own, so if it crashes the strip carries on without it.")
@@ -353,36 +354,43 @@ QQC2.ApplicationWindow {
             }
         }
 
-        QQC2.Button {
-            text: qsTr("Add Effect")
-            icon.name: "list-add"
-            enabled: Devices.daemonRunning && panel.effects.length < 8
-            onClicked: addMenu.popup(this, 0, height)
+        RowLayout {
+            spacing: Kirigami.Units.largeSpacing
 
-            QQC2.Menu {
-                id: addMenu
+            QQC2.Button {
+                text: qsTr("Add Effect")
+                icon.name: "list-add"
+                enabled: Devices.daemonRunning && panel.effects.length < 8
+                onClicked: addMenu.popup(this, 0, height)
 
-                Instantiator {
-                    model: Devices.effectTypes
+                QQC2.Menu {
+                    id: addMenu
 
-                    delegate: QQC2.MenuItem {
-                        required property var modelData
-                        text: modelData.label
-                        onTriggered: Devices.addEffect(panel.key, modelData.type)
+                    Instantiator {
+                        model: Devices.effectTypes
+
+                        delegate: QQC2.MenuItem {
+                            required property var modelData
+                            text: modelData.label
+                            onTriggered: Devices.addEffect(panel.key, modelData.type)
+                        }
+
+                        onObjectAdded: (index, object) => addMenu.insertItem(index, object)
+                        onObjectRemoved: (index, object) => addMenu.removeItem(object)
                     }
 
-                    onObjectAdded: (index, object) => addMenu.insertItem(index, object)
-                    onObjectRemoved: (index, object) => addMenu.removeItem(object)
-                }
+                    QQC2.MenuSeparator {}
 
-                QQC2.MenuSeparator {}
-
-                QQC2.MenuItem {
-                    icon.name: "plugins"
-                    text: qsTr("Plugin…")
-                    onTriggered: pluginPicker.open()
+                    QQC2.MenuItem {
+                        icon.name: "plugins"
+                        text: qsTr("Plugin…")
+                        onTriggered: pluginPicker.open()
+                    }
                 }
             }
+
+            // Plugins installed since the last scan show up after a scan.
+            PluginScan {}
         }
     }
     }

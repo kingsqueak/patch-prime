@@ -12,6 +12,7 @@
 #include <lv2/ui/ui.h>
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -29,6 +30,7 @@ struct UiChoice
     std::string uri;
     std::string binary; // the library's path
     std::string bundle; // its bundle directory, with a trailing slash
+    bool fixedSize = false; // ui:noUserResize or ui:fixedSize
 };
 std::optional<UiChoice> findX11Ui(LilvWorld *world, const LilvPlugin *plugin);
 
@@ -42,7 +44,8 @@ std::optional<UiChoice> findX11Ui(LilvWorld *world, const LilvPlugin *plugin);
 class Lv2Ui : public PluginWindow
 {
 public:
-    Lv2Ui(Lv2World &world, Lv2Effect &effect, const std::string &title);
+    Lv2Ui(Lv2World &world, Lv2Effect &effect, const std::string &title,
+          std::function<void(const std::string &, double)> onParamChanged);
     ~Lv2Ui() override;
     Lv2Ui(const Lv2Ui &) = delete;
     Lv2Ui &operator=(const Lv2Ui &) = delete;
@@ -70,10 +73,12 @@ private:
     std::uint32_t m_eventTransfer = 0;
     // What the UI was last told, by port index (NaN: not yet).
     std::vector<float> m_sent;
+    std::vector<bool> m_told; // whether it was told anything yet
     // Features, which must outlive the UI.
     float m_rate = 48000.0F;
     float m_updateRate = 30.0F;
     std::vector<LV2_Options_Option> m_options;
+    LV2_Feature m_optionsFeature{};
     LV2UI_Resize m_resize{};
     LV2_Extension_Data_Feature m_dataAccess{};
     LV2_Feature m_parentFeature{};

@@ -49,6 +49,9 @@ public:
     // Realtime: the effect runs again after being fully bypassed (skipped);
     // forget what it held from before (buffered audio, filter memory).
     virtual void resume() noexcept {}
+    // Realtime, instead of process() while it's fully bypassed: a block went
+    // by without it (a plugin still has its parameter changes to deliver).
+    virtual void bypassed(int /*frames*/) noexcept {}
 
     // Main thread: the effect's meters since the last call (gain reduction
     // per band, say) into out; returns how many it wrote. Most have none.

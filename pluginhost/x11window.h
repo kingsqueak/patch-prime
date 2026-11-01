@@ -39,6 +39,14 @@ public:
     void raise();
     // Sizes the window (from the program, not reported as the user's).
     void resize(int width, int height);
+    // Be an XEmbed embedder (VST3 editors expect one): a window the editor
+    // makes inside this one is told it's embedded, mapped, and given focus.
+    // Call before the editor is attached.
+    void setEmbedder(bool on);
+    // Whether the user may resize it (the editor can follow). A window that
+    // may not keeps the size it's given: the window manager is told so, and
+    // offers no resizing.
+    void setResizable(bool resizable);
     // Sizes another window (the editor in it, when the user resized this one).
     void resize(XWindowId window, int width, int height);
     // The size of another window (the editor's), or nullopt.
@@ -56,6 +64,11 @@ private:
     unsigned long m_deleteAtom = 0; // NOLINT(google-runtime-int): an X Atom
     int m_width = 0;
     int m_height = 0;
+    bool m_resizable = true;
+    bool m_embedder = false;
+
+    void applySizeHints();
+    void embed(XWindowId child);
 };
 
 } // namespace pp

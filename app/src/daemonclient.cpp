@@ -389,7 +389,8 @@ QVariantMap DaemonClient::effectInfo(const QString &type) const
         }
     }
     // A plugin that isn't installed (any more): its URI's last part as a name.
-    const bool plugin = type.startsWith(QLatin1String("lv2:")) || type.startsWith(QLatin1String("clap:"));
+    const bool plugin = type.startsWith(QLatin1String("lv2:")) || type.startsWith(QLatin1String("clap:")) ||
+                        type.startsWith(QLatin1String("vst3:"));
     return {{QStringLiteral("type"), type},
             {QStringLiteral("label"), plugin ? type.section(QLatin1Char('/'), -1) : type},
             {QStringLiteral("params"), QVariantList{}},
@@ -621,13 +622,17 @@ void DaemonClient::onStateChanged(const QString &state)
     {
         const int revision = root.value(QLatin1String("pluginsRevision")).toInt();
         const bool scanning = root.value(QLatin1String("pluginsScanning")).toBool();
+        const auto scan = root.value(QLatin1String("pluginsScan")).toObject().toVariantMap();
+        const auto lastScan = QDateTime::fromString(root.value(QLatin1String("pluginsLastScan")).toString(),
+                                                    Qt::ISODate);
         const auto errors = root.value(QLatin1String("pluginErrors")).toObject().toVariantMap();
         const auto windows = root.value(QLatin1String("pluginWindows")).toObject().toVariantMap();
         const auto windowErrors =
             root.value(QLatin1String("pluginWindowErrors")).toObject().toVariantMap();
         if (revision != m_pluginsRevision || scanning != m_pluginsScanning ||
             errors != m_pluginErrors || windows != m_pluginWindows ||
-            windowErrors != m_pluginWindowErrors) {
+            windowErrors != m_pluginWindowErrors || scan != m_pluginsScan ||
+            lastScan != m_pluginsLastScan) {
             if (revision != m_pluginsRevision) {
                 // The list is long (every plugin's parameters): only fetched
                 // when it changed.
@@ -645,6 +650,8 @@ void DaemonClient::onStateChanged(const QString &state)
                 m_pluginsRevision = revision;
             }
             m_pluginsScanning = scanning;
+            m_pluginsScan = scan;
+            m_pluginsLastScan = lastScan;
             m_pluginErrors = errors;
             m_pluginWindows = windows;
             m_pluginWindowErrors = windowErrors;

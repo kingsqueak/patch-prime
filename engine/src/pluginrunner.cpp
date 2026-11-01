@@ -12,6 +12,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <cmath>
 
 Q_LOGGING_CATEGORY(lcRunner, "patchprime.plugins.runner")
 
@@ -63,48 +64,52 @@ PluginRunner::PluginRunner(QObject *parent) : QObject(parent) {}
 
 PluginRunner::~PluginRunner()
 {
+    // Not reported: the engine is going away (and with it what would hear).
     for (auto &[node, host] : m_hosts) {
-        stop(*host);
+        stop(node, *host, false);
     }
 }
 
-void PluginRunner::want(const std::string &node, const PluginSpec &spec)
+bool PluginRunner::want(const std::string &node, const PluginSpec &spec)
 {
     auto &slot = m_hosts[node];
     if (!slot) {
         slot = std::make_unique<Host>();
         slot->spec = spec;
         start(node, *slot);
-        return;
+        return true;
     }
     Host &host = *slot;
     if (host.spec == spec) {
-        return;
+        return false;
     }
-    // The window's title and the plugin's state don't restart it: the
-    // state came from it, and the title only shows the next time.
+    // A new state means another instance (two of one plugin swapped, or a
+    // scene loaded): the plugin starts again with it. State the plugin
+    // reported itself is already in host.spec, so that doesn't restart it.
+    // The window's title only shows the next time.
     const bool restart = host.spec.type != spec.type || host.spec.binary != spec.binary ||
                          host.spec.positions != spec.positions ||
                          host.spec.sampleRate != spec.sampleRate ||
                          host.spec.owner != spec.owner ||
-                         host.spec.description != spec.description;
+                         host.spec.description != spec.description ||
+                         host.spec.state != spec.state;
     const bool settingsChanged = host.spec.enabled != spec.enabled || host.spec.params != spec.params;
     host.spec = spec;
-    if (!host.error.empty() || restart || host.process == nullptr) {
+    if (!host.error.empty() || restart || (host.process == nullptr && host.restart == nullptr)) {
         // Changed settings give a plugin that failed another go.
-        stop(host);
+        stop(node, host, false);
         host.crashes.clear();
         host.error.clear();
         start(node, host);
         Q_EMIT changed();
-        return;
+        return true;
     }
-    if (!settingsChanged) {
-        return;
+    if (settingsChanged) {
+        send(host, line({{QStringLiteral("set"),
+                          QJsonObject{{QStringLiteral("enabled"), spec.enabled},
+                                      {QStringLiteral("params"), paramsJson(spec.params)}}}}));
     }
-    send(host, line({{QStringLiteral("set"),
-                      QJsonObject{{QStringLiteral("enabled"), spec.enabled},
-                                  {QStringLiteral("params"), paramsJson(spec.params)}}}}));
+    return false;
 }
 
 void PluginRunner::prune(const std::set<std::string> &keep)
@@ -115,7 +120,7 @@ void PluginRunner::prune(const std::set<std::string> &keep)
             continue;
         }
         qCInfo(lcRunner, "stopping plugin node %s", it->first.c_str());
-        stop(*it->second);
+        stop(it->first, *it->second, true);
         it = m_hosts.erase(it);
     }
 }
@@ -142,8 +147,13 @@ void PluginRunner::setWindow(const std::string &node, bool open)
     if (it == m_hosts.end()) {
         return;
     }
-    it->second->windowError.clear();
-    send(*it->second, line({{QStringLiteral("window"), open}}));
+    Host &host = *it->second;
+    host.windowError.clear();
+    if (host.process == nullptr || !host.ready) {
+        host.windowWanted = open; // once its node is up
+        return;
+    }
+    send(host, line({{QStringLiteral("window"), open}}));
 }
 
 bool PluginRunner::isWindowOpen(const std::string &node) const
@@ -160,9 +170,16 @@ std::string PluginRunner::windowError(const std::string &node) const
 
 void PluginRunner::requestState(const std::string &node)
 {
-    if (const auto it = m_hosts.find(node); it != m_hosts.end()) {
-        send(*it->second, line({{QStringLiteral("saveState"), true}}));
+    const auto it = m_hosts.find(node);
+    if (it == m_hosts.end()) {
+        return;
     }
+    Host &host = *it->second;
+    if (host.process == nullptr || !host.ready) {
+        host.stateWanted = true;
+        return;
+    }
+    send(host, line({{QStringLiteral("saveState"), true}}));
 }
 
 std::optional<EffectLevels> PluginRunner::takeLevels(const std::string &node)
@@ -186,6 +203,7 @@ void PluginRunner::start(const std::string &node, Host &host)
     for (const auto &p : host.spec.positions) {
         positions.append(qs(p));
     }
+    // Parameters and state go in on stdin (they can be long), not as arguments.
     QStringList args{
         QStringLiteral("--run"),
         QStringLiteral("--format"), qs(pluginFormat(host.spec.type)),
@@ -197,18 +215,15 @@ void PluginRunner::start(const std::string &node, Host &host)
         QStringLiteral("--owner"), qs(host.spec.owner),
         QStringLiteral("--description"), qs(host.spec.description),
         QStringLiteral("--title"), qs(host.spec.title),
-        QStringLiteral("--params"),
-        QString::fromUtf8(QJsonDocument(paramsJson(host.spec.params)).toJson(QJsonDocument::Compact)),
     };
     if (!host.spec.enabled) {
         args.append(QStringLiteral("--bypassed"));
     }
-    if (!host.spec.state.empty()) {
-        args.append(QStringLiteral("--state-follows"));
-    }
     host.pending.clear();
     host.reported.clear();
     host.hasLevels = false;
+    host.ready = false;
+    host.windowOpen = false;
     auto *process = new QProcess(this);
     process->setProcessChannelMode(QProcess::ForwardedErrorChannel);
     connect(process, &QProcess::readyReadStandardOutput, this,
@@ -218,27 +233,59 @@ void PluginRunner::start(const std::string &node, Host &host)
                 finished(node, exitCode, status);
             });
     connect(process, &QProcess::errorOccurred, this, [this, node](QProcess::ProcessError e) {
-        if (e == QProcess::FailedToStart) {
-            finished(node, 2, QProcess::NormalExit);
+        const auto it = m_hosts.find(node);
+        if (e != QProcess::FailedToStart || it == m_hosts.end() || it->second->process == nullptr) {
+            return;
         }
+        // Couldn't run the host at all (out of processes, say): like a crash,
+        // tried again a few times.
+        Host &h = *it->second;
+        const auto why = h.process->errorString().toStdString();
+        h.process->disconnect();
+        h.process->deleteLater();
+        h.process = nullptr;
+        crashed(node, h, "the plugin host couldn't be started (" + why + ")");
     });
     host.process = process;
     qCInfo(lcRunner, "starting plugin node %s (%s)", node.c_str(), host.spec.type.c_str());
     process->start(program, args);
+    QJsonObject init{{QStringLiteral("params"), paramsJson(host.spec.params)}};
     if (!host.spec.state.empty()) {
-        send(host, line({{QStringLiteral("state"), qs(host.spec.state)}}));
+        init.insert(QStringLiteral("state"), qs(host.spec.state));
     }
+    send(host, line(init));
     if (host.metering) {
         send(host, line({{QStringLiteral("metering"), true}}));
     }
+    // A host whose node never comes up (stuck loading, refused by PipeWire)
+    // would leave its plugin silently left out: give it a limit.
+    host.readyCheck = new QTimer(this);
+    host.readyCheck->setSingleShot(true);
+    connect(host.readyCheck, &QTimer::timeout, this, [this, node] {
+        const auto it = m_hosts.find(node);
+        if (it == m_hosts.end() || it->second->process == nullptr || it->second->ready) {
+            return;
+        }
+        qCWarning(lcRunner, "plugin node %s didn't come up; stopping it", node.c_str());
+        Host &h = *it->second;
+        h.process->disconnect();
+        h.process->kill();
+        h.process->waitForFinished(1000);
+        h.process->deleteLater();
+        h.process = nullptr;
+        crashed(node, h, "it didn't start in time");
+    });
+    host.readyCheck->start(readyTimeout);
 }
 
-void PluginRunner::stop(Host &host)
+void PluginRunner::stop(const std::string &node, Host &host, bool report)
 {
-    if (host.restart != nullptr) {
-        host.restart->stop();
-        host.restart->deleteLater();
-        host.restart = nullptr;
+    for (QTimer **timer : {&host.restart, &host.readyCheck}) {
+        if (*timer != nullptr) {
+            (*timer)->stop();
+            (*timer)->deleteLater();
+            *timer = nullptr;
+        }
     }
     if (host.process == nullptr) {
         return;
@@ -246,8 +293,22 @@ void PluginRunner::stop(Host &host)
     QProcess *process = host.process;
     host.process = nullptr;
     process->disconnect();
-    process->kill();
-    process->waitForFinished(1000);
+    // Closing its stdin lets it go: it sends the plugin's state and exits.
+    // A host that doesn't is killed.
+    process->closeWriteChannel();
+    if (!process->waitForFinished(static_cast<int>(stopTimeout.count()))) {
+        process->kill();
+        process->waitForFinished(1000);
+    }
+    host.pending += process->readAllStandardOutput();
+    qsizetype end = 0;
+    while ((end = host.pending.indexOf('\n')) >= 0) {
+        handleLine(node, host, host.pending.left(end), report);
+        host.pending.remove(0, end + 1);
+    }
+    host.pending.clear();
+    host.ready = false;
+    host.windowOpen = false;
     process->deleteLater();
 }
 
@@ -259,10 +320,17 @@ void PluginRunner::finished(const std::string &node, int exitCode, QProcess::Exi
     }
     Host &host = *it->second;
     readOutput(node);
+    if (host.process == nullptr) {
+        return; // readOutput gave up on it
+    }
     host.windowOpen = false;
+    host.ready = false;
     host.process->disconnect();
     host.process->deleteLater();
     host.process = nullptr;
+    if (host.readyCheck != nullptr) {
+        host.readyCheck->stop();
+    }
 
     if (status == QProcess::NormalExit && exitCode == 2) {
         // The plugin couldn't be loaded: no point trying again as it is.
@@ -271,29 +339,38 @@ void PluginRunner::finished(const std::string &node, int exitCode, QProcess::Exi
         Q_EMIT changed();
         return;
     }
+    crashed(node, host, "exit " + std::to_string(exitCode));
+}
+
+void PluginRunner::crashed(const std::string &node, Host &host, const std::string &why)
+{
+    host.windowOpen = false;
+    host.ready = false;
     const auto now = Clock::now();
     std::erase_if(host.crashes, [now](Clock::time_point t) { return now - t > crashWindow; });
     host.crashes.push_back(now);
     if (std::cmp_greater_equal(host.crashes.size(), crashLimit)) {
-        host.error = "it crashed " + std::to_string(host.crashes.size()) +
-                     " times, so it's off; change a setting to try again";
+        host.error = "it stopped " + std::to_string(host.crashes.size()) +
+                     " times (" + why + "), so it's off; change a setting to try again";
         qCWarning(lcRunner, "plugin node %s: %s", node.c_str(), host.error.c_str());
         Q_EMIT changed();
         return;
     }
-    qCWarning(lcRunner, "plugin node %s stopped (exit %d); restarting", node.c_str(), exitCode);
-    host.restart = new QTimer(this);
-    host.restart->setSingleShot(true);
-    connect(host.restart, &QTimer::timeout, this, [this, node] {
-        const auto h = m_hosts.find(node);
-        if (h == m_hosts.end() || h->second->process != nullptr) {
-            return;
-        }
-        h->second->restart->deleteLater();
-        h->second->restart = nullptr;
-        start(node, *h->second);
-        Q_EMIT changed();
-    });
+    qCWarning(lcRunner, "plugin node %s stopped (%s); restarting", node.c_str(), why.c_str());
+    if (host.restart == nullptr) {
+        host.restart = new QTimer(this);
+        host.restart->setSingleShot(true);
+        connect(host.restart, &QTimer::timeout, this, [this, node] {
+            const auto h = m_hosts.find(node);
+            if (h == m_hosts.end() || h->second->process != nullptr) {
+                return;
+            }
+            h->second->restart->deleteLater();
+            h->second->restart = nullptr;
+            start(node, *h->second);
+            Q_EMIT changed();
+        });
+    }
     host.restart->start(restartDelay);
     Q_EMIT changed();
 }
@@ -307,29 +384,71 @@ void PluginRunner::readOutput(const std::string &node)
     Host &host = *it->second;
     host.pending += host.process->readAllStandardOutput();
     qsizetype end = 0;
-    while ((end = host.pending.indexOf('\n')) >= 0) {
-        const auto o = QJsonDocument::fromJson(host.pending.left(end)).object();
+    while (host.process != nullptr && (end = host.pending.indexOf('\n')) >= 0) {
+        const QByteArray bytes = host.pending.left(end);
         host.pending.remove(0, end + 1);
-        if (const auto levels = o.value(QLatin1String("levels")); levels.isObject()) {
-            readLevels(levels.toObject(), host.levels, host.hasLevels);
-            host.hasLevels = true;
-        } else if (const auto error = o.value(QLatin1String("error")); error.isString()) {
-            host.reported = error.toString().toStdString();
-        } else if (const auto window = o.value(QLatin1String("window")); window.isBool()) {
-            host.windowOpen = window.toBool();
+        handleLine(node, host, bytes, true);
+    }
+    if (host.process != nullptr && host.pending.size() > maxPending) {
+        // Megabytes without an end of line: not our protocol any more.
+        qCWarning(lcRunner, "plugin node %s sent too much without a line end; stopping it", node.c_str());
+        host.pending.clear();
+        host.process->disconnect();
+        host.process->kill();
+        host.process->waitForFinished(1000);
+        host.process->deleteLater();
+        host.process = nullptr;
+        crashed(node, host, "it sent garbage");
+    }
+}
+
+void PluginRunner::handleLine(const std::string &node, Host &host, const QByteArray &bytes, bool report)
+{
+    const auto o = QJsonDocument::fromJson(bytes).object();
+    if (const auto levels = o.value(QLatin1String("levels")); levels.isObject()) {
+        readLevels(levels.toObject(), host.levels, host.hasLevels);
+        host.hasLevels = true;
+    } else if (o.value(QLatin1String("ready")).toBool()) {
+        host.ready = true;
+        // What was asked while it was starting.
+        if (host.windowWanted) {
+            send(host, line({{QStringLiteral("window"), *host.windowWanted}}));
+            host.windowWanted.reset();
+        }
+        if (host.stateWanted) {
+            send(host, line({{QStringLiteral("saveState"), true}}));
+            host.stateWanted = false;
+        }
+        if (report) {
             Q_EMIT changed();
-        } else if (const auto failed = o.value(QLatin1String("windowError")); failed.isString()) {
-            host.windowError = failed.toString().toStdString();
+        }
+    } else if (const auto error = o.value(QLatin1String("error")); error.isString()) {
+        host.reported = error.toString().toStdString();
+    } else if (const auto window = o.value(QLatin1String("window")); window.isBool()) {
+        host.windowOpen = window.toBool();
+        if (report) {
             Q_EMIT changed();
-        } else if (const auto param = o.value(QLatin1String("param")); param.isObject()) {
-            const auto p = param.toObject();
-            const auto name = p.value(QLatin1String("name")).toString().toStdString();
-            const double value = p.value(QLatin1String("value")).toDouble();
-            host.spec.params[name] = value; // it has it already: no need to send it back
-            Q_EMIT paramChanged(node, name, value);
-        } else if (const auto state = o.value(QLatin1String("state")); state.isString()) {
-            host.spec.state = state.toString().toStdString();
-            Q_EMIT stateChanged(node, host.spec.state);
+        }
+    } else if (const auto failed = o.value(QLatin1String("windowError")); failed.isString()) {
+        host.windowError = failed.toString().toStdString();
+        if (report) {
+            Q_EMIT changed();
+        }
+    } else if (const auto param = o.value(QLatin1String("param")); param.isObject()) {
+        const auto p = param.toObject();
+        const auto name = p.value(QLatin1String("name")).toString().toStdString();
+        const double value = p.value(QLatin1String("value")).toDouble(qQNaN());
+        if (name.empty() || !std::isfinite(value)) {
+            return;
+        }
+        host.spec.params[name] = value; // it has it already: no need to send it back
+        if (report) {
+            Q_EMIT paramChanged(node, host.spec.type, name, value);
+        }
+    } else if (const auto state = o.value(QLatin1String("state")); state.isString()) {
+        host.spec.state = state.toString().toStdString();
+        if (report) {
+            Q_EMIT stateChanged(node, host.spec.type, host.spec.state);
         }
     }
 }

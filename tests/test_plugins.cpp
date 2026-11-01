@@ -10,6 +10,7 @@
 #include "devicestore.h"
 #include "plugins.h"
 
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QSignalSpy>
@@ -57,6 +58,8 @@ private Q_SLOTS:
     void types()
     {
         QVERIFY(isPluginType("clap:com.x.y"));
+        QCOMPARE(pluginFormat("vst3:ABCDEF"), "vst3");
+        QCOMPARE(pluginUri("vst3:ABCDEF"), "ABCDEF");
         QCOMPARE(pluginFormat("clap:com.x.y"), "clap");
         QCOMPARE(pluginFormat("lv2:urn:x"), "lv2");
         QCOMPARE(pluginFormat("gain"), "");
@@ -127,10 +130,23 @@ private Q_SLOTS:
         QVERIFY2(!pluginHostProgram().isEmpty(), "patchprime-pluginhost not built");
         QTemporaryDir dir;
         PluginCatalog catalog(dir.filePath(QStringLiteral("cache/plugins.json")));
-        QSignalSpy changed(&catalog, &PluginCatalog::changed);
+        // No list yet: the first start scans, and says how far it is.
+        PluginCatalog::Progress furthest;
+        connect(&catalog, &PluginCatalog::changed, this, [&] {
+            if (catalog.progress().done > furthest.done) {
+                furthest = catalog.progress();
+            }
+        });
+        QVERIFY(!catalog.lastScan().isValid());
         catalog.start();
+        QVERIFY(catalog.isScanning());
         QVERIFY(QTest::qWaitFor([&] { return !catalog.isScanning(); }, 15000));
-        QCOMPARE(catalog.plugins().size(), 2U); // LV2 and CLAP
+        QCOMPARE(furthest.total, 3); // the LV2 ones, a .clap file, a .vst3 bundle
+        QCOMPARE(furthest.done, 3);
+        QCOMPARE(furthest.found, 3);
+        QCOMPARE(catalog.progress().total, 0); // done with
+        QVERIFY(catalog.lastScan().isValid());
+        QCOMPARE(catalog.plugins().size(), 3U); // LV2, CLAP and VST3
         const auto *gain = catalog.find(testGain);
         QVERIFY(gain != nullptr);
         QCOMPARE(gain->name, "Patch Prime Test Gain");
@@ -161,11 +177,43 @@ private Q_SLOTS:
         QCOMPARE(clap->params[0].maximum, 4.0);
         QCOMPARE(clap->params[2].kind, ParamKind::Toggle);
 
-        // Cached: the next start has it at once.
+        // The VST3 one: stepped parameters as switches, values normalized.
+        const auto *vst3 = catalog.find("vst3:5050545054657374476169" "6E56535433");
+        QVERIFY(vst3 != nullptr);
+        QCOMPARE(vst3->name, "Patch Prime Test Gain (VST3)");
+        QCOMPARE(vst3->author, "Patch Prime tests");
+        QCOMPARE(vst3->category, "Utility");
+        QCOMPARE(vst3->audioIn, 1);
+        QCOMPARE(vst3->problem, "");
+        QVERIFY(vst3->binary.ends_with("patchprime-test.vst3"));
+        QCOMPARE(vst3->params.size(), 3U);
+        QCOMPARE(vst3->params[0].name, "1");
+        QCOMPARE(vst3->params[0].maximum, 1.0);
+        QCOMPARE(vst3->params[0].initial, 0.25);
+        QCOMPARE(vst3->params[2].kind, ParamKind::Toggle);
+
+        // Cached: the next start has it at once, and doesn't scan again.
         PluginCatalog again(dir.filePath(QStringLiteral("cache/plugins.json")));
         again.start();
+        QVERIFY(!again.isScanning());
         QVERIFY(again.find(testGain) != nullptr);
+        QCOMPARE(again.lastScan().toSecsSinceEpoch(), catalog.lastScan().toSecsSinceEpoch());
+        // ...unless asked.
+        again.rescan();
+        QVERIFY(again.isScanning());
         QVERIFY(QTest::qWaitFor([&] { return !again.isScanning(); }, 15000));
+        QCOMPARE(again.plugins().size(), 3U);
+
+        // A cache from an older version (a bare list) is scanned again.
+        QFile old(dir.filePath(QStringLiteral("old.json")));
+        QVERIFY(old.open(QIODevice::WriteOnly));
+        old.write(pluginsToJson(catalog.plugins()));
+        old.close();
+        PluginCatalog older(old.fileName());
+        older.start();
+        QVERIFY(older.isScanning());
+        QVERIFY(QTest::qWaitFor([&] { return !older.isScanning(); }, 15000));
+        QCOMPARE(older.plugins().size(), 3U);
     }
 
     void addsPluginsToAStrip()

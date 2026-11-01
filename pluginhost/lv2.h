@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <map>
 #include <memory>
@@ -45,14 +46,17 @@ public:
     [[nodiscard]] PluginInfo describe(const LilvPlugin *plugin) const;
 
     [[nodiscard]] LilvWorld *world() const { return m_world; }
+    // urid:map and unmap. A URI's string lives as long as the world (LV2
+    // lets plugins keep what unmap returns).
     LV2_URID map(const char *uri);
     const char *unmap(LV2_URID urid);
     [[nodiscard]] LV2_URID_Map *mapFeature() { return &m_map; }
     [[nodiscard]] LV2_URID_Unmap *unmapFeature() { return &m_unmap; }
-    // Features for an instance: options carry the rate and block sizes.
-    [[nodiscard]] std::vector<const LV2_Feature *> features(const LV2_Options_Option *options);
+    // Features for an instance (or its UI): options is its own options
+    // feature (the rate and block sizes), which must outlive it.
+    [[nodiscard]] std::vector<const LV2_Feature *> features(const LV2_Feature *options);
     // Why a plugin can't run here, or "" when it can.
-    [[nodiscard]] static std::string problem(const LilvPlugin *plugin);
+    [[nodiscard]] std::string problem(const LilvPlugin *plugin) const;
 
     // Node URIs used when describing ports.
     struct Uris
@@ -80,7 +84,7 @@ private:
     Uris m_uris;
     std::mutex m_mapLock;
     std::map<std::string, LV2_URID> m_ids;
-    std::vector<std::string> m_names; // by id - 1
+    std::deque<std::string> m_names; // by id - 1; never moved
     LV2_URID_Map m_map{};
     LV2_URID_Unmap m_unmap{};
     LV2_Log_Log m_log{};
@@ -88,7 +92,6 @@ private:
     LV2_Feature m_unmapFeature{};
     LV2_Feature m_logFeature{};
     LV2_Feature m_boundedFeature{};
-    LV2_Feature m_optionsFeature{};
 };
 
 // An LV2 plugin as an effect in a chain (see EffectChain). It processes
@@ -114,7 +117,8 @@ public:
     void setParam(const std::string &name, double value) override;
 
     [[nodiscard]] const std::string &error() const override { return m_error; }
-    std::unique_ptr<PluginWindow> openWindow(const std::string &title) override;
+    std::unique_ptr<PluginWindow>
+    openWindow(const std::string &title, std::function<void(const std::string &, double)> onParam) override;
 
     // --- For its UI (see Lv2Ui), on the main thread ---
     [[nodiscard]] const LilvPlugin *plugin() const { return m_plugin; }
@@ -162,6 +166,7 @@ private:
         std::uint32_t index = 0;
         PortKind kind = PortKind::Other;
         std::string symbol;
+        bool input = false;
         float initial = 0.0F;
         float minimum = 0.0F;
         float maximum = 1.0F;
@@ -174,6 +179,10 @@ private:
         std::vector<std::vector<float>> audioOut; // per audio output port
         std::vector<std::vector<std::uint8_t>> atomIn;
         std::vector<std::vector<std::uint8_t>> atomOut;
+        // A buffer of its own for every other port (sidechains, CV): no two
+        // ports share one. The inputs among them are cleared every block.
+        std::vector<std::vector<float>> other;
+        std::vector<float *> clearEach;
     };
     void free();
 
@@ -189,13 +198,14 @@ private:
     std::map<std::string, std::uint32_t> m_bySymbol;
     std::unique_ptr<std::atomic<float>[]> m_targets; // NOLINT(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays): atomics can't live in a vector
     std::vector<Instance> m_instances;
-    std::vector<float> m_silence; // sidechains and CV
-    std::vector<float> m_scratch; // outputs we don't read (CV)
     int m_channels = 0;
     std::int32_t m_blockMax = maxEffectFrames;
     std::int32_t m_blockMin = 1;
     float m_rate = 48000.0F;
     std::vector<LV2_Options_Option> m_options;
+    LV2_Feature m_optionsFeature{};
+    std::int32_t m_sequenceSize = 0;
+    std::int32_t m_blockNominal = 1024;
     LV2_URID m_sequence = 0;
     LV2_URID m_chunk = 0;
     std::string m_error;
