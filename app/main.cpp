@@ -18,7 +18,7 @@ int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName(QStringLiteral("patchprime"));
-    // Qt adds the display name to every window's title (" — Patch Prime 0.13"),
+    // Qt adds the display name to every window's title (" — Patch Prime 0.14"),
     // so the version shows in each title bar; windows don't repeat it.
     QGuiApplication::setApplicationDisplayName(QStringLiteral("Patch Prime " PATCHPRIME_VERSION));
     QGuiApplication::setOrganizationDomain(QStringLiteral("kingsqueak.org"));
