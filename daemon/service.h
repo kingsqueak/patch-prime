@@ -140,7 +140,11 @@ public Q_SLOTS:
     // is, and "pluginsLastScan" when the list was made (ISO; "" for never).
     // RescanPlugins looks for plugins installed since (the engine doesn't
     // scan at every start: with many plugins that takes a while).
+    // GetPlugins lists them without their parameters ("paramCount" says how
+    // many); GetPluginParams(type) has one plugin's, as JSON
+    // [{name, label, unit, minimum, maximum, initial, kind, options}].
     QString GetPlugins() const;
+    QString GetPluginParams(const QString &type) const;
     void RescanPlugins();
     // A plugin's own window (plugins with "hasUi"): open (or bring forward)
     // or close it. Open ones are in the state as "pluginWindows" =

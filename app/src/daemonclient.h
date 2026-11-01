@@ -153,6 +153,8 @@ public:
     // An effect type's name and parameters: a built-in's (from effectTypes)
     // or a plugin's; {type, label, params} either way.
     [[nodiscard]] Q_INVOKABLE QVariantMap effectInfo(const QString &type) const;
+    // A plugin's parameters (asked of the daemon once, then kept).
+    [[nodiscard]] QVariantList pluginParams(const QString &type) const;
     Q_INVOKABLE void rescanPlugins();
     [[nodiscard]] QString cueOutput() const { return m_cueOutput; }
     [[nodiscard]] QVariantMap controlSurface() const { return m_controlSurface; }
@@ -380,6 +382,7 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QVariantMap m_pluginWindowErrors;
     QString m_cueOutput;
     QVariantMap m_controlSurface;
+    mutable QHash<QString, QVariantList> m_pluginParams; // by plugin type
     QVariantMap m_midiController;
     QVariantList m_midiMappings;
     QVariant m_midiLearning;

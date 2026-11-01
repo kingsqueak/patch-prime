@@ -57,6 +57,11 @@ struct PluginInfo
 };
 
 QByteArray pluginsToJson(const std::vector<PluginInfo> &plugins);
+// The list for clients: everything but the parameters (a plugin can have
+// thousands, and the whole list ran to tens of MB), with "paramCount"; and
+// one plugin's parameters, fetched when it's used.
+QByteArray pluginSummariesToJson(const std::vector<PluginInfo> &plugins);
+QByteArray pluginParamsToJson(const PluginInfo &plugin);
 std::vector<PluginInfo> pluginsFromJson(const QByteArray &json);
 
 // The plugins installed, from `patchprime-pluginhost --scan`. Scanning

@@ -564,12 +564,31 @@ void DaemonClient::setCue(const QString &key, bool cued)
     call(QStringLiteral("SetCue"), {key, cued});
 }
 
+QVariantList DaemonClient::pluginParams(const QString &type) const
+{
+    // Asked for the first time this plugin is shown, then kept (the whole
+    // list's parameters were tens of MB).
+    if (const auto cached = m_pluginParams.find(type); cached != m_pluginParams.end()) {
+        return *cached;
+    }
+    auto message = QDBusMessage::createMethodCall(service, path, interface, QStringLiteral("GetPluginParams"));
+    message.setArguments({type});
+    const QDBusReply<QString> reply = QDBusConnection::sessionBus().call(message);
+    if (!reply.isValid()) {
+        return {};
+    }
+    const auto params = QJsonDocument::fromJson(reply.value().toUtf8()).array().toVariantList();
+    m_pluginParams.insert(type, params);
+    return params;
+}
+
 QVariantMap DaemonClient::effectInfo(const QString &type) const
 {
     if (const auto at = m_pluginIndex.find(type); at != m_pluginIndex.end()) {
         auto info = m_plugins.at(*at).toMap();
         info.insert(QStringLiteral("label"), info.value(QStringLiteral("name")));
         info.insert(QStringLiteral("plugin"), true);
+        info.insert(QStringLiteral("params"), pluginParams(type));
         return info;
     }
     for (const auto &t : m_effectTypes) {
@@ -904,8 +923,9 @@ void DaemonClient::onStateChanged(const QString &state)
             windowErrors != m_pluginWindowErrors || scan != m_pluginsScan ||
             lastScan != m_pluginsLastScan) {
             if (revision != m_pluginsRevision) {
-                // The list is long (every plugin's parameters): only fetched
-                // when it changed.
+                // Only fetched when it changed (and without parameters: see
+                // pluginParams).
+                m_pluginParams.clear();
                 const auto message = QDBusMessage::createMethodCall(service, path, interface,
                                                                     QStringLiteral("GetPlugins"));
                 const QDBusReply<QString> reply = QDBusConnection::sessionBus().call(message);

@@ -641,7 +641,13 @@ void PatchPrimeService::SetEffectParam(const QString &key, int index, const QStr
 
 QString PatchPrimeService::GetPlugins() const
 {
-    return QString::fromUtf8(pp::pluginsToJson(m_plugins->plugins()));
+    return QString::fromUtf8(pp::pluginSummariesToJson(m_plugins->plugins()));
+}
+
+QString PatchPrimeService::GetPluginParams(const QString &type) const
+{
+    const auto *plugin = m_plugins->find(type.toStdString());
+    return plugin == nullptr ? QStringLiteral("[]") : QString::fromUtf8(pp::pluginParamsToJson(*plugin));
 }
 
 void PatchPrimeService::SetPluginWindow(const QString &key, int index, bool open)

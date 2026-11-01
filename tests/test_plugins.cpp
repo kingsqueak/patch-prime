@@ -123,6 +123,16 @@ private Q_SLOTS:
         QCOMPARE(back[0].params[0].options, p.params[0].options);
         QCOMPARE(back[0].params[0].initial, 1.0);
         QVERIFY(pluginsFromJson("not json").empty());
+
+        // For clients: the list without the parameters, then one plugin's.
+        const auto summary = QJsonDocument::fromJson(pluginSummariesToJson({p})).array();
+        QCOMPARE(summary.size(), 1);
+        QVERIFY(!summary.at(0).toObject().contains(QLatin1String("params")));
+        QCOMPARE(summary.at(0).toObject().value(QLatin1String("paramCount")).toInt(), 1);
+        QCOMPARE(summary.at(0).toObject().value(QLatin1String("name")).toString(), QStringLiteral("X Comp"));
+        const auto params = QJsonDocument::fromJson(pluginParamsToJson(p)).array();
+        QCOMPARE(params.size(), 1);
+        QCOMPARE(params.at(0).toObject().value(QLatin1String("options")).toArray().size(), 3);
     }
 
     void scansTheTestPlugin()

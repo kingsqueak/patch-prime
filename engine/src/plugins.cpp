@@ -137,6 +137,34 @@ QByteArray pluginsToJson(const std::vector<PluginInfo> &plugins)
     return QJsonDocument(list).toJson(QJsonDocument::Compact);
 }
 
+QByteArray pluginSummariesToJson(const std::vector<PluginInfo> &plugins)
+{
+    QJsonArray list;
+    for (const auto &p : plugins) {
+        list.append(QJsonObject{
+            {QStringLiteral("type"), qs(p.type)},
+            {QStringLiteral("name"), qs(p.name)},
+            {QStringLiteral("author"), qs(p.author)},
+            {QStringLiteral("category"), qs(p.category)},
+            {QStringLiteral("audioIn"), p.audioIn},
+            {QStringLiteral("audioOut"), p.audioOut},
+            {QStringLiteral("paramCount"), static_cast<int>(p.params.size())},
+            {QStringLiteral("hasUi"), p.hasUi},
+            {QStringLiteral("problem"), qs(p.problem)},
+        });
+    }
+    return QJsonDocument(list).toJson(QJsonDocument::Compact);
+}
+
+QByteArray pluginParamsToJson(const PluginInfo &plugin)
+{
+    QJsonArray params;
+    for (const auto &param : plugin.params) {
+        params.append(paramToJson(param));
+    }
+    return QJsonDocument(params).toJson(QJsonDocument::Compact);
+}
+
 std::vector<PluginInfo> pluginsFromJson(const QByteArray &json)
 {
     std::vector<PluginInfo> plugins;

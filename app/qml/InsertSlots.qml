@@ -30,7 +30,18 @@ ColumnLayout {
     readonly property int shown: effects.length <= Style.insertSlots ? effects.length
                                                                        : Style.insertSlots - 1
 
+    // The strip's effects window, made the first time it's opened (each
+    // one is a whole window of editors: making one per strip at start took
+    // seconds) and kept after.
+    property var window: null
     function open() {
+        if (!window) {
+            window = windowComponent.createObject(inserts, {
+                key: Qt.binding(() => inserts.key),
+                label: Qt.binding(() => inserts.label),
+                effects: Qt.binding(() => inserts.effects)
+            });
+        }
         window.open();
     }
 
@@ -41,7 +52,7 @@ ColumnLayout {
     onLabelChanged: {
         if (label.length > 0 && QQC2.ApplicationWindow.window
                 && QQC2.ApplicationWindow.window.openEffects === label)
-            window.open();
+            open();
     }
 
     component Slot: QQC2.AbstractButton {
@@ -128,10 +139,8 @@ ColumnLayout {
         Layout.fillHeight: true
     }
 
-    EffectsWindow {
-        id: window
-        key: inserts.key
-        label: inserts.label
-        effects: inserts.effects
+    Component {
+        id: windowComponent
+        EffectsWindow {}
     }
 }
