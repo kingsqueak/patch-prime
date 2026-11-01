@@ -25,6 +25,9 @@ class DaemonClient : public QAbstractListModel
     Q_PROPERTY(double maximumVolumeDb READ maximumVolumeDb CONSTANT)
     // Applications: [{key, name, icon, direction, target, streams}], see the daemon's state.
     Q_PROPERTY(QVariantList apps READ apps NOTIFY appsChanged)
+    // App strips' meters: app key -> {levels, peakHold} (0..1 per channel,
+    // like a strip's).
+    Q_PROPERTY(QVariantMap appLevels READ appLevels NOTIFY appLevelsChanged)
     // What clocks the audio graph: "internal" or "hardware".
     Q_PROPERTY(QString clock READ clock NOTIFY clockChanged)
     // With the hardware clock: the chosen device's key. clockNow: the device
@@ -206,6 +209,12 @@ public:
     Q_INVOKABLE void createVirtual(const QString &name, const QString &kind);
     // nodeName: a target's name; empty for the system default.
     Q_INVOKABLE void setAppTarget(const QString &appKey, const QString &nodeName);
+    // App strips: a running app's own level and mute; hidden ones are left
+    // out of the mixer.
+    Q_INVOKABLE void setAppVolume(const QString &appKey, double db);
+    Q_INVOKABLE void setAppMuted(const QString &appKey, bool muted);
+    Q_INVOKABLE void setAppHidden(const QString &appKey, bool hidden);
+    [[nodiscard]] QVariantMap appLevels() const { return m_appLevels; }
     Q_INVOKABLE void forgetApp(const QString &appKey);
     Q_INVOKABLE void setClock(const QString &mode);
     Q_INVOKABLE void setClockDevice(const QString &key);
@@ -261,6 +270,7 @@ Q_SIGNALS:
     void connectedChanged();
     void lastErrorChanged();
     void appsChanged();
+    void appLevelsChanged();
     void clockChanged();
     void scenesChanged();
     void effectTypesChanged();
@@ -308,6 +318,7 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     bool m_connected = false;
     QString m_lastError;
     QVariantList m_apps;
+    QVariantMap m_appLevels;
     QString m_clock;
     QString m_clockDevice;
     QString m_clockNow;

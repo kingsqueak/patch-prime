@@ -5,6 +5,7 @@
 // in for hardware. Enabling it must create its bus, link the bus monitor to it,
 // apply the fader, meter a tone played into the bus, and remove the bus again.
 
+#include "appmixer.h"
 #include "approuter.h"
 #include "appstore.h"
 #include "busmanager.h"
@@ -19,6 +20,7 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QScopeGuard>
+#include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
@@ -1682,6 +1684,67 @@ private Q_SLOTS:
 
         devices.setEnabled(devices.rowForKey(key), false);
         QVERIFY(QTest::qWaitFor([&] { return nodeNamed(m_graph, bus) == nullptr; }, 5000));
+    }
+
+    // An app strip: the app's own stream volume and mute, and its meter.
+    void appStrips()
+    {
+        QTemporaryDir dir;
+        AppStore store(dir.filePath(QStringLiteral("apps.json")));
+        const auto scope = "test-" + std::to_string(QCoreApplication::applicationPid());
+        AppRouter router(&m_graph, &store, scope);
+        AppMixer mixer(&m_graph, &router);
+        const std::string key = "playback|patchprime-test-strip";
+
+        // A tone into the test sink (heard nowhere).
+        QTemporaryDir toneDir;
+        const auto tone = toneDir.filePath(QStringLiteral("tone.wav"));
+        QVERIFY(writeTone(tone, 20));
+        QProcess player;
+        player.start(QStringLiteral("pw-play"),
+                     {QStringLiteral("--target"), QString::fromStdString(m_sinkName), QStringLiteral("-P"),
+                      QStringLiteral("{ application.name = \"Patch Prime Strip Test\" "
+                                     "application.process.binary = \"patchprime-test-strip\" "
+                                     "patchprime.scope = \"%1\" }")
+                          .arg(QString::fromStdString(scope)),
+                      tone});
+        auto stopPlayer = qScopeGuard([&player] {
+            player.kill();
+            player.waitForFinished();
+        });
+        QVERIFY(QTest::qWaitFor([&] { return mixer.volumeDb(key).has_value(); }, 5000));
+
+        QVERIFY(mixer.setVolume(key, -12.0));
+        QVERIFY(QTest::qWaitFor([&] { return std::abs(mixer.volumeDb(key).value_or(0) + 12.0) < 0.01; }, 3000));
+        QVERIFY(mixer.setMuted(key, true));
+        QVERIFY(QTest::qWaitFor([&] { return mixer.isMuted(key).value_or(false); }, 3000));
+        QVERIFY(std::abs(*mixer.volumeDb(key) + 12.0) < 0.01); // muting keeps the level
+
+        // Changed elsewhere (an app, Plasma's applet): followed.
+        QSignalSpy changed(&mixer, &AppMixer::changed);
+        const auto stream = router.streamNodes(key).at(0);
+        QVERIFY(m_graph.setNodeVolume(stream, {0.5F, 0.5F}, false));
+        QVERIFY(QTest::qWaitFor([&] { return !mixer.isMuted(key).value_or(true); }, 3000));
+        QVERIFY(std::abs(*mixer.volumeDb(key) + 6.02) < 0.05);
+        QVERIFY(!changed.isEmpty());
+
+        // The meter hears the tone (-6 dBFS, at -6 dB): about 0.25.
+        mixer.setMetering(true);
+        auto loudest = [&] {
+            const auto levels = mixer.takeLevels();
+            const auto at = levels.find(key);
+            return at == levels.end() || at->second.empty() ? 0.0F : std::ranges::max(at->second);
+        };
+        QVERIFY(QTest::qWaitFor([&] { return loudest() > 0.15F; }, 5000));
+        QVERIFY(mixer.setVolume(key, AppMixer::minimumDb)); // silent
+        QTest::qWait(300);
+        loudest();
+        QVERIFY(QTest::qWaitFor([&] { return loudest() < 0.001F; }, 3000));
+        mixer.setMetering(false);
+
+        // Leave WirePlumber's saved level for the test app at 0 dB.
+        mixer.setVolume(key, 0.0);
+        QVERIFY(QTest::qWaitFor([&] { return std::abs(mixer.volumeDb(key).value_or(-1)) < 0.01; }, 3000));
     }
 
     void routesApps()

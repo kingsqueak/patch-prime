@@ -107,6 +107,20 @@ The **Apps** page lists applications that play or record sound, running or not.
 - The choice is remembered and applied whenever the app starts.
 - Apps that aren't running have a **✕** to forget them.
 - If an app chooses its own device in its settings (Audacity's device setting, for example), that choice wins and is remembered as its route.
+- The eye button shows or hides a playback app's strip in the mixer.
+
+### App strips
+
+Every running app that plays sound gets a strip in the mixer, under **Apps**, between the inputs and the mix buses:
+
+- **The fader and M** set the app's own volume and mute. It's the same volume Plasma's volume applet shows for that app, so the two always agree, and it's remembered for the app the next time it plays.
+- **The meter** shows what the app plays, after its volume.
+- **The button under the icon** is where it plays, as on the Apps page.
+- An app with several streams (a browser with two tabs playing) moves them all together.
+
+Strips come and go as apps start and stop playing. To leave an app out of the mixer (system sounds, say), right-click its strip and choose **Hide from the Mixer**. Show it again from the Apps page.
+
+With many apps playing, click the **APPS** heading to fold them into one column: each app becomes a compact row (icon, name, **M**, a meter and a level slider). Click it again for full strips. Patch Prime remembers which you chose.
 
 ## Scenes
 

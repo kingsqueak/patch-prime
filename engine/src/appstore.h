@@ -33,6 +33,8 @@ struct AppSettings
     // the system default.
     std::string target;
     QDateTime lastSeen;
+    // Left out of the mixer's app strips.
+    bool hidden = false;
 };
 
 // ~/.config/patchprime/apps.json, keyed by app key ("playback|<binary>").

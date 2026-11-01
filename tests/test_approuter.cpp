@@ -74,6 +74,7 @@ private Q_SLOTS:
             a.target = "patchprime.virtual.12345678";
             a.lastSeen = QDateTime(QDate(2026, 10, 29), QTime(12, 0), QTimeZone::UTC);
             store.upsert("playback|brave").name = "Brave";
+            store.upsert("playback|brave").hidden = true; // not in the mixer
             QVERIFY(store.save());
         }
         AppStore store(path);
@@ -87,6 +88,8 @@ private Q_SLOTS:
         QCOMPARE(obs->target, "patchprime.virtual.12345678");
         QCOMPARE(obs->lastSeen, QDateTime(QDate(2026, 10, 29), QTime(12, 0), QTimeZone::UTC));
         QVERIFY(store.find("playback|brave")->target.empty()); // the system default
+        QVERIFY(store.find("playback|brave")->hidden);
+        QVERIFY(!obs->hidden);
         QVERIFY(store.remove("playback|brave"));
         QVERIFY(!store.remove("playback|brave"));
     }

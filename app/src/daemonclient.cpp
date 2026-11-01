@@ -608,6 +608,21 @@ void DaemonClient::setAppTarget(const QString &appKey, const QString &nodeName)
     call(QStringLiteral("SetAppTarget"), {appKey, nodeName});
 }
 
+void DaemonClient::setAppVolume(const QString &appKey, double db)
+{
+    call(QStringLiteral("SetAppVolume"), {appKey, db});
+}
+
+void DaemonClient::setAppMuted(const QString &appKey, bool muted)
+{
+    call(QStringLiteral("SetAppMuted"), {appKey, muted});
+}
+
+void DaemonClient::setAppHidden(const QString &appKey, bool hidden)
+{
+    call(QStringLiteral("SetAppHidden"), {appKey, hidden});
+}
+
 void DaemonClient::forgetApp(const QString &appKey)
 {
     call(QStringLiteral("ForgetApp"), {appKey});
@@ -1040,6 +1055,23 @@ void DaemonClient::onLevels(const QVariantMap &levels)
     }
     if (timesChanged) {
         Q_EMIT recordingTimesChanged();
+    }
+    // App strips' meters (kept falling like the strips' above).
+    QVariantMap apps;
+    for (auto it = m_levels.begin(); it != m_levels.end(); ++it) {
+        if (!it.key().startsWith(QLatin1String("app|"))) {
+            continue;
+        }
+        QVariantList holds;
+        for (const auto &h : m_peakHold.value(it.key())) {
+            holds.append(h.level);
+        }
+        apps.insert(it.key().mid(4), QVariantMap{{QStringLiteral("levels"), QVariant::fromValue(it.value())},
+                                                 {QStringLiteral("peakHold"), holds}});
+    }
+    if (apps != m_appLevels) {
+        m_appLevels = apps;
+        Q_EMIT appLevelsChanged();
     }
 }
 

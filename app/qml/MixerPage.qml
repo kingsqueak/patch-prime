@@ -119,7 +119,19 @@ Kirigami.Page {
 
             Kirigami.Separator {
                 Layout.fillHeight: true
-                visible: inputs.count > 0 && (buses.count > 0 || outputs.count > 0)
+                visible: inputs.count > 0 && appGroup.count > 0
+            }
+
+            // Running apps that play sound, as strips of their own.
+            AppStripGroup {
+                id: appGroup
+                Layout.fillHeight: true
+                visible: count > 0
+            }
+
+            Kirigami.Separator {
+                Layout.fillHeight: true
+                visible: (inputs.count > 0 || appGroup.count > 0) && (buses.count > 0 || outputs.count > 0)
             }
 
             StripGroup {

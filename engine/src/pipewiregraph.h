@@ -102,6 +102,17 @@ public:
     // what Plasma and pavucontrol write when an app is moved to another device.
     [[nodiscard]] std::string streamTarget(std::uint32_t nodeId) const;
 
+    // A stream's own volume (its Props: one linear volume per channel, and
+    // mute), as apps and Plasma's volume applet set it. Followed for stream
+    // nodes only (media.class Stream/...); nullopt until known.
+    struct NodeVolume
+    {
+        std::vector<float> channels;
+        bool mute = false;
+        bool operator==(const NodeVolume &) const = default;
+    };
+    [[nodiscard]] std::optional<NodeVolume> nodeVolume(std::uint32_t nodeId) const;
+
     static constexpr int reconnectInterval() { return 2000; }
 
     // Commands. Each returns false when not connected or when PipeWire refuses
@@ -172,6 +183,8 @@ Q_SIGNALS:
     // The object as it was last seen, so receivers can read its props.
     void objectRemoved(const pp::GraphObject &object);
     void defaultsChanged();
+    // A stream's volume or mute changed (see nodeVolume).
+    void nodeVolumeChanged(std::uint32_t nodeId);
     void streamTargetChanged(std::uint32_t nodeId);
     // A value in PipeWire's "settings" metadata changed (see setting()).
     void settingsChanged();
@@ -192,6 +205,7 @@ private:
     void handleAdded(int generation, GraphObject object);
     void handleChanged(int generation, GraphObject object);
     void handleRemoved(int generation, std::uint32_t id);
+    void handleNodeVolume(int generation, std::uint32_t id, NodeVolume volume);
     void handleMetadata(int generation, std::uint32_t subject, const std::string &key,
                         const std::string &value);
     void handleSetting(int generation, const std::string &key, const std::string &value);
@@ -212,6 +226,7 @@ private:
     std::map<std::uint32_t, GraphObject> m_devices;
     std::map<std::uint32_t, GraphObject> m_ports;
     std::map<std::uint32_t, GraphObject> m_links;
+    std::map<std::uint32_t, NodeVolume> m_volumes;
     std::string m_defaultSink;
     std::string m_defaultSource;
     std::map<std::uint32_t, std::string> m_streamTargets;

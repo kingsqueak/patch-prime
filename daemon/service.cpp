@@ -4,6 +4,7 @@
 #include "service.h"
 
 #include "alsamidi.h"
+#include "appmixer.h"
 #include "approuter.h"
 #include "busmanager.h"
 #include "effects.h"
@@ -105,6 +106,13 @@ void PatchPrimeService::setMidiMapper(pp::AlsaMidi *midi, pp::MidiMapper *mapper
     connect(mapper, &pp::MidiMapper::sceneRequested, this, [this](const QString &name) { LoadScene(name); });
 }
 
+void PatchPrimeService::setAppMixer(pp::AppMixer *mixer)
+{
+    m_appMixer = mixer;
+    connect(mixer, &pp::AppMixer::changed, this, &PatchPrimeService::scheduleState);
+    updateMetering();
+}
+
 void PatchPrimeService::setHotkeys(pp::Hotkeys *hotkeys)
 {
     m_hotkeys = hotkeys;
@@ -136,6 +144,12 @@ QString PatchPrimeService::GetState() const
              QString::fromStdString(pp::streamDirectionName(app.settings.direction))},
             {QStringLiteral("target"), QString::fromStdString(app.settings.target)},
             {QStringLiteral("streams"), app.streams},
+            {QStringLiteral("hidden"), app.settings.hidden},
+            {QStringLiteral("volumeDb"), [this, &app] {
+                 const auto db = m_appMixer != nullptr ? m_appMixer->volumeDb(app.key) : std::nullopt;
+                 return db ? QJsonValue(*db) : QJsonValue();
+             }()},
+            {QStringLiteral("muted"), m_appMixer != nullptr && m_appMixer->isMuted(app.key).value_or(false)},
         });
     }
     QJsonArray effectTypes;
@@ -822,6 +836,9 @@ void PatchPrimeService::updateMetering()
 {
     const bool watched = !m_levelWatchers.isEmpty();
     m_buses->setMetering(watched || (m_mackie != nullptr && m_mackie->wantsMeters()));
+    if (m_appMixer != nullptr) {
+        m_appMixer->setMetering(watched);
+    }
     if (watched && !m_levelsTimer.isActive()) {
         m_levelsTimer.start();
     } else if (!watched) {
@@ -839,6 +856,12 @@ void PatchPrimeService::emitLevels()
             values.append(static_cast<double>(peak));
         }
         levels.insert(QString::fromStdString(key), QVariant::fromValue(values));
+    }
+    if (m_appMixer != nullptr) {
+        for (const auto &[key, peaks] : m_appMixer->takeLevels()) {
+            levels.insert(QStringLiteral("app|") + QString::fromStdString(key),
+                          QVariant::fromValue(QList<double>(peaks.begin(), peaks.end())));
+        }
     }
     for (const auto &[key, values] : m_buses->loudness()) {
         const auto name = QString::fromStdString(key);
@@ -956,4 +979,29 @@ QString PatchPrimeService::DescribeTarget(const QString &target) const
 {
     const auto parsed = pp::midiTargetFromJson(QJsonDocument::fromJson(target.toUtf8()).object());
     return parsed && m_mapper != nullptr ? QString::fromStdString(m_mapper->describe(*parsed)) : QString();
+}
+
+void PatchPrimeService::SetAppVolume(const QString &appKey, double db)
+{
+    if (m_appMixer == nullptr || !m_appMixer->setVolume(appKey.toStdString(), db)) {
+        if (calledFromDBus()) {
+            sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no running app ") + appKey);
+        }
+    }
+}
+
+void PatchPrimeService::SetAppMuted(const QString &appKey, bool muted)
+{
+    if (m_appMixer == nullptr || !m_appMixer->setMuted(appKey.toStdString(), muted)) {
+        if (calledFromDBus()) {
+            sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no running app ") + appKey);
+        }
+    }
+}
+
+void PatchPrimeService::SetAppHidden(const QString &appKey, bool hidden)
+{
+    if (!m_apps->setHidden(appKey.toStdString(), hidden) && calledFromDBus()) {
+        sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no app ") + appKey);
+    }
 }

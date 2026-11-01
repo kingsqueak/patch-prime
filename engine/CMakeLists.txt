@@ -27,6 +27,8 @@ endif()
 patchprime_set_warnings(patchprime-dsp)
 
 add_library(patchprime-engine STATIC
+    src/appmixer.cpp
+    src/appmixer.h
     src/alsamidi.cpp
     src/alsamidi.h
     src/approuter.cpp

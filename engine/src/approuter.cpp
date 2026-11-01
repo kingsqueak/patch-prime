@@ -112,6 +112,36 @@ std::vector<AppRouter::App> AppRouter::apps() const
     return list;
 }
 
+bool AppRouter::setHidden(const std::string &key, bool hidden)
+{
+    if (m_store->find(key) == nullptr) {
+        // Running but not remembered yet (still settling): remember it now.
+        const auto live = std::ranges::find_if(m_streams, [&key](const auto &e) { return e.second.app.key == key; });
+        if (live == m_streams.end()) {
+            return false;
+        }
+        remember(live->second.app, nodeNameFor(m_graph->streamTarget(live->first)).value_or(std::string{}));
+    }
+    auto &stored = m_store->upsert(key);
+    if (stored.hidden != hidden) {
+        stored.hidden = hidden;
+        save();
+        Q_EMIT changed();
+    }
+    return true;
+}
+
+std::vector<std::uint32_t> AppRouter::streamNodes(const std::string &key) const
+{
+    std::vector<std::uint32_t> out;
+    for (const auto &[id, live] : m_streams) {
+        if (live.app.key == key) {
+            out.push_back(id);
+        }
+    }
+    return out;
+}
+
 bool AppRouter::setTarget(const std::string &key, const std::string &nodeName)
 {
     const auto live = std::ranges::find_if(

@@ -111,6 +111,7 @@ struct PipeWireGraph::Session
         pw_proxy *proxy = nullptr;
         spa_hook listener{};
         bool announced = false;
+        bool propsSubscribed = false; // a stream: its volume is followed
     };
 
     Session(PipeWireGraph *graphOwner, int sessionGeneration)
@@ -195,6 +196,8 @@ struct PipeWireGraph::Session
                          std::uint32_t version, const spa_dict *props);
     static void onGlobalRemove(void *data, std::uint32_t id);
     static void onNodeInfo(void *data, const pw_node_info *info);
+    static void onNodeParam(void *data, int seq, std::uint32_t id, std::uint32_t index, std::uint32_t next,
+                            const spa_pod *param);
     static void onDeviceInfo(void *data, const pw_device_info *info);
     static int onMetadataProperty(void *data, std::uint32_t subject, const char *key,
                                   const char *type, const char *value);
@@ -255,6 +258,7 @@ const pw_node_events nodeEvents = [] {
     pw_node_events e{};
     e.version = PW_VERSION_NODE_EVENTS;
     e.info = &PipeWireGraph::Session::onNodeInfo;
+    e.param = &PipeWireGraph::Session::onNodeParam;
     return e;
 }();
 
@@ -550,6 +554,42 @@ void PipeWireGraph::Session::onNodeInfo(void *data, const pw_node_info *info)
 {
     auto *b = static_cast<Bound *>(data);
     b->session->announce(*b, info->props, (info->change_mask & PW_NODE_CHANGE_MASK_PROPS) != 0);
+    // Streams: follow their volume (app strips show and set it).
+    if (!b->propsSubscribed && prop(b->object, PW_KEY_MEDIA_CLASS).starts_with("Stream/")) {
+        b->propsSubscribed = true;
+        std::array<std::uint32_t, 1> ids{SPA_PARAM_Props};
+        pw_node_subscribe_params(reinterpret_cast<pw_node *>(b->proxy), ids.data(), ids.size());
+    }
+}
+
+void PipeWireGraph::Session::onNodeParam(void *data, int /*seq*/, std::uint32_t id, std::uint32_t /*index*/,
+                                         std::uint32_t /*next*/, const spa_pod *param)
+{
+    if (id != SPA_PARAM_Props || param == nullptr || spa_pod_is_object(param) == 0) {
+        return;
+    }
+    auto *b = static_cast<Bound *>(data);
+    NodeVolume volume;
+    bool found = false;
+    if (const auto *p = spa_pod_find_prop(param, nullptr, SPA_PROP_channelVolumes);
+        p != nullptr && spa_pod_is_array(&p->value) != 0) {
+        std::uint32_t count = 0;
+        const auto *array = reinterpret_cast<const spa_pod_array *>(&p->value); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+        if (array->body.child.type == SPA_TYPE_Float) {
+            const auto *values = static_cast<const float *>(spa_pod_get_array(&p->value, &count));
+            volume.channels.assign(values, values + count); // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+            found = true;
+        }
+    }
+    if (const auto *p = spa_pod_find_prop(param, nullptr, SPA_PROP_mute); p != nullptr) {
+        found = spa_pod_get_bool(&p->value, &volume.mute) >= 0 || found;
+    }
+    if (found && !volume.channels.empty()) {
+        b->session->post([owner = b->session->owner, generation = b->session->generation, nodeId = b->object.id,
+                          volume = std::move(volume)]() mutable {
+            owner->handleNodeVolume(generation, nodeId, std::move(volume));
+        });
+    }
 }
 
 void PipeWireGraph::Session::onDeviceInfo(void *data, const pw_device_info *info)
@@ -828,6 +868,7 @@ void PipeWireGraph::disconnectNow()
         }
     }
     m_streamTargets.clear();
+    m_volumes.clear();
     m_settings.clear();
     if (!m_defaultSink.empty() || !m_defaultSource.empty()) {
         m_defaultSink.clear();
@@ -1308,10 +1349,29 @@ void PipeWireGraph::handleRemoved(int generation, std::uint32_t id)
         if (auto it = map->find(id); it != map->end()) {
             const GraphObject object = std::move(it->second);
             map->erase(it);
+            m_volumes.erase(id);
             Q_EMIT objectRemoved(object);
             return;
         }
     }
+}
+
+void PipeWireGraph::handleNodeVolume(int generation, std::uint32_t id, NodeVolume volume)
+{
+    if (generation != m_generation || !m_nodes.contains(id)) {
+        return;
+    }
+    auto &stored = m_volumes[id];
+    if (stored != volume) {
+        stored = std::move(volume);
+        Q_EMIT nodeVolumeChanged(id);
+    }
+}
+
+std::optional<PipeWireGraph::NodeVolume> PipeWireGraph::nodeVolume(std::uint32_t nodeId) const
+{
+    const auto at = m_volumes.find(nodeId);
+    return at == m_volumes.end() ? std::nullopt : std::optional{at->second};
 }
 
 void PipeWireGraph::handleMetadata(int generation, std::uint32_t subject, const std::string &key,

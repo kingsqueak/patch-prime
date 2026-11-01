@@ -5,6 +5,7 @@
 // offers them to the GUI over D-Bus. Meant to run as a systemd user service.
 
 #include "alsamidi.h"
+#include "appmixer.h"
 #include "approuter.h"
 #include "appstore.h"
 #include "audiosetup.h"
@@ -176,6 +177,9 @@ int run(int &argc, char **argv)
     pp::Hotkeys hotkeys(&devices, &shortcuts);
     hotkeys.setRecordings(&recordings);
     service.setHotkeys(&hotkeys);
+    // App strips: apps' own stream volumes, and their meters.
+    pp::AppMixer appMixer(&graph, &apps);
+    service.setAppMixer(&appMixer);
     bus.registerObject(QString::fromLatin1(PatchPrimeService::objectPath), &service,
                        QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);
 

@@ -13,6 +13,7 @@
 
 namespace pp {
 class AlsaMidi;
+class AppMixer;
 class AppRouter;
 class Hotkeys;
 class MackieControl;
@@ -67,6 +68,9 @@ public:
     void setMidiMapper(pp::AlsaMidi *midi, pp::MidiMapper *mapper);
     // Global hotkeys (optional): in the state, and their scene keys.
     void setHotkeys(pp::Hotkeys *hotkeys);
+    // App strips (optional): apps' levels and mutes in the state, their
+    // meters in Levels.
+    void setAppMixer(pp::AppMixer *mixer);
 
 public Q_SLOTS:
     QString GetState() const;
@@ -151,6 +155,13 @@ public Q_SLOTS:
     void SetAppTarget(const QString &appKey, const QString &nodeName);
     // Forgets an app that isn't running.
     void ForgetApp(const QString &appKey);
+    // App strips: a running app's level (its streams' own volume, in dB:
+    // -60 = silent .. +12) and mute, and whether it's left out of the
+    // mixer. In the state per app as "volumeDb" (null while unknown),
+    // "muted", "hidden"; its meter in Levels as "app|<app key>".
+    void SetAppVolume(const QString &appKey, double db);
+    void SetAppMuted(const QString &appKey, bool muted);
+    void SetAppHidden(const QString &appKey, bool hidden);
     // Scenes: the whole mix (levels, mutes, mono, sends and send levels, app
     // routes, default output and input) saved under a name, and loaded back
     // without creating, deleting or restarting anything. In the state as
@@ -245,6 +256,7 @@ private:
     pp::AlsaMidi *m_controllerMidi = nullptr;
     pp::MidiMapper *m_mapper = nullptr;
     pp::Hotkeys *m_hotkeys = nullptr;
+    pp::AppMixer *m_appMixer = nullptr;
     int m_recordingsRevision = 0;
     pp::SceneStore *m_scenes;
     QTimer m_stateTimer;

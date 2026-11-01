@@ -77,6 +77,10 @@ public:
     bool setTarget(const std::string &key, const std::string &nodeName);
     // Forgets a remembered app that isn't running.
     bool forget(const std::string &key);
+    // Leaves an app out of the mixer's app strips (or shows it again).
+    bool setHidden(const std::string &key, bool hidden);
+    // The app's live streams (node ids).
+    [[nodiscard]] std::vector<std::uint32_t> streamNodes(const std::string &key) const;
 
     [[nodiscard]] const AppStore &store() const { return *m_store; }
 

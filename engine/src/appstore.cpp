@@ -75,6 +75,7 @@ bool AppStore::load()
             .target = str(o, "target"),
             .lastSeen =
                 QDateTime::fromString(o.value(QLatin1String("lastSeen")).toString(), Qt::ISODate),
+            .hidden = o.value(QLatin1String("hidden")).toBool(),
         };
     }
     return true;
@@ -96,6 +97,7 @@ bool AppStore::save()
                         {QStringLiteral("icon"), qs(a.icon)},
                         {QStringLiteral("target"), qs(a.target)},
                         {QStringLiteral("lastSeen"), a.lastSeen.toString(Qt::ISODate)},
+                        {QStringLiteral("hidden"), a.hidden},
                     });
     }
     const QJsonObject root{

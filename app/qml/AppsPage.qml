@@ -132,6 +132,20 @@ Kirigami.ScrollablePage {
                 Accessible.name: qsTr("Route for %1").arg(row.modelData.name)
             }
 
+            // Playback apps get a strip in the mixer while they run.
+            QQC2.ToolButton {
+                visible: row.modelData.direction === "playback"
+                icon.name: row.modelData.hidden ? "view-hidden" : "view-visible"
+                text: row.modelData.hidden ? qsTr("Show in Mixer") : qsTr("Hide from Mixer")
+                display: QQC2.AbstractButton.IconOnly
+                enabled: Devices.daemonRunning
+                onClicked: Devices.setAppHidden(row.modelData.key, !row.modelData.hidden)
+                QQC2.ToolTip.text: row.modelData.hidden ? qsTr("Hidden from the mixer: click to show its strip")
+                                                        : qsTr("Shown in the mixer while it plays: click to hide")
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+            }
+
             QQC2.ToolButton {
                 icon.name: "edit-delete-remove"
                 text: qsTr("Forget")

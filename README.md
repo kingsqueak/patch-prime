@@ -9,7 +9,7 @@ A virtual audio mixer and router for KDE Plasma, built on PipeWire. Think of it 
 - **A console for your sound.** Each device you choose gets a channel strip with a fader, mute, meters and a label you pick. Strips are grouped into inputs, mix buses and outputs.
 - **Route anything anywhere.** Send any input to any mix bus or output, each send at its own level. The Routing page shows every send as a grid.
 - **Mix buses and virtual devices.** Make a "Stream Mix" for OBS, a "Chat Mic" for Discord, or a "Desktop" input that carries all your system sound.
-- **Per-app routing.** Choose where each application plays or records. The choice is remembered and applied when the app starts.
+- **Per-app routing and app strips.** Choose where each application plays or records; the choice is remembered and applied when the app starts. Running apps get their own strips in the mixer (Discord, Spotify, a game), each with a fader, mute and meter.
 - **Built-in effects**, as insert slots on each strip:
   - 6-band parametric EQ, with a curve you drag;
   - 4-band multiband compressor;

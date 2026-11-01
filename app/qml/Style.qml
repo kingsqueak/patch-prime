@@ -28,8 +28,9 @@ QtObject {
     readonly property color busColor: Kirigami.Theme.highlightColor
     readonly property color outputColor: Kirigami.Theme.neutralTextColor
     readonly property real stageBarHeight: 3
+    readonly property color appColor: Kirigami.Theme.visitedLinkColor
     function stageColor(stage) {
-        return stage === "input" ? inputColor : stage === "bus" ? busColor : outputColor;
+        return stage === "input" ? inputColor : stage === "bus" ? busColor : stage === "app" ? appColor : outputColor;
     }
 
     // Insert slots (a strip's effects)
