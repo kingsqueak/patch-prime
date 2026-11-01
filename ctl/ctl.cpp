@@ -227,6 +227,9 @@ share a label. Switches take on, off or toggle (the default).
   record <strip> [on|off|toggle]    record it to the recordings folder
   scene <name>                      load a scene
   scenes                            list the scenes
+  pad <name>                        play a soundboard pad (stop it if playing)
+  pads [stop]                       list the pads (playing ones marked),
+                                    or stop them all
 
 Options: --help, --version
 )");
@@ -253,6 +256,36 @@ std::expected<Plan, QString> plan(const QStringList &args, const QJsonObject &st
     }
     if (command == QLatin1String("scene")) {
         return scene(args, state);
+    }
+    if (command == QLatin1String("pads")) {
+        if (args.size() > 1 && args.at(1).toLower() == QLatin1String("stop")) {
+            return Plan{.calls = {{.method = QStringLiteral("StopAllPads"), .args = {}}}, .output = {}};
+        }
+        QString text;
+        for (const auto &p : state.value(QLatin1String("pads")).toArray()) {
+            const auto pad = p.toObject();
+            text += pad.value(QLatin1String("label")).toString() +
+                    (pad.value(QLatin1String("playing")).toBool() ? QStringLiteral("  (playing)") : QString()) +
+                    QLatin1Char('\n');
+        }
+        return Plan{.calls = {}, .output = text};
+    }
+    if (command == QLatin1String("pad")) {
+        if (args.size() < 2) {
+            return fail(QStringLiteral("usage: patchprime-ctl pad <name>"));
+        }
+        const auto wanted = args.mid(1).join(QLatin1Char(' '));
+        for (const auto &p : state.value(QLatin1String("pads")).toArray()) {
+            const auto pad = p.toObject();
+            if (pad.value(QLatin1String("label")).toString().compare(wanted, Qt::CaseInsensitive) == 0 ||
+                pad.value(QLatin1String("id")).toString() == wanted) {
+                return Plan{.calls = {{.method = QStringLiteral("TriggerPad"),
+                                       .args = {pad.value(QLatin1String("id")).toString()},
+                                       .returnsError = true}},
+                            .output = {}};
+            }
+        }
+        return fail(QStringLiteral("no pad called \"%1\" (see: patchprime-ctl pads)").arg(wanted));
     }
 
     // Everything else acts on a strip.

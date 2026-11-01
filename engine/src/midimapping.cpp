@@ -11,7 +11,7 @@ namespace pp {
 
 namespace {
 
-constexpr std::array<std::pair<MidiAction, const char *>, 9> actionNames{{
+constexpr std::array<std::pair<MidiAction, const char *>, 10> actionNames{{
     {MidiAction::Volume, "volume"},
     {MidiAction::Mute, "mute"},
     {MidiAction::Cue, "cue"},
@@ -21,6 +21,7 @@ constexpr std::array<std::pair<MidiAction, const char *>, 9> actionNames{{
     {MidiAction::EffectEnabled, "effectEnabled"},
     {MidiAction::Record, "record"},
     {MidiAction::Scene, "scene"},
+    {MidiAction::Pad, "pad"},
 }};
 
 QString qs(const std::string &s)
@@ -86,6 +87,9 @@ QJsonObject midiTargetToJson(const MidiTarget &target)
     if (!target.scene.empty()) {
         json.insert(QStringLiteral("scene"), qs(target.scene));
     }
+    if (!target.pad.empty()) {
+        json.insert(QStringLiteral("pad"), qs(target.pad));
+    }
     return json;
 }
 
@@ -100,7 +104,8 @@ std::optional<MidiTarget> midiTargetFromJson(const QJsonObject &json)
                       .destination = str(json, "destination"),
                       .effect = json.value(QLatin1String("effect")).toInt(-1),
                       .param = str(json, "param"),
-                      .scene = str(json, "scene")};
+                      .scene = str(json, "scene"),
+                      .pad = str(json, "pad")};
     // Each action needs its own fields.
     const bool strip = !target.key.empty();
     switch (target.action) {
@@ -118,6 +123,8 @@ std::optional<MidiTarget> midiTargetFromJson(const QJsonObject &json)
         return strip && target.effect >= 0 ? std::optional{target} : std::nullopt;
     case MidiAction::Scene:
         return target.scene.empty() ? std::nullopt : std::optional{target};
+    case MidiAction::Pad:
+        return target.pad.empty() ? std::nullopt : std::optional{target};
     }
     return std::nullopt;
 }

@@ -273,6 +273,10 @@ public:
     // patchprime.tap.owner (= owner()).
     void setTaps(std::map<std::string, std::string> recorders, std::string playerNode,
                  std::string playerTarget);
+    // The soundboard's pad streams playing now (node name -> the key of the
+    // strip they play into: a mix bus, Desktop or an output), linked into
+    // it like the player.
+    void setPadStreams(std::map<std::string, std::string> pads);
     [[nodiscard]] const std::string &owner() const { return m_owner; }
     // The channel positions of the strip with this key as it's mixed
     // ("MONO" for a mono input; "FL" "FR" for a stereo pair); empty when
@@ -384,6 +388,10 @@ private:
                    const LinkMap &existingLinks);
     [[nodiscard]] std::vector<PortRef> portsOf(std::uint32_t nodeId, const std::string &direction,
                                                bool monitor) const;
+    // Links a playback stream (the player, a pad) into the strip with targetKey.
+    void linkStreamInto(const std::string &nodeName, const std::string &targetKey,
+                        const std::map<std::string, std::uint32_t> &ready, const std::map<std::string, Wanted> &wanted,
+                        const std::map<std::string, FxPorts> &fx, const LinkMap &existingLinks);
     void linkTaps(const std::map<std::string, std::uint32_t> &ready,
                   const std::map<std::string, Wanted> &wanted,
                   const std::map<std::string, FxPorts> &fx,
@@ -426,6 +434,7 @@ private:
     std::map<std::string, std::string> m_recorders; // node name -> endpoint key
     std::string m_playerNode;
     std::string m_playerTarget; // endpoint key
+    std::map<std::string, std::string> m_pads; // pad stream node -> endpoint key
     // The hardware input the player stands in for now (its key), or empty.
     std::string m_substitute;
 };

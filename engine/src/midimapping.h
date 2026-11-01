@@ -23,6 +23,7 @@ enum class MidiAction : std::uint8_t
     EffectEnabled, // an effect on/bypassed
     Record,        // start/stop recording a strip
     Scene,         // load a scene (by name)
+    Pad,           // play or stop a soundboard pad (by id)
 };
 std::string midiActionName(MidiAction action); // "volume", "mute", ...
 std::optional<MidiAction> midiActionFromName(const std::string &name);
@@ -38,6 +39,7 @@ struct MidiTarget
     int effect = -1;           // effects: the effect's index in the strip's chain
     std::string param{};       // EffectParam: the parameter's name
     std::string scene{};       // Scene: its name
+    std::string pad{};         // Pad: its id
     bool operator==(const MidiTarget &) const = default;
 };
 

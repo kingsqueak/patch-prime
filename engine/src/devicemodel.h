@@ -140,6 +140,9 @@ public:
     // The tray icon and on-screen messages (see DeviceStore); emit
     // desktopSettingsChanged.
     void setTrayIcon(bool on);
+    // The soundboard (see DeviceStore); emit soundboardChanged.
+    void setPads(std::vector<SoundPad> pads);
+    void setSoundboardTarget(const std::string &key);
     void setShowOsd(bool on);
     Q_INVOKABLE void setCue(int row, bool cued);
     [[nodiscard]] const std::set<std::string> &cued() const { return m_cued; }
@@ -200,6 +203,7 @@ Q_SIGNALS:
     void midiMappingsChanged();
     void hotkeysChanged();
     void desktopSettingsChanged();
+    void soundboardChanged();
 
 private:
     const PluginCatalog *m_pluginCatalog = nullptr;

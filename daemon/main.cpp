@@ -22,6 +22,7 @@
 #include "plugins.h"
 #include "recordingmanager.h"
 #include "scenes.h"
+#include "soundboard.h"
 #include "service.h"
 
 #include <QCommandLineParser>
@@ -180,6 +181,11 @@ int run(int &argc, char **argv)
     // App strips: apps' own stream volumes, and their meters.
     pp::AppMixer appMixer(&graph, &apps);
     service.setAppMixer(&appMixer);
+    // The soundboard, also played from MIDI and hotkeys.
+    pp::Soundboard soundboard(&graph, &devices, &buses);
+    service.setSoundboard(&soundboard);
+    mapper.setSoundboard(&soundboard);
+    hotkeys.setSoundboard(&soundboard);
     bus.registerObject(QString::fromLatin1(PatchPrimeService::objectPath), &service,
                        QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);
 

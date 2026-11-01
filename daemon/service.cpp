@@ -18,6 +18,7 @@
 #include "plugins.h"
 #include "recordingmanager.h"
 #include "scenes.h"
+#include "soundboard.h"
 
 #include <QDBusConnection>
 #include <QDBusError>
@@ -121,6 +122,12 @@ void PatchPrimeService::setAppMixer(pp::AppMixer *mixer)
     m_appMixer = mixer;
     connect(mixer, &pp::AppMixer::changed, this, &PatchPrimeService::scheduleState);
     updateMetering();
+}
+
+void PatchPrimeService::setSoundboard(pp::Soundboard *soundboard)
+{
+    m_soundboard = soundboard;
+    connect(soundboard, &pp::Soundboard::changed, this, &PatchPrimeService::scheduleState);
 }
 
 void PatchPrimeService::setHotkeys(pp::Hotkeys *hotkeys)
@@ -287,6 +294,17 @@ QString PatchPrimeService::GetState() const
                  mappings.append(json);
              }
              return mappings;
+         }()},
+        {QStringLiteral("soundboardTarget"), QString::fromStdString(m_devices->store().soundboardTarget())},
+        {QStringLiteral("soundboardError"), m_soundboard != nullptr ? m_soundboard->lastError() : QString()},
+        {QStringLiteral("pads"), [this] {
+             QJsonArray pads;
+             for (const auto &p : m_devices->store().pads()) {
+                 auto json = pp::soundPadToJson(p);
+                 json.insert(QStringLiteral("playing"), m_soundboard != nullptr && m_soundboard->isPlaying(p.id));
+                 pads.append(json);
+             }
+             return pads;
          }()},
         {QStringLiteral("trayIcon"), m_devices->store().trayIcon()},
         {QStringLiteral("showOsd"), m_devices->store().showOsd()},
@@ -905,6 +923,12 @@ void PatchPrimeService::emitLevels()
             QStringLiteral("fxio|%1|%2").arg(QString::fromStdString(at.first)).arg(at.second),
             QVariant::fromValue(values));
     }
+    if (m_soundboard != nullptr) {
+        for (const auto &[id, at] : m_soundboard->progress()) {
+            levels.insert(QStringLiteral("pad|") + QString::fromStdString(id),
+                          QVariant::fromValue(QList<double>{at.first, at.second}));
+        }
+    }
     for (const auto &[key, seconds] : m_recordings->recordedSeconds()) {
         levels.insert(QStringLiteral("rec|") + QString::fromStdString(key),
                       QVariant::fromValue(QList<double>{seconds}));
@@ -1027,4 +1051,57 @@ void PatchPrimeService::SetTrayIcon(bool on)
 void PatchPrimeService::SetShowOsd(bool on)
 {
     m_devices->setShowOsd(on);
+}
+
+QString PatchPrimeService::AddPad(const QString &path)
+{
+    QString error;
+    const auto id = m_soundboard != nullptr ? m_soundboard->add(path, &error) : std::string{};
+    if (id.empty() && calledFromDBus()) {
+        sendErrorReply(QDBusError::InvalidArgs, error.isEmpty() ? QStringLiteral("no soundboard") : error);
+    }
+    return QString::fromStdString(id);
+}
+
+void PatchPrimeService::RemovePad(const QString &id)
+{
+    if (m_soundboard != nullptr) {
+        m_soundboard->remove(id.toStdString());
+    }
+}
+
+void PatchPrimeService::UpdatePad(const QString &id, const QString &label, double gainDb, bool loop)
+{
+    if ((m_soundboard == nullptr || !m_soundboard->update(id.toStdString(), label.trimmed().toStdString(), gainDb, loop)) &&
+        calledFromDBus()) {
+        sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no pad ") + id);
+    }
+}
+
+void PatchPrimeService::MovePad(int from, int to)
+{
+    if (m_soundboard != nullptr) {
+        m_soundboard->move(from, to);
+    }
+}
+
+QString PatchPrimeService::TriggerPad(const QString &id)
+{
+    QString error;
+    if (m_soundboard == nullptr || !m_soundboard->trigger(id.toStdString(), &error)) {
+        return error.isEmpty() ? QStringLiteral("no soundboard") : error;
+    }
+    return {};
+}
+
+void PatchPrimeService::StopAllPads()
+{
+    if (m_soundboard != nullptr) {
+        m_soundboard->stopAll();
+    }
+}
+
+void PatchPrimeService::SetSoundboardTarget(const QString &key)
+{
+    m_devices->setSoundboardTarget(key.toStdString());
 }

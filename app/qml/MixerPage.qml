@@ -14,11 +14,17 @@ Kirigami.Page {
     signal openRouting()
     signal openApps()
     signal openRecordings()
+    signal openSoundboard()
 
     title: qsTr("Mixer")
     header: EngineMessage {}
 
     actions: [
+        Kirigami.Action {
+            text: qsTr("Soundboard")
+            icon.name: "media-playlist-play"
+            onTriggered: page.openSoundboard()
+        },
         Kirigami.Action {
             text: qsTr("Recordings")
             icon.name: "media-record"
@@ -157,6 +163,18 @@ Kirigami.Page {
 
             Kirigami.Separator {
                 Layout.fillHeight: true
+            }
+
+            // The soundboard's pads, once there are some.
+            SoundboardPanel {
+                Layout.fillHeight: true
+                visible: Devices.pads.length > 0
+                onOpenSoundboard: page.openSoundboard()
+            }
+
+            Kirigami.Separator {
+                Layout.fillHeight: true
+                visible: Devices.pads.length > 0
             }
 
             RecordingsPanel {

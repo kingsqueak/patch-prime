@@ -248,6 +248,8 @@ bool DeviceStore::load()
     m_hotkeys.clear();
     m_trayIcon = true;
     m_showOsd = true;
+    m_pads.clear();
+    m_soundboardTarget.clear();
     m_lastError.clear();
     QFile file(m_path);
     if (!file.exists()) {
@@ -276,6 +278,12 @@ bool DeviceStore::load()
     m_controlSurface = root.value(QLatin1String("controlSurface")).toString().toStdString();
     m_midiController = root.value(QLatin1String("midiController")).toString().toStdString();
     m_trayIcon = root.value(QLatin1String("trayIcon")).toBool(true);
+    m_soundboardTarget = root.value(QLatin1String("soundboardTarget")).toString().toStdString();
+    for (const auto &p : root.value(QLatin1String("pads")).toArray()) {
+        if (auto pad = soundPadFromJson(p.toObject())) {
+            m_pads.push_back(std::move(*pad));
+        }
+    }
     m_showOsd = root.value(QLatin1String("showOsd")).toBool(true);
     for (const auto &m : root.value(QLatin1String("midiMappings")).toArray()) {
         if (auto mapping = midiMappingFromJson(m.toObject())) {
@@ -322,6 +330,14 @@ bool DeviceStore::save()
         {QStringLiteral("controlSurface"), qs(m_controlSurface)},
         {QStringLiteral("midiController"), qs(m_midiController)},
         {QStringLiteral("trayIcon"), m_trayIcon},
+        {QStringLiteral("soundboardTarget"), qs(m_soundboardTarget)},
+        {QStringLiteral("pads"), [this] {
+             QJsonArray pads;
+             for (const auto &p : m_pads) {
+                 pads.append(soundPadToJson(p));
+             }
+             return pads;
+         }()},
         {QStringLiteral("showOsd"), m_showOsd},
         {QStringLiteral("midiMappings"), [this] {
              QJsonArray mappings;
@@ -390,6 +406,9 @@ bool DeviceStore::remove(const std::string &key)
     std::erase_if(m_hotkeys, [&key](const Hotkey &h) {
         return h.target.key == key || h.target.destination == key;
     });
+    if (m_soundboardTarget == key) {
+        m_soundboardTarget.clear();
+    }
     return true;
 }
 
@@ -426,6 +445,9 @@ bool DeviceStore::rekey(const std::string &from, const std::string &to)
     }
     for (auto &h : m_hotkeys) {
         rekeyTarget(h.target);
+    }
+    if (m_soundboardTarget == from) {
+        m_soundboardTarget = to;
     }
     for (auto &[key, settings] : m_entries) {
         std::ranges::replace(settings.sends, from, to);

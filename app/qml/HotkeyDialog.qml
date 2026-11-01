@@ -38,6 +38,8 @@ Kirigami.Dialog {
         if (a === "sendLevel")
             return [{ text: qsTr("Level up 1 dB"), mode: "levelUp", action: a },
                     { text: qsTr("Level down 1 dB"), mode: "levelDown", action: a }];
+        if (a === "pad")
+            return [{ text: qsTr("Play / stop"), mode: "toggle", action: a }];
         return [{ text: qsTr("On/off"), mode: "toggle", action: a }];
     }
     readonly property var choice: choices[Math.max(0, modeChoice.currentIndex)]

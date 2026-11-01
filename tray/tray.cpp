@@ -48,6 +48,7 @@ Tray::Tray(QObject *parent)
     connect(m_mute, &QAction::triggered, this, &Tray::toggleMute);
     m_scenes = m_menu->addMenu(QIcon::fromTheme(QStringLiteral("view-media-playlist")), tr("Scenes"));
     m_sceneGroup = new QActionGroup(m_scenes); // NOLINT(cppcoreguidelines-prefer-member-initializer): needs m_scenes
+    m_pads = m_menu->addMenu(QIcon::fromTheme(QStringLiteral("media-playlist-play")), tr("Soundboard"));
     m_menu->addSeparator();
     connect(m_menu->addAction(QIcon::fromTheme(QStringLiteral("view-media-equalizer")), tr("Open Patch Prime")),
             &QAction::triggered, this, &Tray::openWindow);
@@ -152,6 +153,27 @@ void Tray::apply(const QJsonObject &state)
         m_sceneGroup->addAction(action);
         connect(action, &QAction::triggered, this, [name] { call(QStringLiteral("LoadScene"), {name}); });
     }
+
+    // The soundboard: a pad plays (or stops) when picked.
+    m_pads->clear();
+    const auto pads = state.value(QLatin1String("pads")).toArray();
+    m_pads->setEnabled(!pads.isEmpty());
+    bool anyPlaying = false;
+    for (const auto &p : pads) {
+        const auto pad = p.toObject();
+        const auto id = pad.value(QLatin1String("id")).toString();
+        const bool playing = pad.value(QLatin1String("playing")).toBool();
+        anyPlaying = anyPlaying || playing;
+        auto *action = m_pads->addAction(
+            QIcon::fromTheme(playing ? QStringLiteral("media-playback-stop") : QStringLiteral("media-playback-start")),
+            pad.value(QLatin1String("label")).toString());
+        connect(action, &QAction::triggered, this, [id] { call(QStringLiteral("TriggerPad"), {id}); });
+    }
+    if (anyPlaying) {
+        m_pads->addSeparator();
+        connect(m_pads->addAction(QIcon::fromTheme(QStringLiteral("media-playback-stop")), tr("Stop All")),
+                &QAction::triggered, this, [] { call(QStringLiteral("StopAllPads"), {}); });
+    }
 }
 
 void Tray::setEngineRunning(bool running)
@@ -164,6 +186,7 @@ void Tray::setEngineRunning(bool running)
         m_item->setToolTip(m_item->iconName(), QStringLiteral("Patch Prime"), tr("The engine isn't running"));
         m_mute->setEnabled(false);
         m_scenes->setEnabled(false);
+        m_pads->setEnabled(false);
     }
 }
 

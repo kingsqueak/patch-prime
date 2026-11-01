@@ -16,6 +16,7 @@ class AlsaMidi;
 class AppMixer;
 class AppRouter;
 class Hotkeys;
+class Soundboard;
 class MackieControl;
 class MidiMapper;
 class SceneStore;
@@ -71,6 +72,8 @@ public:
     // App strips (optional): apps' levels and mutes in the state, their
     // meters in Levels.
     void setAppMixer(pp::AppMixer *mixer);
+    // The soundboard (optional).
+    void setSoundboard(pp::Soundboard *soundboard);
 
 public Q_SLOTS:
     QString GetState() const;
@@ -237,6 +240,19 @@ public Q_SLOTS:
     // on-screen messages when a hotkey or MIDI button changes something.
     void SetTrayIcon(bool on);
     void SetShowOsd(bool on);
+    // The soundboard: pads that play sound files into one strip (in the
+    // state as "pads" = [{id, label, path, gainDb, loop, playing}],
+    // "soundboardTarget" = that strip's key, "soundboardError"; while
+    // levels are watched, Levels has "pad|<id>" = [seconds played, length]).
+    // AddPad returns the new pad's id; TriggerPad plays a pad, or stops it
+    // if it's playing, and returns an error message ("" when it worked).
+    QString AddPad(const QString &path);
+    void RemovePad(const QString &id);
+    void UpdatePad(const QString &id, const QString &label, double gainDb, bool loop);
+    void MovePad(int from, int to);
+    QString TriggerPad(const QString &id);
+    void StopAllPads();
+    void SetSoundboardTarget(const QString &key);
 
 Q_SIGNALS:
     void StateChanged(const QString &state);
@@ -263,6 +279,7 @@ private:
     pp::MidiMapper *m_mapper = nullptr;
     pp::Hotkeys *m_hotkeys = nullptr;
     pp::AppMixer *m_appMixer = nullptr;
+    pp::Soundboard *m_soundboard = nullptr;
     int m_recordingsRevision = 0;
     pp::SceneStore *m_scenes;
     QTimer m_stateTimer;

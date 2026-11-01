@@ -10,6 +10,7 @@ Patch Prime turns your computer's audio into a small mixing console. This guide 
 - [Apps](#apps)
 - [Scenes](#scenes)
 - [Recording and playback](#recording-and-playback)
+- [Soundboard](#soundboard)
 - [Cue (headphones)](#cue-headphones)
 - [Effects](#effects)
 - [Meters](#meters)
@@ -162,6 +163,15 @@ You can't really hear your own voice while you talk, so tuning a gate or a compr
 4. Open the strip's effects and adjust them while you listen (cue the strip, or listen on the output it's sent to). Stop the player when you're done: the microphone is connected again at once.
 - **Move to Trash** puts a file in the desktop's trash, from which you can still restore it.
 - **Open Folder** opens the recordings folder in the file manager.
+
+## Soundboard
+
+The soundboard plays sound files on cue (an intro, applause, a stinger) into one strip: a mix bus such as Stream Mix, or Desktop to be heard everywhere Desktop goes. Open it from the **Soundboard** button (Ctrl+6), or use its column at the right of the mixer.
+
+- **Add Sounds…** adds WAV, FLAC, MP3 or Ogg files as pads, named after the files. The first pad plays into your first mix bus; change that under **Plays into**.
+- **Click a pad** to play it, and again to stop it. Several pads can play at once. A playing pad is lit, with its progress along the bottom. **Stop All** stops them all.
+- **Right-click a pad** to rename it, set its level, or make it loop (it then plays until clicked again). Remove it from there too.
+- **From anywhere:** right-click a pad and choose **MIDI Learn** to play it from a controller's pad or button, or **Add Hotkey…** for a key. The tray icon's menu has the pads too, and `patchprime-ctl pad <name>` plays one from a script or a Stream Deck button.
 
 ## Cue (headphones)
 
@@ -379,6 +389,7 @@ patchprime-ctl send-level Mic "Stream Mix" up
 patchprime-ctl effect Mic 2 off          # the strip's second effect
 patchprime-ctl record "Stream Mix"
 patchprime-ctl scene Podcast
+patchprime-ctl pad Applause              # play a soundboard pad (again to stop)
 patchprime-ctl get Mic muted             # yes or no: for a button's state
 ```
 

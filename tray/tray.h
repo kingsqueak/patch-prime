@@ -20,7 +20,7 @@ class QMenu;
 // The mic is the strip that's the system default input, else the first
 // hardware input. Left click opens the window, middle click mutes or
 // unmutes the mic, scrolling sets its level; the menu has the mute, the
-// scenes and the window.
+// scenes, the soundboard's pads and the window.
 class Tray : public QObject
 {
     Q_OBJECT
@@ -54,6 +54,7 @@ private:
     QAction *m_mute = nullptr;
     QMenu *m_scenes = nullptr;
     QActionGroup *m_sceneGroup = nullptr; // one scene checked at a time
+    QMenu *m_pads = nullptr;
     QJsonObject m_mic;
     bool m_running = false;
 };

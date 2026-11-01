@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QSortFilterProxyModel>
 #include <QDateTime>
+#include <QUrl>
 #include <QVariantMap>
 
 class QDBusPendingCallWatcher;
@@ -60,6 +61,11 @@ class DaemonClient : public QAbstractListModel
     Q_PROPERTY(bool hotkeysAvailable READ hotkeysAvailable NOTIFY hotkeysChanged)
     // The tray icon (patchprime-tray) and Plasma's on-screen messages.
     Q_PROPERTY(bool trayIcon READ trayIcon NOTIFY desktopSettingsChanged)
+    // The soundboard: [{id, label, path, gainDb, loop, playing}], the key of
+    // the strip it plays into, and each playing pad's progress (0..1).
+    Q_PROPERTY(QVariantList pads READ pads NOTIFY padsChanged)
+    Q_PROPERTY(QString soundboardTarget READ soundboardTarget NOTIFY padsChanged)
+    Q_PROPERTY(QVariantMap padProgress READ padProgress NOTIFY padProgressChanged)
     Q_PROPERTY(bool showOsd READ showOsd NOTIFY desktopSettingsChanged)
     // Built-in effects on offer: [{type, label, params: [{name, label, unit,
     // minimum, maximum, initial}]}]. A strip's chain is its "effects" role.
@@ -168,6 +174,18 @@ public:
     [[nodiscard]] bool showOsd() const { return m_showOsd; }
     // Turning the tray icon on starts it now (it starts at login anyway).
     Q_INVOKABLE void setTrayIcon(bool on);
+    [[nodiscard]] QVariantList pads() const { return m_pads; }
+    [[nodiscard]] QString soundboardTarget() const { return m_soundboardTarget; }
+    [[nodiscard]] QVariantMap padProgress() const { return m_padProgress; }
+    // A new pad for a sound file; its id ("" with lastError set on failure).
+    Q_INVOKABLE QString addPad(const QUrl &file);
+    Q_INVOKABLE void removePad(const QString &id);
+    Q_INVOKABLE void updatePad(const QString &id, const QString &label, double gainDb, bool loop);
+    Q_INVOKABLE void movePad(int from, int to);
+    // Plays a pad, or stops it if it's playing (errors go to lastError).
+    Q_INVOKABLE void triggerPad(const QString &id);
+    Q_INVOKABLE void stopAllPads();
+    Q_INVOKABLE void setSoundboardTarget(const QString &key);
     Q_INVOKABLE void setShowOsd(bool on);
     // A new hotkey ({mode, target}; see the daemon's AddHotkey) with this
     // key (a QKeySequence; empty for none); returns its id, "" on failure.
@@ -288,6 +306,8 @@ Q_SIGNALS:
     void midiChanged();
     void hotkeysChanged();
     void desktopSettingsChanged();
+    void padsChanged();
+    void padProgressChanged();
     void effectMetersChanged();
     void recordingChanged();
     void recordingTimesChanged();
@@ -355,6 +375,9 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QVariantList m_hotkeys;
     bool m_hotkeysAvailable = false;
     bool m_trayIcon = true;
+    QVariantList m_pads;
+    QString m_soundboardTarget;
+    QVariantMap m_padProgress;
     bool m_trayStarted = false;
     bool m_showOsd = true;
     QVariantMap m_effectMeters;

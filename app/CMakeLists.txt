@@ -18,7 +18,7 @@ qt_add_qml_module(patchprime
         qml/Style.qml qml/LevelMeter.qml qml/StripToggle.qml qml/VolumeFader.qml qml/StripGroup.qml qml/SendButton.qml qml/DbField.qml qml/SceneBar.qml qml/EffectsWindow.qml qml/InsertSlots.qml qml/ConsoleFader.qml
         qml/EqEditor.qml qml/ParamField.qml qml/MultibandEditor.qml qml/EffectParamRow.qml qml/PluginPicker.qml qml/PluginScan.qml
         qml/EffectMeterBridge.qml qml/GainReductionMeter.qml qml/effectmeters.js qml/UserGuide.qml
-        qml/MidiLearnMenu.qml qml/MidiLearnBanner.qml qml/HotkeyDialog.qml qml/AppStrip.qml qml/AppStripGroup.qml qml/AppCompactRow.qml
+        qml/MidiLearnMenu.qml qml/MidiLearnBanner.qml qml/HotkeyDialog.qml qml/AppStrip.qml qml/AppStripGroup.qml qml/AppCompactRow.qml qml/PadButton.qml qml/PadDialog.qml qml/SoundboardPage.qml qml/SoundboardPanel.qml
     NO_IMPORT_SCAN) # the import scan only matters for static Qt builds
 
 # The user guide is built in (Help > User Guide), so it's always there and

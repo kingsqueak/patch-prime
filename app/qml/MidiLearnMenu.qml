@@ -43,7 +43,13 @@ QQC2.Menu {
         text: Devices.hotkeysAvailable ? qsTr("Add Hotkey…") : qsTr("Add Hotkey (no global shortcuts on this desktop)")
         icon.name: "input-keyboard"
         enabled: Devices.daemonRunning && Devices.hotkeysAvailable
-        onTriggered: hotkeyDialog.createObject(menu.parent, { fixedTarget: menu.target, destroyOnClose: true }).open()
+        onTriggered: {
+            // On the window, not the control: a control in a list can be
+            // rebuilt (and its children with it) while the dialog is open.
+            const host = menu.parent.QQC2.ApplicationWindow.window;
+            hotkeyDialog.createObject(host ? host.contentItem : menu.parent,
+                                      { fixedTarget: menu.target, destroyOnClose: true }).open();
+        }
     }
 
     Component {

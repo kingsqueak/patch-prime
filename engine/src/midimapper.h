@@ -18,6 +18,7 @@ namespace pp {
 
 class DeviceModel;
 class RecordingManager;
+class Soundboard;
 
 // Any MIDI controller driving the mixer, through mappings the user teaches
 // it (MIDI learn): startLearn(target), then the next control moved on the
@@ -38,6 +39,8 @@ public:
     MidiMapper(DeviceModel *devices, MidiPort *port, QObject *parent = nullptr);
 
     // Optional: recording targets do nothing without it.
+    // Optional: pad targets do nothing without it.
+    void setSoundboard(Soundboard *soundboard);
     void setRecordings(RecordingManager *recordings);
 
     // Learns the next control moved (replacing what it did before, and

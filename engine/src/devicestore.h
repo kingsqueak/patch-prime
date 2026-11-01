@@ -6,6 +6,7 @@
 #include "endpoint.h"
 #include "hotkeys.h"
 #include "midimapping.h"
+#include "soundpad.h"
 
 #include <QDateTime>
 #include <QJsonArray>
@@ -218,6 +219,12 @@ public:
     // mappings, they follow their strips.
     // Desktop integration: a tray icon (patchprime-tray), and Plasma's
     // on-screen messages when a hotkey or controller changes something.
+    // The soundboard: its pads, and the strip they play into (a key; empty
+    // for none chosen).
+    [[nodiscard]] const std::vector<SoundPad> &pads() const { return m_pads; }
+    void setPads(std::vector<SoundPad> pads) { m_pads = std::move(pads); }
+    [[nodiscard]] const std::string &soundboardTarget() const { return m_soundboardTarget; }
+    void setSoundboardTarget(std::string key) { m_soundboardTarget = std::move(key); }
     [[nodiscard]] bool trayIcon() const { return m_trayIcon; }
     void setTrayIcon(bool on) { m_trayIcon = on; }
     [[nodiscard]] bool showOsd() const { return m_showOsd; }
@@ -255,6 +262,8 @@ private:
     std::string m_midiController;
     std::vector<MidiMapping> m_midiMappings;
     std::vector<Hotkey> m_hotkeys;
+    std::vector<SoundPad> m_pads;
+    std::string m_soundboardTarget;
     bool m_trayIcon = true;
     bool m_showOsd = true;
     std::map<std::string, DeviceSettings> m_entries;

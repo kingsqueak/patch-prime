@@ -13,6 +13,7 @@
 #include "pipewiregraph.h"
 #include "plugins.h"
 #include "recordingmanager.h"
+#include "soundboard.h"
 
 #include <QCoreApplication>
 #include <QJsonArray>
@@ -575,6 +576,91 @@ private Q_SLOTS:
         devices.forget(devices.rowForKey(desktopKey));
         QVERIFY(QTest::qWaitFor(
             [&] { return !nodeNamed(m_graph, mixNode) && !nodeNamed(m_graph, desktopNode); }, 5000));
+    }
+
+    // Soundboard pads: streams of their own into the chosen strip, several
+    // at once, stopped by pressing again or at their end.
+    void soundboardPlays()
+    {
+        QTemporaryDir dir;
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel devices(&store);
+        devices.attach(&m_graph);
+        BusManager buses(&m_graph, &devices);
+        m_owners.insert(busOwnerFor(store.path()));
+        Soundboard soundboard(&m_graph, &devices, &buses);
+
+        const auto mixKey =
+            devices.createVirtual(QStringLiteral("Test Mix"), EndpointKind::VirtualSink).toStdString();
+        const auto desktopKey =
+            devices.createVirtual(QStringLiteral("Test Desktop"), EndpointKind::VirtualInput).toStdString();
+        const auto mixNode = store.find(mixKey)->busName;
+        const auto desktopNode = store.find(desktopKey)->busName;
+        QVERIFY(QTest::qWaitFor([&] { return nodeNamed(m_graph, mixNode) && nodeNamed(m_graph, desktopNode); }, 5000));
+        QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(mixKey) >= 0; }, 5000));
+
+        QTemporaryDir toneDir;
+        const auto tone = toneDir.filePath(QStringLiteral("tone.wav"));
+        QVERIFY(writeTone(tone, 1));
+        QString error;
+        QVERIFY(soundboard.add(toneDir.filePath(QStringLiteral("missing.wav")), &error).empty());
+        const auto first = soundboard.add(tone, &error);
+        const auto second = soundboard.add(tone, &error);
+        QVERIFY2(!first.empty() && !second.empty(), qPrintable(error));
+        QCOMPARE(store.pads().front().label, std::string("tone"));
+        const auto nodeOf = [](const std::string &id) { return std::string(Soundboard::streamPrefix) + id.substr(0, 8); };
+
+        // The first pad picks the first mix bus to play into; with none
+        // chosen, a pad can't play.
+        QCOMPARE(store.soundboardTarget(), mixKey);
+        devices.setSoundboardTarget({});
+        QVERIFY(!soundboard.trigger(first, &error));
+        QVERIFY(!error.isEmpty());
+
+        devices.setSoundboardTarget(mixKey);
+        buses.setMetering(true);
+        QVERIFY2(soundboard.trigger(first, &error), qPrintable(error));
+        QVERIFY(soundboard.trigger(second, &error)); // both at once
+        QVERIFY(QTest::qWaitFor([&] {
+            return linkCount(m_graph, nodeOf(first), mixNode) == 2 && linkCount(m_graph, nodeOf(second), mixNode) == 2;
+        }, 5000));
+        float peak = 0.0F;
+        QVERIFY(QTest::qWaitFor([&] {
+            const auto levels = buses.takeLevels();
+            if (const auto it = levels.find(mixKey); it != levels.end()) {
+                for (const float level : it->second) {
+                    peak = std::max(peak, level);
+                }
+            }
+            return peak > 0.3F;
+        }, 5000));
+
+        // Pressed again: stops. The other ends by itself (1 s).
+        QVERIFY(soundboard.trigger(first));
+        QVERIFY(!soundboard.isPlaying(first));
+        QVERIFY(QTest::qWaitFor([&] { return !nodeNamed(m_graph, nodeOf(first)); }, 3000));
+        QVERIFY(QTest::qWaitFor([&] { return !soundboard.isPlaying(second); }, 4000));
+        QVERIFY(QTest::qWaitFor([&] { return !nodeNamed(m_graph, nodeOf(second)); }, 3000));
+
+        // Looping, and moved to another strip while it plays.
+        QVERIFY(soundboard.update(first, "Loop", -6.0, true));
+        QVERIFY(soundboard.trigger(first));
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, nodeOf(first), mixNode) == 2; }, 5000));
+        devices.setSoundboardTarget(desktopKey);
+        QVERIFY(QTest::qWaitFor([&] {
+            return linkCount(m_graph, nodeOf(first), desktopNode) == 2 && linkCount(m_graph, nodeOf(first), mixNode) == 0;
+        }, 5000));
+        QTest::qWait(1500); // past its length
+        QVERIFY(soundboard.isPlaying(first));
+        soundboard.stopAll();
+        QVERIFY(soundboard.playing().empty());
+        QVERIFY(QTest::qWaitFor([&] { return !nodeNamed(m_graph, nodeOf(first)); }, 3000));
+        buses.setMetering(false);
+
+        devices.forget(devices.rowForKey(mixKey));
+        devices.forget(devices.rowForKey(desktopKey));
+        QVERIFY(store.soundboardTarget().empty()); // forgotten with the strip
+        QVERIFY(QTest::qWaitFor([&] { return !nodeNamed(m_graph, mixNode) && !nodeNamed(m_graph, desktopNode); }, 5000));
     }
 
     // A raw sample of a mic, played back into that mic's strip (looping)

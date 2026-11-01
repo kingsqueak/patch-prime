@@ -381,6 +381,11 @@ void Player::process(float *samples, std::uint32_t frames, std::uint32_t channel
     const auto got = m_ring.pop(samples, count);
     std::fill_n(samples + got, count - got, 0.0F);
     m_played.fetch_add(static_cast<std::int64_t>(got / channels), std::memory_order_relaxed);
+    if (const float gain = m_gain.load(std::memory_order_relaxed); gain != 1.0F) {
+        for (std::size_t i = 0; i < got; ++i) {
+            samples[i] *= gain; // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+        }
+    }
     if (got < count && eof && m_ring.available() == 0 &&
         m_seekTo.load(std::memory_order_relaxed) < 0) {
         m_finished.store(true, std::memory_order_relaxed);

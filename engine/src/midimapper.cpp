@@ -6,6 +6,7 @@
 #include "devicemodel.h"
 #include "mackiecontrol.h"
 #include "recordingmanager.h"
+#include "soundboard.h"
 
 #include <QUuid>
 
@@ -49,6 +50,13 @@ MidiMapper::MidiMapper(DeviceModel *devices, MidiPort *port, QObject *parent)
     connect(m_devices, &QAbstractItemModel::modelReset, this, &MidiMapper::scheduleFeedback);
     connect(m_devices, &DeviceModel::cueChanged, this, &MidiMapper::scheduleFeedback);
     connect(m_devices, &DeviceModel::midiMappingsChanged, this, &MidiMapper::scheduleFeedback);
+}
+
+void MidiMapper::setSoundboard(Soundboard *soundboard)
+{
+    m_targets.setPadHandlers([soundboard](const std::string &id) { soundboard->trigger(id); },
+                             [soundboard](const std::string &id) { return soundboard->isPlaying(id); });
+    connect(soundboard, &Soundboard::changed, this, &MidiMapper::scheduleFeedback); // pad lights
 }
 
 void MidiMapper::setRecordings(RecordingManager *recordings)

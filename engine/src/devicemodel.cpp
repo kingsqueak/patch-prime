@@ -471,6 +471,24 @@ void DeviceModel::setMidiMappings(std::vector<MidiMapping> mappings)
     Q_EMIT midiMappingsChanged();
 }
 
+void DeviceModel::setPads(std::vector<SoundPad> pads)
+{
+    if (pads != m_store->pads()) {
+        m_store->setPads(std::move(pads));
+        saveStore();
+        Q_EMIT soundboardChanged();
+    }
+}
+
+void DeviceModel::setSoundboardTarget(const std::string &key)
+{
+    if (key != m_store->soundboardTarget()) {
+        m_store->setSoundboardTarget(key);
+        saveStore();
+        Q_EMIT soundboardChanged();
+    }
+}
+
 void DeviceModel::setTrayIcon(bool on)
 {
     if (on != m_store->trayIcon()) {

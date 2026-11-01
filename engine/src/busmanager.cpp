@@ -1351,6 +1351,12 @@ void BusManager::setTaps(std::map<std::string, std::string> recorders, std::stri
     scheduleReconcile();
 }
 
+void BusManager::setPadStreams(std::map<std::string, std::string> pads)
+{
+    m_pads = std::move(pads);
+    scheduleReconcile();
+}
+
 std::vector<std::string> BusManager::stripPositions(const std::string &key) const
 {
     for (const auto &[name, w] : wantedBuses()) {
@@ -1389,7 +1395,7 @@ void BusManager::linkTaps(const std::map<std::string, std::uint32_t> &ready,
                           const std::map<std::string, std::vector<PortRef>> &stripOuts,
                           const LinkMap &existingLinks)
 {
-    if (m_recorders.empty() && m_playerNode.empty()) {
+    if (m_recorders.empty() && m_playerNode.empty() && m_pads.empty()) {
         return;
     }
     std::map<std::string, std::string> nameOf; // endpoint key -> bus name
@@ -1428,22 +1434,38 @@ void BusManager::linkTaps(const std::map<std::string, std::uint32_t> &ready,
             }
         }
     }
-    if (m_playerNode.empty()) {
-        return;
+    if (!m_playerNode.empty()) {
+        linkStreamInto(m_playerNode, m_playerTarget, ready, wanted, fx, existingLinks);
     }
-    const auto player = tapNode(m_playerNode);
+    for (const auto &[node, target] : m_pads) {
+        linkStreamInto(node, target, ready, wanted, fx, existingLinks);
+    }
+}
+
+void BusManager::linkStreamInto(const std::string &nodeName, const std::string &targetKey,
+                                const std::map<std::string, std::uint32_t> &ready,
+                                const std::map<std::string, Wanted> &wanted,
+                                const std::map<std::string, FxPorts> &fx, const LinkMap &existingLinks)
+{
+    const auto player = tapNode(nodeName);
     if (!player) {
         return;
+    }
+    std::string busName;
+    for (const auto &[name, w] : wanted) {
+        if (w.key == targetKey) {
+            busName = name;
+        }
     }
     // Into the target strip, and nowhere else: the target may have just
     // changed. A hardware input takes it where the device comes in: its
     // effects node, or its bus.
     std::vector<PortRef> into;
-    if (const auto bus = nameOf.find(m_playerTarget); bus != nameOf.end()) {
-        const auto &w = wanted.at(bus->second);
-        if (const auto f = fx.find(bus->second); f != fx.end() && effectsBeforeBus(w)) {
+    if (!busName.empty()) {
+        const auto &w = wanted.at(busName);
+        if (const auto f = fx.find(busName); f != fx.end() && effectsBeforeBus(w)) {
             into = f->second.in;
-        } else if (const auto it = ready.find(bus->second); it != ready.end()) {
+        } else if (const auto it = ready.find(busName); it != ready.end()) {
             into = portsOf(it->second, "in", false);
         }
     }

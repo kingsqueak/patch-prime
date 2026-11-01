@@ -4,6 +4,7 @@
 #include "hotkeys.h"
 
 #include "devicemodel.h"
+#include "soundboard.h"
 
 #include <QUuid>
 
@@ -106,6 +107,14 @@ Hotkeys::Hotkeys(DeviceModel *devices, ShortcutBackend *backend, QObject *parent
     connect(m_devices, &QAbstractItemModel::rowsInserted, this, &Hotkeys::sync);
     connect(m_devices, &QAbstractItemModel::rowsRemoved, this, &Hotkeys::sync);
     sync();
+}
+
+void Hotkeys::setSoundboard(Soundboard *soundboard)
+{
+    m_targets.setPadHandlers([soundboard](const std::string &id) { soundboard->trigger(id); },
+                             [soundboard](const std::string &id) { return soundboard->isPlaying(id); });
+    // Pads renamed or removed: names and hotkeys follow.
+    connect(m_devices, &DeviceModel::soundboardChanged, this, &Hotkeys::sync);
 }
 
 std::string Hotkeys::add(HotkeyMode mode, const MidiTarget &target)

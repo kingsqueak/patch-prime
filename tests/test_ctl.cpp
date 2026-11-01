@@ -18,6 +18,7 @@ QJsonObject state()
     const auto json = QByteArrayLiteral(R"({
         "cueOutput": "out|phones",
         "scenes": ["Live", "Podcast"],
+        "pads": [{"id": "p1", "label": "Applause", "playing": false}, {"id": "p2", "label": "Air Horn", "playing": true}],
         "recording": {"virtual|stream": "/tmp/x.flac"},
         "devices": [
             {"key": "in|mic", "nodeName": "mic", "label": "Mic", "stage": "input", "isEnabled": true,
@@ -129,6 +130,17 @@ private Q_SLOTS:
         QVERIFY(error({QStringLiteral("send-level"), QStringLiteral("Line1"), QStringLiteral("Stream Mix"),
                        QStringLiteral("0")})
                     .contains(QStringLiteral("isn't sent")));
+    }
+
+    void pads()
+    {
+        const auto c = only({QStringLiteral("pad"), QStringLiteral("air"), QStringLiteral("horn")});
+        QCOMPARE(c.method, QStringLiteral("TriggerPad"));
+        QCOMPARE(c.args.at(0).toString(), QStringLiteral("p2"));
+        QVERIFY(c.returnsError);
+        QVERIFY(!error({QStringLiteral("pad"), QStringLiteral("Boo")}).isEmpty());
+        QCOMPARE(ok({QStringLiteral("pads")}).output, QStringLiteral("Applause\nAir Horn  (playing)\n"));
+        QCOMPARE(only({QStringLiteral("pads"), QStringLiteral("stop")}).method, QStringLiteral("StopAllPads"));
     }
 
     void scenesAndReading()

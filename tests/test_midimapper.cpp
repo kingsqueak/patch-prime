@@ -83,6 +83,10 @@ private Q_SLOTS:
         QVERIFY(!midiTargetFromJson({{QStringLiteral("action"), QStringLiteral("send")},
                                      {QStringLiteral("key"), QStringLiteral("k")}}));
         QVERIFY(!midiTargetFromJson({{QStringLiteral("action"), QStringLiteral("dance")}}));
+        // A pad, by id.
+        const MidiTarget pad{.action = MidiAction::Pad, .pad = "p1"};
+        QCOMPARE(midiTargetFromJson(midiTargetToJson(pad)), std::optional{pad});
+        QVERIFY(!midiTargetFromJson({{QStringLiteral("action"), QStringLiteral("pad")}}));
         QCOMPARE(describeMidiControl(m), std::string("CC 7, channel 3"));
         QCOMPARE(describeMidiControl({.kind = MidiKind::Note, .number = 60}), std::string("Note C3, channel 1"));
     }
@@ -272,12 +276,16 @@ private Q_SLOTS:
             mapper.startLearn({.action = MidiAction::Cue, .key = m_mic});
             port.feed(note(1));
             m_devices->setMidiController("Some Controller:Port 1");
+            m_devices->setPads({SoundPad{.id = "p1", .label = "Applause", .path = "/x/applause.wav", .gainDb = -3.0, .loop = true}});
+            m_devices->setSoundboardTarget(m_bus);
         }
         QVERIFY(m_store->save());
         DeviceStore again(m_store->path());
         QVERIFY(again.load());
         QCOMPARE(again.midiMappings(), m_store->midiMappings());
         QCOMPARE(again.midiController(), std::string("Some Controller:Port 1"));
+        QCOMPARE(again.pads(), m_store->pads());
+        QCOMPARE(again.soundboardTarget(), m_bus);
         // Forgetting the strip forgets its mappings.
         QVERIFY(again.remove(m_mic));
         QVERIFY(again.midiMappings().empty());

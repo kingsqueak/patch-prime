@@ -35,6 +35,14 @@ public:
     void setSceneHandler(std::function<void(const QString &)> handler) { m_onScene = std::move(handler); }
     // Told what a toggle did, for an on-screen message: an icon name and
     // the text ("Mic muted").
+    // Pads: play/stop one by id, and whether it's playing (the soundboard
+    // isn't the model's job either).
+    void setPadHandlers(std::function<void(const std::string &)> trigger,
+                        std::function<bool(const std::string &)> playing)
+    {
+        m_triggerPad = std::move(trigger);
+        m_padPlaying = std::move(playing);
+    }
     using Feedback = std::function<void(const QString &icon, const QString &text)>;
     void setFeedback(Feedback feedback) { m_feedback = std::move(feedback); }
 
@@ -55,6 +63,8 @@ private:
     RecordingManager *m_recordings = nullptr;
     std::function<void(const QString &)> m_onScene;
     Feedback m_feedback;
+    std::function<void(const std::string &)> m_triggerPad;
+    std::function<bool(const std::string &)> m_padPlaying;
 
     void announce(const MidiTarget &target) const;
 };

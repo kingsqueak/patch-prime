@@ -450,6 +450,48 @@ QString DaemonClient::addHotkey(const QVariantMap &hotkey, const QVariant &keySe
     return reply.value();
 }
 
+QString DaemonClient::addPad(const QUrl &file)
+{
+    auto message = QDBusMessage::createMethodCall(service, path, interface, QStringLiteral("AddPad"));
+    message.setArguments({file.isLocalFile() ? file.toLocalFile() : file.toString()});
+    const QDBusReply<QString> reply = QDBusConnection::sessionBus().call(message);
+    if (!reply.isValid()) {
+        setLastError(reply.error().message());
+        return {};
+    }
+    return reply.value();
+}
+
+void DaemonClient::removePad(const QString &id)
+{
+    call(QStringLiteral("RemovePad"), {id});
+}
+
+void DaemonClient::updatePad(const QString &id, const QString &label, double gainDb, bool loop)
+{
+    call(QStringLiteral("UpdatePad"), {id, label, gainDb, loop});
+}
+
+void DaemonClient::movePad(int from, int to)
+{
+    call(QStringLiteral("MovePad"), {from, to});
+}
+
+void DaemonClient::triggerPad(const QString &id)
+{
+    callReportingError(QStringLiteral("TriggerPad"), {id});
+}
+
+void DaemonClient::stopAllPads()
+{
+    call(QStringLiteral("StopAllPads"), {});
+}
+
+void DaemonClient::setSoundboardTarget(const QString &key)
+{
+    call(QStringLiteral("SetSoundboardTarget"), {key});
+}
+
 void DaemonClient::setTrayIcon(bool on)
 {
     call(QStringLiteral("SetTrayIcon"), {on});
@@ -774,6 +816,13 @@ void DaemonClient::onStateChanged(const QString &state)
         }
     }
 
+    if (const auto pads = root.value(QLatin1String("pads")).toArray().toVariantList();
+        pads != m_pads || root.value(QLatin1String("soundboardTarget")).toString() != m_soundboardTarget) {
+        m_pads = pads;
+        m_soundboardTarget = root.value(QLatin1String("soundboardTarget")).toString();
+        Q_EMIT padsChanged();
+    }
+
     if (const bool tray = root.value(QLatin1String("trayIcon")).toBool(true),
         osd = root.value(QLatin1String("showOsd")).toBool(true);
         tray != m_trayIcon || osd != m_showOsd) {
@@ -890,6 +939,7 @@ void DaemonClient::onStateChanged(const QString &state)
             {QStringLiteral("name"), busName},
             {QStringLiteral("label"), row.value(QStringLiteral("label"))},
             {QStringLiteral("kind"), kind},
+            {QStringLiteral("key"), row.value(QStringLiteral("key"))},
         };
         record.append(target);
         if ((row.value(QStringLiteral("direction")).toString() == QLatin1String("output") &&
@@ -951,6 +1001,7 @@ void DaemonClient::onLevels(const QVariantMap &levels)
 {
     bool metersChanged = false;
     bool timesChanged = false;
+    bool padsMoved = false;
     for (auto it = levels.begin(); it != levels.end(); ++it) {
         QList<double> peaks;
         const auto &value = it.value();
@@ -960,6 +1011,14 @@ void DaemonClient::onLevels(const QVariantMap &levels)
             peaks = value.value<QList<double>>();
         }
 
+        // Pads playing: [seconds played, length].
+        if (it.key().startsWith(QLatin1String("pad|"))) {
+            if (peaks.size() == 2 && peaks[1] > 0) {
+                m_padProgress.insert(it.key().mid(4), peaks[0] / peaks[1]);
+                padsMoved = true;
+            }
+            continue;
+        }
         // Recording and playing times.
         if (it.key().startsWith(QLatin1String("rec|"))) {
             if (!peaks.isEmpty()) {
@@ -1084,6 +1143,18 @@ void DaemonClient::onLevels(const QVariantMap &levels)
     }
     if (timesChanged) {
         Q_EMIT recordingTimesChanged();
+    }
+    // Pads that stopped have no progress any more.
+    for (auto it = m_padProgress.begin(); it != m_padProgress.end();) {
+        if (!levels.contains(QStringLiteral("pad|") + it.key())) {
+            it = m_padProgress.erase(it);
+            padsMoved = true;
+        } else {
+            ++it;
+        }
+    }
+    if (padsMoved) {
+        Q_EMIT padProgressChanged();
     }
     // App strips' meters (kept falling like the strips' above).
     QVariantMap apps;

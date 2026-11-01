@@ -96,6 +96,11 @@ std::string MixerTargets::describe(const MidiTarget &target) const
         return label(target.key) + ": " + effect().first + " on/off";
     case MidiAction::Scene:
         return "Scene " + target.scene;
+    case MidiAction::Pad: {
+        const auto &pads = m_devices->store().pads();
+        const auto at = std::ranges::find(pads, target.pad, &SoundPad::id);
+        return "Pad " + (at == pads.end() ? target.pad : at->label);
+    }
     }
     return {};
 }
@@ -142,6 +147,9 @@ std::optional<bool> MixerTargets::isOn(const MidiTarget &target) const
 {
     if (target.action == MidiAction::Scene) {
         return m_devices->store().currentScene() == target.scene;
+    }
+    if (target.action == MidiAction::Pad) {
+        return m_padPlaying ? std::optional{m_padPlaying(target.pad)} : std::nullopt;
     }
     const int row = m_devices->rowForKey(target.key);
     if (row < 0) {
@@ -238,6 +246,12 @@ void MixerTargets::toggle(const MidiTarget &target)
             m_onScene(QString::fromStdString(target.scene));
         }
         announce(target);
+        return;
+    }
+    if (target.action == MidiAction::Pad) {
+        if (m_triggerPad) {
+            m_triggerPad(target.pad); // heard: no message
+        }
         return;
     }
     const int row = m_devices->rowForKey(target.key);

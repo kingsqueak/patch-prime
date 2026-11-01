@@ -111,6 +111,14 @@ Kirigami.ApplicationWindow {
                     onTriggered: root.open(recordingsPage)
                 }
             }
+            QQC2.MenuItem {
+                text: qsTr("&Soundboard")
+                icon.name: "media-playlist-play"
+                action: QQC2.Action {
+                    shortcut: "Ctrl+6"
+                    onTriggered: root.open(soundboardPage)
+                }
+            }
         }
 
         QQC2.Menu {
@@ -156,11 +164,17 @@ Kirigami.ApplicationWindow {
         onOpenRouting: root.open(routingPage)
         onOpenApps: root.open(appsPage)
         onOpenRecordings: root.open(recordingsPage)
+        onOpenSoundboard: root.open(soundboardPage)
     }
 
     Component {
         id: recordingsPage
         RecordingsPage {}
+    }
+
+    Component {
+        id: soundboardPage
+        SoundboardPage {}
     }
 
     Component {
@@ -245,6 +259,8 @@ Kirigami.ApplicationWindow {
             open(appsPage);
         else if (startPage === "recordings")
             open(recordingsPage);
+        else if (startPage === "soundboard")
+            open(soundboardPage);
         else if (startPage === "about")
             open(aboutPage);
         else if (startPage === "guide")

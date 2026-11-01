@@ -153,6 +153,8 @@ public:
     [[nodiscard]] bool isLooping() const { return m_loop.load(); }
     // Played to the end.
     [[nodiscard]] bool finished() const { return m_finished.load(); }
+    // A level for what it plays (linear; 1 = as recorded).
+    void setGain(float gain) { m_gain.store(gain); }
 
 private:
     struct File;
@@ -168,6 +170,7 @@ private:
     std::atomic<bool> m_loop{false};
     std::atomic<bool> m_eof{false};
     std::atomic<bool> m_finished{false};
+    std::atomic<float> m_gain{1.0F};
     // Seeking: the decoding thread asks the realtime thread to drop what's
     // queued (request), waits until it has (done), then reads from there.
     std::atomic<std::int64_t> m_seekTo{-1};

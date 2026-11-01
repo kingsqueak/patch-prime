@@ -17,6 +17,7 @@ namespace pp {
 
 class DeviceModel;
 class RecordingManager;
+class Soundboard;
 
 // What a hotkey does to its target.
 enum class HotkeyMode : std::uint8_t
@@ -77,6 +78,8 @@ class Hotkeys : public QObject
 public:
     Hotkeys(DeviceModel *devices, ShortcutBackend *backend, QObject *parent = nullptr);
 
+    // Optional: pad targets do nothing without it.
+    void setSoundboard(Soundboard *soundboard);
     void setRecordings(RecordingManager *recordings) { m_targets.setRecordings(recordings); }
 
     // A new hotkey (no keys yet); its id, or empty when the mode doesn't

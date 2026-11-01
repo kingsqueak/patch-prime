@@ -38,7 +38,8 @@ set(CPACK_DEBIAN_PACKAGE_DEPENDS
     "pipewire (>= 1.6), wireplumber, qml6-module-org-kde-kirigami, qml6-module-org-kde-kquickcontrols, \
 qml6-module-org-kde-desktop, qml6-module-qtquick-controls, \
 qml6-module-qtquick-layouts, qml6-module-qtquick-window, \
-qml6-module-qtquick-templates, qml6-module-qtqml-workerscript, qml6-module-qtcore")
+qml6-module-qtquick-templates, qml6-module-qtqml-workerscript, qml6-module-qtcore, \
+qml6-module-qtquick-dialogs")
 # Starts the engine at every user's login (it's also D-Bus activated when
 # the window opens).
 set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA

@@ -73,7 +73,11 @@ add_library(patchprime-engine STATIC
     src/recordingmanager.cpp
     src/recordingmanager.h
     src/scenes.cpp
-    src/scenes.h)
+    src/scenes.h
+    src/soundboard.cpp
+    src/soundboard.h
+    src/soundpad.cpp
+    src/soundpad.h)
 add_library(PatchPrime::Engine ALIAS patchprime-engine)
 
 target_include_directories(patchprime-engine PUBLIC src)
