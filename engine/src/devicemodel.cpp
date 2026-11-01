@@ -441,6 +441,16 @@ void DeviceModel::setPlayerTarget(const std::string &key)
     Q_EMIT recordingSettingsChanged();
 }
 
+void DeviceModel::setControlSurface(const std::string &id)
+{
+    if (id == m_store->controlSurface()) {
+        return;
+    }
+    m_store->setControlSurface(id);
+    saveStore();
+    Q_EMIT controlSurfaceChanged();
+}
+
 void DeviceModel::setCurrentScene(const std::string &name)
 {
     if (name != m_store->currentScene()) {

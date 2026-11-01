@@ -242,6 +242,7 @@ bool DeviceStore::load()
     m_recordingFormat = "flac";
     m_playerTarget.clear();
     m_currentScene.clear();
+    m_controlSurface.clear();
     m_lastError.clear();
     QFile file(m_path);
     if (!file.exists()) {
@@ -267,6 +268,7 @@ bool DeviceStore::load()
         root.value(QLatin1String("recordingFormat")).toString(QStringLiteral("flac")).toStdString();
     m_playerTarget = root.value(QLatin1String("playerTarget")).toString().toStdString();
     m_currentScene = root.value(QLatin1String("currentScene")).toString().toStdString();
+    m_controlSurface = root.value(QLatin1String("controlSurface")).toString().toStdString();
     const auto devices = document.object().value(QLatin1String("devices")).toObject();
     for (auto it = devices.begin(); it != devices.end(); ++it) {
         auto settings = fromJson(it.value().toObject());
@@ -299,6 +301,7 @@ bool DeviceStore::save()
         {QStringLiteral("recordingFormat"), qs(m_recordingFormat)},
         {QStringLiteral("playerTarget"), qs(m_playerTarget)},
         {QStringLiteral("currentScene"), qs(m_currentScene)},
+        {QStringLiteral("controlSurface"), qs(m_controlSurface)},
         {QStringLiteral("devices"), devices},
     };
 

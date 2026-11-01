@@ -201,6 +201,10 @@ public:
     // after a restart.
     [[nodiscard]] const std::string &currentScene() const { return m_currentScene; }
     void setCurrentScene(std::string name) { m_currentScene = std::move(name); }
+    // The MIDI port of the Mackie Control surface (see AlsaMidi::Port::id),
+    // or empty for none.
+    [[nodiscard]] const std::string &controlSurface() const { return m_controlSurface; }
+    void setControlSurface(std::string id) { m_controlSurface = std::move(id); }
 
     [[nodiscard]] const std::map<std::string, DeviceSettings> &entries() const { return m_entries; }
     [[nodiscard]] const DeviceSettings *find(const std::string &key) const;
@@ -228,6 +232,7 @@ private:
     std::string m_recordingFormat = "flac";
     std::string m_playerTarget;
     std::string m_currentScene;
+    std::string m_controlSurface;
     std::map<std::string, DeviceSettings> m_entries;
 };
 

@@ -42,6 +42,7 @@ find_package(Qt6 6.10 REQUIRED COMPONENTS Core)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PipeWire REQUIRED IMPORTED_TARGET libpipewire-0.3>=1.6)
 pkg_check_modules(SndFile REQUIRED IMPORTED_TARGET sndfile>=1.1)
+pkg_check_modules(Alsa REQUIRED IMPORTED_TARGET alsa>=1.2)
 pkg_check_modules(Lilv REQUIRED IMPORTED_TARGET lilv-0>=0.24 lv2>=1.18)
 
 add_subdirectory(engine)

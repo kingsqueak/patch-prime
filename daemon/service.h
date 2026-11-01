@@ -12,7 +12,9 @@
 #include <QVariantMap>
 
 namespace pp {
+class AlsaMidi;
 class AppRouter;
+class MackieControl;
 class SceneStore;
 class BusManager;
 class DeviceModel;
@@ -54,6 +56,10 @@ public:
     PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *devices, pp::BusManager *buses,
                       pp::AppRouter *apps, pp::SceneStore *scenes, pp::RecordingManager *recordings,
                       pp::PluginCatalog *plugins, QObject *parent = nullptr);
+
+    // The Mackie Control surface (optional): its port in the state, its
+    // meters, and its F1..F8 loading scenes.
+    void setControlSurface(pp::AlsaMidi *midi, pp::MackieControl *mackie);
 
 public Q_SLOTS:
     QString GetState() const;
@@ -173,6 +179,13 @@ public Q_SLOTS:
     void SeekPlayback(double seconds);
     void SetPlayerTarget(const QString &key);
     void SetPlaybackLoop(bool loop);
+    // The Mackie Control surface's MIDI port: an id from the state's
+    // "controlSurfacePorts" = [{id, name}], or "" for none (in the state as
+    // "controlSurface"; "controlSurfaceConnected" says whether it's
+    // connected now, "controlSurfaceAvailable" whether there's an ALSA
+    // sequencer at all). Saved; the controller is connected whenever it's
+    // plugged in.
+    void SetControlSurface(const QString &id);
 
 Q_SIGNALS:
     void StateChanged(const QString &state);
@@ -192,6 +205,8 @@ private:
     pp::AppRouter *m_apps;
     pp::RecordingManager *m_recordings;
     pp::PluginCatalog *m_plugins;
+    pp::AlsaMidi *m_midi = nullptr;
+    pp::MackieControl *m_mackie = nullptr;
     int m_recordingsRevision = 0;
     pp::SceneStore *m_scenes;
     QTimer m_stateTimer;

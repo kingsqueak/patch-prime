@@ -3,11 +3,13 @@
 
 #include "service.h"
 
+#include "alsamidi.h"
 #include "approuter.h"
 #include "busmanager.h"
 #include "effects.h"
 #include "devicemodel.h"
 #include "endpoint.h"
+#include "mackiecontrol.h"
 #include "pipewiregraph.h"
 #include "plugins.h"
 #include "recordingmanager.h"
@@ -68,6 +70,26 @@ PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *
                 updateMetering();
                 updateEffectMetering();
             });
+}
+
+void PatchPrimeService::setControlSurface(pp::AlsaMidi *midi, pp::MackieControl *mackie)
+{
+    m_midi = midi;
+    m_mackie = mackie;
+    connect(midi, &pp::AlsaMidi::portsChanged, this, &PatchPrimeService::scheduleState);
+    connect(midi, &pp::MidiPort::connectedChanged, this, [this] {
+        updateMetering();
+        scheduleState();
+    });
+    connect(m_devices, &pp::DeviceModel::controlSurfaceChanged, this,
+            &PatchPrimeService::scheduleState);
+    connect(mackie, &pp::MackieControl::sceneRequested, this, [this](int index) {
+        const auto names = m_scenes->names();
+        if (index >= 0 && index < names.size()) {
+            LoadScene(names.at(index));
+        }
+    });
+    updateMetering();
 }
 
 QString PatchPrimeService::GetState() const
@@ -198,6 +220,19 @@ QString PatchPrimeService::GetState() const
          }()},
         {QStringLiteral("recordingError"), m_recordings->lastError()},
         {QStringLiteral("recordingsRevision"), m_recordingsRevision},
+        {QStringLiteral("controlSurface"), QString::fromStdString(m_devices->store().controlSurface())},
+        {QStringLiteral("controlSurfaceAvailable"), m_midi != nullptr && m_midi->isAvailable()},
+        {QStringLiteral("controlSurfaceConnected"), m_midi != nullptr && m_midi->isConnected()},
+        {QStringLiteral("controlSurfacePorts"), [this] {
+             QJsonArray ports;
+             if (m_midi != nullptr) {
+                 for (const auto &port : m_midi->ports()) {
+                     ports.append(QJsonObject{{QStringLiteral("id"), QString::fromStdString(port.id)},
+                                              {QStringLiteral("name"), QString::fromStdString(port.name)}});
+                 }
+             }
+             return ports;
+         }()},
         {QStringLiteral("player"), [this] {
              const auto p = m_recordings->player();
              return QJsonObject{{QStringLiteral("path"), p.path},
@@ -729,7 +764,7 @@ void PatchPrimeService::scheduleState()
 void PatchPrimeService::updateMetering()
 {
     const bool watched = !m_levelWatchers.isEmpty();
-    m_buses->setMetering(watched);
+    m_buses->setMetering(watched || (m_mackie != nullptr && m_mackie->wantsMeters()));
     if (watched && !m_levelsTimer.isActive()) {
         m_levelsTimer.start();
     } else if (!watched) {
@@ -787,4 +822,9 @@ void PatchPrimeService::emitLevels()
     if (!levels.isEmpty()) {
         Q_EMIT Levels(levels);
     }
+}
+
+void PatchPrimeService::SetControlSurface(const QString &id)
+{
+    m_devices->setControlSurface(id.trimmed().toStdString());
 }

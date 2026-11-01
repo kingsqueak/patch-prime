@@ -196,6 +196,52 @@ Kirigami.ScrollablePage {
                     onActivated: Devices.setBlockSize(currentValue)
                 }
             }
+
+            Kirigami.ListSectionHeader {
+                Layout.fillWidth: true
+                text: qsTr("Control surface")
+            }
+
+            Kirigami.FormLayout {
+                Layout.fillWidth: true
+                Layout.margins: Kirigami.Units.largeSpacing
+
+                // A Mackie Control (or a controller in its Mackie mode), by
+                // its MIDI port; the chosen one stays listed while unplugged.
+                QQC2.ComboBox {
+                    readonly property var surface: Devices.controlSurface
+                    Kirigami.FormData.label: qsTr("Mackie Control:")
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                    enabled: Devices.daemonRunning && surface.available === true
+                    textRole: "text"
+                    valueRole: "value"
+                    model: {
+                        const ports = (surface.ports || []).map(p => ({ value: p.id, text: p.name }));
+                        const chosen = surface.id || "";
+                        if (chosen !== "" && !ports.some(p => p.value === chosen))
+                            ports.push({ value: chosen,
+                                         text: qsTr("%1 (unplugged)").arg(chosen.slice(chosen.indexOf(":") + 1)) });
+                        return [{ value: "", text: qsTr("None") }].concat(ports);
+                    }
+                    currentIndex: Math.max(0, model.findIndex(m => m.value === (surface.id || "")))
+                    onActivated: Devices.setControlSurface(currentValue)
+                }
+
+                QQC2.Label {
+                    Kirigami.FormData.label: qsTr("Status:")
+                    visible: (Devices.controlSurface.id || "") !== "" || Devices.controlSurface.available !== true
+                    text: Devices.controlSurface.available !== true ? qsTr("No MIDI (the ALSA sequencer isn't available)")
+                        : Devices.controlSurface.connected ? qsTr("Connected") : qsTr("Not connected: plug it in")
+                }
+
+                QQC2.Label {
+                    Layout.maximumWidth: Kirigami.Units.gridUnit * 30
+                    wrapMode: Text.Wrap
+                    font: Kirigami.Theme.smallFont
+                    color: Kirigami.Theme.disabledTextColor
+                    text: qsTr("Faders, MUTE, SOLO (cue) and REC work on eight strips at a time (BANK and CHANNEL move them); SELECT a mix bus or output, and the V-Pots set each strip's send to it. F1 to F8 load your first eight scenes.")
+                }
+            }
         }
 
         Kirigami.PlaceholderMessage {

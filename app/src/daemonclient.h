@@ -42,6 +42,8 @@ class DaemonClient : public QAbstractListModel
     Q_PROPERTY(int blockSize READ blockSize NOTIFY clockChanged)
     // The hardware output cue plays to (a strip key; empty: cue is off).
     Q_PROPERTY(QString cueOutput READ cueOutput NOTIFY cueOutputChanged)
+    // The Mackie Control surface: {id, available, connected, ports: [{id, name}]}.
+    Q_PROPERTY(QVariantMap controlSurface READ controlSurface NOTIFY controlSurfaceChanged)
     // Built-in effects on offer: [{type, label, params: [{name, label, unit,
     // minimum, maximum, initial}]}]. A strip's chain is its "effects" role.
     Q_PROPERTY(QVariantList effectTypes READ effectTypes NOTIFY effectTypesChanged)
@@ -127,6 +129,9 @@ public:
     [[nodiscard]] Q_INVOKABLE QVariantMap effectInfo(const QString &type) const;
     Q_INVOKABLE void rescanPlugins();
     [[nodiscard]] QString cueOutput() const { return m_cueOutput; }
+    [[nodiscard]] QVariantMap controlSurface() const { return m_controlSurface; }
+    // The control surface's MIDI port (an id from controlSurface.ports), or "".
+    Q_INVOKABLE void setControlSurface(const QString &id);
     [[nodiscard]] QVariantMap effectMeters() const { return m_effectMeters; }
     [[nodiscard]] QVariantMap effectLevels() const { return m_effectLevels; }
     [[nodiscard]] QVariantList playbackTargets() const { return m_playbackTargets; }
@@ -225,6 +230,7 @@ Q_SIGNALS:
     void effectTypesChanged();
     void pluginsChanged();
     void cueOutputChanged();
+    void controlSurfaceChanged();
     void effectMetersChanged();
     void recordingChanged();
     void recordingTimesChanged();
@@ -283,6 +289,7 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QVariantMap m_pluginWindows;
     QVariantMap m_pluginWindowErrors;
     QString m_cueOutput;
+    QVariantMap m_controlSurface;
     QVariantMap m_effectMeters;
     QVariantMap m_effectLevels;
     QHash<QString, int> m_effectLevelWatches; // strip key -> windows showing it

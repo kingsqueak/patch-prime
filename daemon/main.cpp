@@ -4,6 +4,7 @@
 // patchprimed: the Patch Prime engine. Owns the buses and links in PipeWire and
 // offers them to the GUI over D-Bus. Meant to run as a systemd user service.
 
+#include "alsamidi.h"
 #include "approuter.h"
 #include "appstore.h"
 #include "audiosetup.h"
@@ -11,6 +12,7 @@
 #include "devicemodel.h"
 #include "devicestore.h"
 #include "hotplugrecovery.h"
+#include "mackiecontrol.h"
 #include "notifier.h"
 #include "pipewiregraph.h"
 #include "plugins.h"
@@ -149,6 +151,15 @@ int run(int &argc, char **argv)
     pp::SceneStore scenes;
     pp::RecordingManager recordings(&graph, &devices, &buses);
     PatchPrimeService service(&graph, &devices, &buses, &apps, &scenes, &recordings, &plugins);
+    // A Mackie Control surface, on the MIDI port chosen in the settings.
+    pp::AlsaMidi midi;
+    pp::MackieControl mackie(&devices, &midi);
+    mackie.setBuses(&buses);
+    mackie.setRecordings(&recordings);
+    midi.setTarget(devices.store().controlSurface());
+    QObject::connect(&devices, &pp::DeviceModel::controlSurfaceChanged, &midi,
+                     [&midi, &devices] { midi.setTarget(devices.store().controlSurface()); });
+    service.setControlSurface(&midi, &mackie);
     bus.registerObject(QString::fromLatin1(PatchPrimeService::objectPath), &service,
                        QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);
 

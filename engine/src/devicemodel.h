@@ -126,6 +126,9 @@ public:
     void setPlayerTarget(const std::string &key);
     // The scene last saved or loaded (see DeviceStore); saved, no signal.
     void setCurrentScene(const std::string &name);
+    // The control surface's MIDI port (see DeviceStore); emits
+    // controlSurfaceChanged.
+    void setControlSurface(const std::string &id);
     Q_INVOKABLE void setCue(int row, bool cued);
     [[nodiscard]] const std::set<std::string> &cued() const { return m_cued; }
     // Sets a strip's mix from a scene (see mixFromJson), keeping only what
@@ -180,6 +183,7 @@ Q_SIGNALS:
     void audioSettingsChanged();
     // The recording format or the player's target.
     void recordingSettingsChanged();
+    void controlSurfaceChanged();
 
 private:
     const PluginCatalog *m_pluginCatalog = nullptr;

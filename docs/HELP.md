@@ -14,6 +14,7 @@ Patch Prime turns your computer's audio into a small mixing console. This guide 
 - [Effects](#effects)
 - [Meters](#meters)
 - [Audio engine settings](#audio-engine-settings)
+- [Control surface (Mackie Control)](#control-surface-mackie-control)
 - [Unplugging and plugging in devices](#unplugging-and-plugging-in-devices)
 - [Recipes](#recipes)
 - [Troubleshooting](#troubleshooting)
@@ -281,6 +282,27 @@ On the **Devices** page, under **Audio engine**:
 - **Block size**: **Automatic** lets PipeWire choose. Smaller blocks mean less latency and more CPU.
 
 Each hardware device has a **settings button** (the sliders icon) for its own sample rate and scheduling. Changing these restarts WirePlumber, which interrupts audio for a few seconds.
+
+## Control surface (Mackie Control)
+
+Patch Prime can be driven from a hardware controller that speaks Mackie Control: a Mackie Control Universal, or a controller in its Mackie (MCU) mode, such as a Behringer X-Touch, an Icon Platform or a PreSonus FaderPort 8.
+
+To set it up, plug the controller in, then on the **Devices** page, under **Control surface**, pick its MIDI port as **Mackie Control**. The status says when it's connected. Patch Prime remembers the choice and reconnects whenever the controller is plugged in.
+
+The controller's eight strips show eight of the mixer's strips, in the mixer's order: inputs, then mix buses, then outputs. **BANK** moves them eight at a time and **CHANNEL** one at a time.
+
+On each strip:
+
+- **Fader**: the strip's level. Motorised faders follow changes made in Patch Prime, but not while your hand is on them.
+- **MUTE** mutes the strip and **SOLO** cues it (see [Cue](#cue-headphones); a cue output must be chosen).
+- **REC** starts or stops recording the strip (strips that can be recorded).
+- **V-Pot**: the strip's send level to the mix bus or output you chose (see below). Push it to turn that send on or off.
+- **The display** shows the strip's name, and its level (or its send level).
+- **The meter** shows its level.
+
+To choose where the V-Pots send, press **SELECT** on a mix bus or an output, or press **SEND** to step through them. The display names the destination for a moment, and that strip's SELECT light stays on. Press its SELECT again to turn the V-Pots off.
+
+The **master fader** sets the default output's level (or the first output's). **F1** to **F8** load your first eight scenes, in alphabetical order.
 
 ## Unplugging and plugging in devices
 

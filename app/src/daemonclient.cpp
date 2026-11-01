@@ -370,6 +370,11 @@ void DaemonClient::setCueOutput(const QString &key)
     call(QStringLiteral("SetCueOutput"), {key});
 }
 
+void DaemonClient::setControlSurface(const QString &id)
+{
+    call(QStringLiteral("SetControlSurface"), {id});
+}
+
 void DaemonClient::setCue(const QString &key, bool cued)
 {
     call(QStringLiteral("SetCue"), {key, cued});
@@ -611,6 +616,17 @@ void DaemonClient::onStateChanged(const QString &state)
     if (const auto cue = root.value(QLatin1String("cueOutput")).toString(); cue != m_cueOutput) {
         m_cueOutput = cue;
         Q_EMIT cueOutputChanged();
+    }
+
+    if (const QVariantMap surface{
+            {QStringLiteral("id"), root.value(QLatin1String("controlSurface")).toString()},
+            {QStringLiteral("available"), root.value(QLatin1String("controlSurfaceAvailable")).toBool()},
+            {QStringLiteral("connected"), root.value(QLatin1String("controlSurfaceConnected")).toBool()},
+            {QStringLiteral("ports"), root.value(QLatin1String("controlSurfacePorts")).toArray().toVariantList()},
+        };
+        surface != m_controlSurface) {
+        m_controlSurface = surface;
+        Q_EMIT controlSurfaceChanged();
     }
 
     if (const auto types = root.value(QLatin1String("effectTypes")).toArray().toVariantList();

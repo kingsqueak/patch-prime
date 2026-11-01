@@ -27,6 +27,8 @@ endif()
 patchprime_set_warnings(patchprime-dsp)
 
 add_library(patchprime-engine STATIC
+    src/alsamidi.cpp
+    src/alsamidi.h
     src/approuter.cpp
     src/approuter.h
     src/appstore.cpp
@@ -46,6 +48,9 @@ add_library(patchprime-engine STATIC
     src/graphtypes.h
     src/hotplugrecovery.cpp
     src/hotplugrecovery.h
+    src/mackiecontrol.cpp
+    src/mackiecontrol.h
+    src/midiport.h
     src/pipewiregraph.cpp
     src/pipewiregraph.h
     src/pluginrunner.cpp
@@ -63,7 +68,7 @@ add_library(PatchPrime::Engine ALIAS patchprime-engine)
 target_include_directories(patchprime-engine PUBLIC src)
 target_link_libraries(patchprime-engine
     PUBLIC Qt6::Core patchprime-dsp
-    PRIVATE PkgConfig::PipeWire PkgConfig::SndFile)
+    PRIVATE PkgConfig::PipeWire PkgConfig::SndFile PkgConfig::Alsa)
 target_compile_definitions(patchprime-engine PRIVATE
     QT_NO_CAST_FROM_ASCII
     PATCHPRIME_PLUGINHOST_INSTALLED="${CMAKE_INSTALL_FULL_LIBEXECDIR}/patchprime-pluginhost")

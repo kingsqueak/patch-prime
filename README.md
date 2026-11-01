@@ -22,6 +22,7 @@ A virtual audio mixer and router for KDE Plasma, built on PipeWire. Think of it 
 - **Recording and playback.** Record any input, mix bus or Desktop to FLAC, WAV or MP3 with one click, and play recordings back into a strip. Play a raw mic sample into the mic's own strip, on a loop, to set up its effects while you listen.
 - **Scenes.** Save the whole mix, including effects, under a name and load it back.
 - **Cue.** Listen to any strip alone in your headphones without changing the mix.
+- **Control surfaces.** Drive the mixer from a Mackie Control (or a controller in its Mackie mode, such as a Behringer X-Touch or a PreSonus FaderPort): motorised faders, mute, cue, record, send levels on the V-Pots, the strip names on its display, meters, and scenes on the function keys.
 - **Metering.** Peak, RMS and peak hold on every strip, short-term loudness (LUFS) on mix buses and outputs, and gain-reduction meters in the effects.
 - **Pro-audio friendly.** Choose the sample rate and block size, use one hardware interface as the master clock or let Patch Prime keep time, pick stereo pairs on multichannel cards, and have hot-plugged devices recovered automatically.
 - **Runs in the background.** The engine (`patchprimed`) is a systemd user service. Your routing keeps working with the window closed and comes back after a reboot.
@@ -44,7 +45,7 @@ Build dependencies on Ubuntu 26.04:
 
 ```sh
 sudo apt install cmake ninja-build g++ qt6-base-dev qt6-declarative-dev \
-    libpipewire-0.3-dev libspa-0.2-dev libsndfile1-dev liblilv-dev lv2-dev libx11-dev libkirigami-dev kirigami-addons-dev
+    libpipewire-0.3-dev libspa-0.2-dev libsndfile1-dev liblilv-dev lv2-dev libx11-dev libasound2-dev libkirigami-dev kirigami-addons-dev
 ```
 
 ```sh
