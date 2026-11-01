@@ -35,7 +35,7 @@ See the **[user guide](docs/HELP.md)** for how to use it.
 
 ## Status
 
-Version 0.12: under active development and in daily use on the author's machine. Phases 1–6 (devices, mixer, routing, apps, scenes, effects, monitoring) and recording are done, with packages for Ubuntu 26.04, Fedora 44 and Arch Linux. LV2, CLAP and VST3 plugins work, with their own editor windows (phase 7); next: hardware control.
+Version 0.13: under active development and in daily use on the author's machine. Devices, mixer, routing, apps, scenes, effects, monitoring and recording are done, with packages for Ubuntu 26.04, Fedora 44 and Arch Linux. LV2, CLAP and VST3 plugins work, with their own editor windows. New in 0.13: hardware control (Mackie Control surfaces, MIDI learn, global hotkeys, `patchprime-ctl` for scripts and Stream Deck), app strips in the mixer, a tray icon with the mic's mute, a soundboard, and effect presets.
 
 ## Requirements
 
@@ -68,9 +68,9 @@ Each release has packages built by GitHub Actions; download the one for your sys
 
 | System | Package | Install |
 | --- | --- | --- |
-| Ubuntu 26.04 (amd64, arm64) | `patchprime_<version>-1_<arch>.deb` | `sudo apt install ./patchprime_0.12-1_amd64.deb` |
-| Fedora 44 (x86_64, aarch64) | `patchprime-<version>-1.fc44.<arch>.rpm` | `sudo dnf install ./patchprime-0.12-1.fc44.x86_64.rpm` |
-| Arch Linux (x86_64) | `patchprime-<version>-1-x86_64.pkg.tar.zst` | `sudo pacman -U patchprime-0.12-1-x86_64.pkg.tar.zst` |
+| Ubuntu 26.04 (amd64, arm64) | `patchprime_<version>-1_<arch>.deb` | `sudo apt install ./patchprime_0.13-1_amd64.deb` |
+| Fedora 44 (x86_64, aarch64) | `patchprime-<version>-1.fc44.<arch>.rpm` | `sudo dnf install ./patchprime-0.13-1.fc44.x86_64.rpm` |
+| Arch Linux (x86_64) | `patchprime-<version>-1-x86_64.pkg.tar.zst` | `sudo pacman -U patchprime-0.13-1-x86_64.pkg.tar.zst` |
 
 On Arch you can also build it yourself: `makepkg -si` in [`packaging/arch`](packaging/arch). The engine starts at your next login (or right away when you open **Patch Prime** from the application menu). Patch Prime needs Qt 6.10 or newer, KDE Frameworks 6 and PipeWire 1.6, so older releases of these distributions can't run it.
 
