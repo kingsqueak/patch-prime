@@ -11,6 +11,8 @@
 #include <QTimer>
 #include <QVariantMap>
 
+#include <functional>
+
 namespace pp {
 class AlsaMidi;
 class AppMixer;
@@ -24,6 +26,7 @@ class BusManager;
 class DeviceModel;
 class PipeWireGraph;
 class PluginCatalog;
+class PresetStore;
 class RecordingManager;
 } // namespace pp
 
@@ -74,6 +77,8 @@ public:
     void setAppMixer(pp::AppMixer *mixer);
     // The soundboard (optional).
     void setSoundboard(pp::Soundboard *soundboard);
+    // Effect presets (optional).
+    void setPresets(pp::PresetStore *presets);
 
 public Q_SLOTS:
     QString GetState() const;
@@ -253,6 +258,18 @@ public Q_SLOTS:
     QString TriggerPad(const QString &id);
     void StopAllPads();
     void SetSoundboardTarget(const QString &key);
+    // Presets (in the state as "chainPresets" = [names] and "effectPresets"
+    // = {type: [names]}): a strip's whole effects chain, or one effect's
+    // settings (by its index in the strip's chain). Loading a chain
+    // replaces the strip's; loading an effect preset needs an effect of
+    // the same type. Saving under a name replaces what was there. Saves
+    // (scenes too) first ask open plugin windows for their latest state.
+    void SaveChainPreset(const QString &key, const QString &name);
+    void LoadChainPreset(const QString &key, const QString &name);
+    void DeleteChainPreset(const QString &name);
+    void SaveEffectPreset(const QString &key, int index, const QString &name);
+    void LoadEffectPreset(const QString &key, int index, const QString &name);
+    void DeleteEffectPreset(const QString &type, const QString &name);
 
 Q_SIGNALS:
     void StateChanged(const QString &state);
@@ -263,6 +280,9 @@ private:
     [[nodiscard]] QString clockNow() const;
     void scheduleState();
     void showFeedback(const QString &icon, const QString &text);
+    // Runs then once plugins with open windows have sent their state (it
+    // otherwise reaches the engine only every few seconds).
+    void afterPluginStates(const std::function<void()> &then);
     void updateMetering();
     void updateEffectMetering();
     void emitLevels();
@@ -280,6 +300,7 @@ private:
     pp::Hotkeys *m_hotkeys = nullptr;
     pp::AppMixer *m_appMixer = nullptr;
     pp::Soundboard *m_soundboard = nullptr;
+    pp::PresetStore *m_presets = nullptr;
     int m_recordingsRevision = 0;
     pp::SceneStore *m_scenes;
     QTimer m_stateTimer;

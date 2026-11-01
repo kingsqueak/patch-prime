@@ -450,6 +450,36 @@ QString DaemonClient::addHotkey(const QVariantMap &hotkey, const QVariant &keySe
     return reply.value();
 }
 
+void DaemonClient::saveChainPreset(const QString &key, const QString &name)
+{
+    call(QStringLiteral("SaveChainPreset"), {key, name});
+}
+
+void DaemonClient::loadChainPreset(const QString &key, const QString &name)
+{
+    call(QStringLiteral("LoadChainPreset"), {key, name});
+}
+
+void DaemonClient::deleteChainPreset(const QString &name)
+{
+    call(QStringLiteral("DeleteChainPreset"), {name});
+}
+
+void DaemonClient::saveEffectPreset(const QString &key, int index, const QString &name)
+{
+    call(QStringLiteral("SaveEffectPreset"), {key, index, name});
+}
+
+void DaemonClient::loadEffectPreset(const QString &key, int index, const QString &name)
+{
+    call(QStringLiteral("LoadEffectPreset"), {key, index, name});
+}
+
+void DaemonClient::deleteEffectPreset(const QString &type, const QString &name)
+{
+    call(QStringLiteral("DeleteEffectPreset"), {type, name});
+}
+
 QString DaemonClient::addPad(const QUrl &file)
 {
     auto message = QDBusMessage::createMethodCall(service, path, interface, QStringLiteral("AddPad"));
@@ -814,6 +844,14 @@ void DaemonClient::onStateChanged(const QString &state)
             m_midiLearningText = learningText;
             Q_EMIT midiChanged();
         }
+    }
+
+    const auto chains = root.value(QLatin1String("chainPresets")).toVariant().toStringList();
+    if (const auto effects = root.value(QLatin1String("effectPresets")).toObject().toVariantMap();
+        chains != m_chainPresets || effects != m_effectPresets) {
+        m_chainPresets = chains;
+        m_effectPresets = effects;
+        Q_EMIT presetsChanged();
     }
 
     if (const auto pads = root.value(QLatin1String("pads")).toArray().toVariantList();

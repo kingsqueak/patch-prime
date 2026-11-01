@@ -64,6 +64,9 @@ class DaemonClient : public QAbstractListModel
     // The soundboard: [{id, label, path, gainDb, loop, playing}], the key of
     // the strip it plays into, and each playing pad's progress (0..1).
     Q_PROPERTY(QVariantList pads READ pads NOTIFY padsChanged)
+    // Presets: chain preset names, and effect preset names by effect type.
+    Q_PROPERTY(QStringList chainPresets READ chainPresets NOTIFY presetsChanged)
+    Q_PROPERTY(QVariantMap effectPresets READ effectPresets NOTIFY presetsChanged)
     Q_PROPERTY(QString soundboardTarget READ soundboardTarget NOTIFY padsChanged)
     Q_PROPERTY(QVariantMap padProgress READ padProgress NOTIFY padProgressChanged)
     Q_PROPERTY(bool showOsd READ showOsd NOTIFY desktopSettingsChanged)
@@ -175,6 +178,14 @@ public:
     // Turning the tray icon on starts it now (it starts at login anyway).
     Q_INVOKABLE void setTrayIcon(bool on);
     [[nodiscard]] QVariantList pads() const { return m_pads; }
+    [[nodiscard]] QStringList chainPresets() const { return m_chainPresets; }
+    [[nodiscard]] QVariantMap effectPresets() const { return m_effectPresets; }
+    Q_INVOKABLE void saveChainPreset(const QString &key, const QString &name);
+    Q_INVOKABLE void loadChainPreset(const QString &key, const QString &name);
+    Q_INVOKABLE void deleteChainPreset(const QString &name);
+    Q_INVOKABLE void saveEffectPreset(const QString &key, int index, const QString &name);
+    Q_INVOKABLE void loadEffectPreset(const QString &key, int index, const QString &name);
+    Q_INVOKABLE void deleteEffectPreset(const QString &type, const QString &name);
     [[nodiscard]] QString soundboardTarget() const { return m_soundboardTarget; }
     [[nodiscard]] QVariantMap padProgress() const { return m_padProgress; }
     // A new pad for a sound file; its id ("" with lastError set on failure).
@@ -307,6 +318,7 @@ Q_SIGNALS:
     void hotkeysChanged();
     void desktopSettingsChanged();
     void padsChanged();
+    void presetsChanged();
     void padProgressChanged();
     void effectMetersChanged();
     void recordingChanged();
@@ -376,6 +388,8 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     bool m_hotkeysAvailable = false;
     bool m_trayIcon = true;
     QVariantList m_pads;
+    QStringList m_chainPresets;
+    QVariantMap m_effectPresets;
     QString m_soundboardTarget;
     QVariantMap m_padProgress;
     bool m_trayStarted = false;

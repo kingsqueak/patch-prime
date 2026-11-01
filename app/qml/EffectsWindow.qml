@@ -51,6 +51,33 @@ QQC2.ApplicationWindow {
     color: Kirigami.Theme.backgroundColor
     footer: MidiLearnBanner {}
 
+    // The whole chain as a preset ("Podcast mic"), for this or any strip.
+    header: QQC2.ToolBar {
+        RowLayout {
+            anchors.fill: parent
+
+            QQC2.Label {
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.smallSpacing
+                text: panel.effects.length === 1 ? qsTr("1 effect") : qsTr("%1 effects, top to bottom").arg(panel.effects.length)
+                color: Style.dimText
+            }
+
+            PresetButton {
+                text: qsTr("Chain Presets")
+                names: Devices.chainPresets
+                saveTitle: qsTr("Save the Effects Chain")
+                loadHint: qsTr("Load (replaces these effects):")
+                onSave: name => Devices.saveChainPreset(panel.key, name)
+                onLoad: name => Devices.loadChainPreset(panel.key, name)
+                onRemove: name => Devices.deleteChainPreset(name)
+                QQC2.ToolTip.text: qsTr("Save these effects as a preset, or load a saved chain onto this strip")
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+            }
+        }
+    }
+
     QQC2.ScrollView {
         id: scroll
 
@@ -174,6 +201,20 @@ QQC2.ApplicationWindow {
                             onClicked: Devices.setPluginWindow(panel.key, slot.index, !slot.windowOpen)
                             QQC2.ToolTip.text: slot.windowOpen ? qsTr("Close the plugin's own window")
                                                                : qsTr("Open the plugin's own window, with all its controls and displays")
+                            QQC2.ToolTip.visible: hovered
+                            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        }
+
+                        // This effect's settings as a preset (for this type).
+                        PresetButton {
+                            display: QQC2.AbstractButton.IconOnly
+                            text: qsTr("Presets")
+                            names: Devices.effectPresets[slot.modelData.type] || []
+                            saveTitle: qsTr("Save %1 Preset").arg(slot.info.label)
+                            onSave: name => Devices.saveEffectPreset(panel.key, slot.index, name)
+                            onLoad: name => Devices.loadEffectPreset(panel.key, slot.index, name)
+                            onRemove: name => Devices.deleteEffectPreset(slot.modelData.type, name)
+                            QQC2.ToolTip.text: qsTr("Presets for %1").arg(slot.info.label)
                             QQC2.ToolTip.visible: hovered
                             QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
                         }

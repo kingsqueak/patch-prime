@@ -20,6 +20,7 @@
 #include "notifier.h"
 #include "pipewiregraph.h"
 #include "plugins.h"
+#include "presets.h"
 #include "recordingmanager.h"
 #include "scenes.h"
 #include "soundboard.h"
@@ -184,6 +185,12 @@ int run(int &argc, char **argv)
     // The soundboard, also played from MIDI and hotkeys.
     pp::Soundboard soundboard(&graph, &devices, &buses);
     service.setSoundboard(&soundboard);
+    pp::PresetStore presets;
+    if (!presets.load()) {
+        std::println(stderr, "patchprimed: can't read {}: {}", presets.path().toStdString(),
+                     presets.lastError().toStdString());
+    }
+    service.setPresets(&presets);
     mapper.setSoundboard(&soundboard);
     hotkeys.setSoundboard(&soundboard);
     bus.registerObject(QString::fromLatin1(PatchPrimeService::objectPath), &service,

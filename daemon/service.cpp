@@ -16,6 +16,7 @@
 #include "midimapper.h"
 #include "pipewiregraph.h"
 #include "plugins.h"
+#include "presets.h"
 #include "recordingmanager.h"
 #include "scenes.h"
 #include "soundboard.h"
@@ -122,6 +123,22 @@ void PatchPrimeService::setAppMixer(pp::AppMixer *mixer)
     m_appMixer = mixer;
     connect(mixer, &pp::AppMixer::changed, this, &PatchPrimeService::scheduleState);
     updateMetering();
+}
+
+void PatchPrimeService::setPresets(pp::PresetStore *presets)
+{
+    m_presets = presets;
+}
+
+void PatchPrimeService::afterPluginStates(const std::function<void()> &then)
+{
+    if (m_buses->pluginWindows().empty()) {
+        then();
+        return;
+    }
+    m_buses->requestPluginStates();
+    constexpr int answerTime = 400; // ms: the hosts answer within a block or two
+    QTimer::singleShot(answerTime, this, then);
 }
 
 void PatchPrimeService::setSoundboard(pp::Soundboard *soundboard)
@@ -294,6 +311,17 @@ QString PatchPrimeService::GetState() const
                  mappings.append(json);
              }
              return mappings;
+         }()},
+        {QStringLiteral("chainPresets"),
+         m_presets != nullptr ? QJsonArray::fromStringList(m_presets->chainNames()) : QJsonArray()},
+        {QStringLiteral("effectPresets"), [this] {
+             QJsonObject byType;
+             if (m_presets != nullptr) {
+                 for (const auto &[type, names] : m_presets->effectNames()) {
+                     byType.insert(QString::fromStdString(type), QJsonArray::fromStringList(names));
+                 }
+             }
+             return byType;
          }()},
         {QStringLiteral("soundboardTarget"), QString::fromStdString(m_devices->store().soundboardTarget())},
         {QStringLiteral("soundboardError"), m_soundboard != nullptr ? m_soundboard->lastError() : QString()},
@@ -748,16 +776,23 @@ void PatchPrimeService::ForgetApp(const QString &appKey)
 void PatchPrimeService::SaveScene(const QString &name)
 {
     const auto trimmed = name.trimmed();
-    const auto scene = pp::captureScene(trimmed, m_devices->store(), m_apps->store(),
-                                        m_graph->defaultSinkName(), m_graph->defaultSourceName());
-    if (trimmed.isEmpty() || !m_scenes->save(scene)) {
+    if (trimmed.isEmpty()) {
         if (calledFromDBus()) {
-            sendErrorReply(QDBusError::Failed, QStringLiteral("could not save the scene ") + name);
+            sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("a scene needs a name"));
         }
         return;
     }
-    m_devices->setCurrentScene(trimmed.toStdString());
-    scheduleState();
+    // With the plugins' latest state (what their windows changed).
+    afterPluginStates([this, trimmed] {
+        const auto scene = pp::captureScene(trimmed, m_devices->store(), m_apps->store(),
+                                            m_graph->defaultSinkName(), m_graph->defaultSourceName());
+        if (!m_scenes->save(scene)) {
+            qWarning("could not save the scene %s", qPrintable(trimmed));
+            return;
+        }
+        m_devices->setCurrentScene(trimmed.toStdString());
+        scheduleState();
+    });
 }
 
 void PatchPrimeService::LoadScene(const QString &name)
@@ -1104,4 +1139,78 @@ void PatchPrimeService::StopAllPads()
 void PatchPrimeService::SetSoundboardTarget(const QString &key)
 {
     m_devices->setSoundboardTarget(key.toStdString());
+}
+
+void PatchPrimeService::SaveChainPreset(const QString &key, const QString &name)
+{
+    const int row = rowFor(key);
+    if (row < 0 || m_presets == nullptr || name.trimmed().isEmpty()) {
+        return;
+    }
+    afterPluginStates([this, key, name] {
+        const auto *settings = m_devices->store().find(key.toStdString());
+        if (settings == nullptr || !m_presets->saveChain(name, settings->effects)) {
+            qWarning("could not save the chain preset %s", qPrintable(name));
+        }
+        scheduleState();
+    });
+}
+
+void PatchPrimeService::LoadChainPreset(const QString &key, const QString &name)
+{
+    const int row = rowFor(key);
+    if (row < 0 || m_presets == nullptr) {
+        return;
+    }
+    if (const auto chain = m_presets->chain(name)) {
+        m_devices->setEffects(row, *chain);
+    } else if (calledFromDBus()) {
+        sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no chain preset called ") + name);
+    }
+}
+
+void PatchPrimeService::DeleteChainPreset(const QString &name)
+{
+    if (m_presets != nullptr && m_presets->removeChain(name)) {
+        scheduleState();
+    }
+}
+
+void PatchPrimeService::SaveEffectPreset(const QString &key, int index, const QString &name)
+{
+    const int row = rowFor(key);
+    if (row < 0 || m_presets == nullptr || name.trimmed().isEmpty()) {
+        return;
+    }
+    afterPluginStates([this, key, index, name] {
+        const auto *settings = m_devices->store().find(key.toStdString());
+        if (settings == nullptr || index < 0 || std::cmp_greater_equal(index, settings->effects.size()) ||
+            !m_presets->saveEffect(name, settings->effects.at(static_cast<std::size_t>(index)))) {
+            qWarning("could not save the effect preset %s", qPrintable(name));
+        }
+        scheduleState();
+    });
+}
+
+void PatchPrimeService::LoadEffectPreset(const QString &key, int index, const QString &name)
+{
+    const int row = rowFor(key);
+    const auto *settings = m_devices->store().find(key.toStdString());
+    if (row < 0 || m_presets == nullptr || settings == nullptr || index < 0 ||
+        std::cmp_greater_equal(index, settings->effects.size())) {
+        return;
+    }
+    const auto &type = settings->effects.at(static_cast<std::size_t>(index)).type;
+    if (const auto preset = m_presets->effect(type, name)) {
+        m_devices->loadEffectPreset(row, index, *preset);
+    } else if (calledFromDBus()) {
+        sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no preset called %1 for this effect").arg(name));
+    }
+}
+
+void PatchPrimeService::DeleteEffectPreset(const QString &type, const QString &name)
+{
+    if (m_presets != nullptr && m_presets->removeEffect(type.toStdString(), name)) {
+        scheduleState();
+    }
 }

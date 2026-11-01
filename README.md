@@ -20,7 +20,7 @@ A virtual audio mixer and router for KDE Plasma, built on PipeWire. Think of it 
   - delay, to line up outputs with different latency.
 - **Plugins.** Add LV2, CLAP and VST3 plugins (LSP, x42, ZAM, Calf, Dragonfly, and Linux VST3s from other makers) to any strip, in the same chain as the built-in effects and in any order. Open a plugin's own window to use its full editor (its knobs, graphs and meters), or use the simple controls in Patch Prime. Each plugin runs in a process of its own, so one that crashes doesn't take the mixer down: the strip carries on without it.
 - **Recording and playback.** Record any input, mix bus or Desktop to FLAC, WAV or MP3 with one click, and play recordings back into a strip. Play a raw mic sample into the mic's own strip, on a loop, to set up its effects while you listen.
-- **Scenes.** Save the whole mix, including effects, under a name and load it back.
+- **Scenes and presets.** Save the whole mix, including effects and plugins' own state, under a name and load it back. Save a strip's effects chain, or one effect's settings, as a preset for any strip.
 - **Cue.** Listen to any strip alone in your headphones without changing the mix.
 - **Soundboard.** Pads that play sound files into a mix bus (applause, an intro, a stinger), several at once, from the app, the tray, MIDI, hotkeys or `patchprime-ctl`.
 - **Control surfaces.** Drive the mixer from a Mackie Control (or a controller in its Mackie mode, such as a Behringer X-Touch or a PreSonus FaderPort): motorised faders, mute, cue, record, send levels on the V-Pots, the strip names on its display, meters, and scenes on the function keys. Any other MIDI controller works through **MIDI Learn**: right-click a fader, button, send or effect setting and move a control.

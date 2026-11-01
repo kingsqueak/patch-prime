@@ -68,6 +68,8 @@ add_library(patchprime-engine STATIC
     src/pluginrunner.h
     src/plugins.cpp
     src/plugins.h
+    src/presets.cpp
+    src/presets.h
     src/recording.cpp
     src/recording.h
     src/recordingmanager.cpp

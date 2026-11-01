@@ -795,6 +795,46 @@ void DeviceModel::setEffectParam(int row, int index, const QString &name, double
     });
 }
 
+void DeviceModel::setEffects(int row, std::vector<EffectSettings> effects)
+{
+    if (effects.size() > maxEffectsPerStrip) {
+        effects.resize(maxEffectsPerStrip);
+    }
+    std::vector<std::string> before;
+    const bool changed = editEffects(row, [&](std::vector<EffectSettings> &current) {
+        if (current == effects) {
+            return false;
+        }
+        for (const auto &e : current) {
+            before.push_back(e.type);
+        }
+        current = effects;
+        return true;
+    });
+    if (changed) {
+        remapEffects(row, [&](int i) {
+            const auto at = static_cast<std::size_t>(i);
+            return at < effects.size() && at < before.size() && effects[at].type == before[at] ? i : -1;
+        });
+    }
+}
+
+void DeviceModel::loadEffectPreset(int row, int index, const EffectSettings &preset)
+{
+    editEffects(row, [index, &preset](std::vector<EffectSettings> &effects) {
+        if (index < 0 || std::cmp_greater_equal(index, effects.size())) {
+            return false;
+        }
+        auto &e = effects[static_cast<std::size_t>(index)];
+        if (e.type != preset.type || (e.params == preset.params && e.state == preset.state)) {
+            return false;
+        }
+        e.params = preset.params;
+        e.state = preset.state;
+        return true;
+    });
+}
+
 void DeviceModel::setEffectState(int row, int index, const std::string &state)
 {
     editEffects(row, [index, &state](std::vector<EffectSettings> &effects) {

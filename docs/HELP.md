@@ -263,6 +263,15 @@ Delays the strip by up to one second. Use it on a fast output to line it up with
 
 A plain level trim, ±24 dB.
 
+### Presets
+
+Effects settings can be saved and reused:
+
+- **Chain presets:** **Chain Presets** at the top of a strip's effects window saves all its effects, in order, under a name ("Podcast mic"). Loading one onto any strip replaces that strip's effects with it. MIDI controls and hotkeys on the strip's effects stay where the same kind of effect stays in the same place.
+- **Effect presets:** the bookmark button on each effect saves just that effect's settings ("Warm voice" for an EQ). Its menu loads them onto any effect of the same kind, keeping whether it's on or bypassed.
+- Both menus save under an existing name to replace it, and have **Delete**. Presets are kept in `~/.config/patchprime/presets.json`.
+- Plugins' presets keep the plugin's own state too (what its window changed). Saving a preset or a scene while a plugin's window is open first collects its latest state.
+
 ### Plugins (LV2, CLAP and VST3)
 
 Besides the built-in effects, a strip can run **plugins** in three formats: **LV2**, the Linux plugin format (LSP, x42, ZAM, Calf, Dragonfly and many more); **CLAP**, a newer cross-platform format (LSP, DPF, Dragonfly, Surge, Airwindows...); and **VST3**, the most common format for commercial plugins (Linux builds only; Windows plugins work through [yabridge](https://github.com/robbert-vdh/yabridge)). Install them from your distribution (for example `sudo apt install lsp-plugins-lv2`, `lsp-plugins-clap` or `lsp-plugins-vst3`), or from the maker. Patch Prime looks for CLAP plugins in `~/.clap`, `/usr/lib/clap`, `/usr/local/lib/clap` and the folders in `CLAP_PATH`, and for VST3 plugins in `~/.vst3`, `/usr/lib/vst3` and `/usr/local/lib/vst3`.

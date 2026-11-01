@@ -111,6 +111,12 @@ public:
     // The strip an effect listens to (a ducker's key): another strip's key,
     // or empty for none. Ignored for effects that don't take one.
     Q_INVOKABLE void setEffectKey(int row, int index, const QString &key);
+    // Presets: a strip's whole chain replaced (MIDI and hotkey targets stay
+    // where the same type of effect stays at the same place), and one
+    // effect's parameters and plugin state from an effect preset of its
+    // type (its bypass and key are kept).
+    void setEffects(int row, std::vector<EffectSettings> effects);
+    void loadEffectPreset(int row, int index, const EffectSettings &preset);
     // A plugin's own state (see EffectSettings::state), as its host saved it.
     void setEffectState(int row, int index, const std::string &state);
     // The installed plugins, for adding and checking plugin effects (types
