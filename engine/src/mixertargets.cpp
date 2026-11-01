@@ -9,6 +9,8 @@
 #include "plugins.h"
 #include "recordingmanager.h"
 
+#include <QScopeGuard>
+
 #include <algorithm>
 #include <cmath>
 
@@ -235,6 +237,7 @@ void MixerTargets::toggle(const MidiTarget &target)
         if (m_onScene) {
             m_onScene(QString::fromStdString(target.scene));
         }
+        announce(target);
         return;
     }
     const int row = m_devices->rowForKey(target.key);
@@ -242,6 +245,7 @@ void MixerTargets::toggle(const MidiTarget &target)
     if (row < 0 || !on) {
         return;
     }
+    auto announceAfter = qScopeGuard([this, &target] { announce(target); });
     switch (target.action) {
     case MidiAction::Mute:
         m_devices->setMuted(row, !*on);
@@ -268,6 +272,47 @@ void MixerTargets::toggle(const MidiTarget &target)
         }
         break;
     default:
+        break;
+    }
+}
+
+void MixerTargets::announce(const MidiTarget &target) const
+{
+    if (!m_feedback) {
+        return;
+    }
+    if (target.action == MidiAction::Scene) {
+        m_feedback(QStringLiteral("view-media-playlist"), QStringLiteral("Scene: ") + QString::fromStdString(target.scene));
+        return;
+    }
+    const int row = m_devices->rowForKey(target.key);
+    const auto on = isOn(target);
+    if (row < 0 || !on) {
+        return;
+    }
+    const auto label = roleAt(*m_devices, row, DeviceModel::LabelRole).toString();
+    const bool input = roleAt(*m_devices, row, DeviceModel::StageRole).toString() == QLatin1String("input");
+    switch (target.action) {
+    case MidiAction::Mute: {
+        QString icon = *on ? QStringLiteral("audio-volume-muted") : QStringLiteral("audio-volume-high");
+        if (input) {
+            icon = *on ? QStringLiteral("microphone-sensitivity-muted") : QStringLiteral("audio-input-microphone");
+        }
+        m_feedback(icon, *on ? label + QStringLiteral(" muted") : label + QStringLiteral(" on"));
+        break;
+    }
+    case MidiAction::Cue:
+        m_feedback(QStringLiteral("audio-headphones"), *on ? label + QStringLiteral(" cued") : label + QStringLiteral(": cue off"));
+        break;
+    case MidiAction::Record:
+        m_feedback(QStringLiteral("media-record"),
+                   *on ? QStringLiteral("Recording ") + label : label + QStringLiteral(": recording stopped"));
+        break;
+    default:
+        // Sends and effects: "Mic → Stream Mix: send on/off", "Mic: Gate on/off".
+        m_feedback(QStringLiteral("view-media-equalizer"),
+                   QString::fromStdString(describe(target)).remove(QStringLiteral(" on/off")) +
+                       (*on ? QStringLiteral(" on") : QStringLiteral(" off")));
         break;
     }
 }

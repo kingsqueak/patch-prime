@@ -137,6 +137,10 @@ public:
     // Global hotkeys (see DeviceStore); emits hotkeysChanged. Effects'
     // hotkeys follow them like the mappings.
     void setHotkeys(std::vector<Hotkey> hotkeys);
+    // The tray icon and on-screen messages (see DeviceStore); emit
+    // desktopSettingsChanged.
+    void setTrayIcon(bool on);
+    void setShowOsd(bool on);
     Q_INVOKABLE void setCue(int row, bool cued);
     [[nodiscard]] const std::set<std::string> &cued() const { return m_cued; }
     // Sets a strip's mix from a scene (see mixFromJson), keeping only what
@@ -195,6 +199,7 @@ Q_SIGNALS:
     void midiControllerChanged();
     void midiMappingsChanged();
     void hotkeysChanged();
+    void desktopSettingsChanged();
 
 private:
     const PluginCatalog *m_pluginCatalog = nullptr;

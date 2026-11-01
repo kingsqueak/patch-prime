@@ -12,6 +12,7 @@
 #include "endpoint.h"
 #include "hotkeys.h"
 #include "mackiecontrol.h"
+#include "osd.h"
 #include "midimapper.h"
 #include "pipewiregraph.h"
 #include "plugins.h"
@@ -48,6 +49,7 @@ PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *
     connect(apps, &pp::AppRouter::changed, this, &PatchPrimeService::scheduleState);
     connect(devices, &pp::DeviceModel::clockChanged, this, &PatchPrimeService::scheduleState);
     connect(devices, &pp::DeviceModel::cueChanged, this, &PatchPrimeService::scheduleState);
+    connect(devices, &pp::DeviceModel::desktopSettingsChanged, this, &PatchPrimeService::scheduleState);
     connect(devices, &pp::DeviceModel::audioSettingsChanged, this,
             &PatchPrimeService::scheduleState);
 
@@ -104,6 +106,14 @@ void PatchPrimeService::setMidiMapper(pp::AlsaMidi *midi, pp::MidiMapper *mapper
     connect(m_devices, &pp::DeviceModel::midiControllerChanged, this, &PatchPrimeService::scheduleState);
     connect(m_devices, &pp::DeviceModel::midiMappingsChanged, this, &PatchPrimeService::scheduleState);
     connect(mapper, &pp::MidiMapper::sceneRequested, this, [this](const QString &name) { LoadScene(name); });
+    connect(mapper, &pp::MidiMapper::feedback, this, &PatchPrimeService::showFeedback);
+}
+
+void PatchPrimeService::showFeedback(const QString &icon, const QString &text)
+{
+    if (m_devices->store().showOsd()) {
+        osd::showText(icon, text);
+    }
 }
 
 void PatchPrimeService::setAppMixer(pp::AppMixer *mixer)
@@ -119,6 +129,7 @@ void PatchPrimeService::setHotkeys(pp::Hotkeys *hotkeys)
     connect(hotkeys, &pp::Hotkeys::changed, this, &PatchPrimeService::scheduleState);
     connect(m_devices, &pp::DeviceModel::hotkeysChanged, this, &PatchPrimeService::scheduleState);
     connect(hotkeys, &pp::Hotkeys::sceneRequested, this, [this](const QString &name) { LoadScene(name); });
+    connect(hotkeys, &pp::Hotkeys::feedback, this, &PatchPrimeService::showFeedback);
 }
 
 QString PatchPrimeService::GetState() const
@@ -277,6 +288,8 @@ QString PatchPrimeService::GetState() const
              }
              return mappings;
          }()},
+        {QStringLiteral("trayIcon"), m_devices->store().trayIcon()},
+        {QStringLiteral("showOsd"), m_devices->store().showOsd()},
         {QStringLiteral("hotkeysAvailable"), m_hotkeys != nullptr && m_hotkeys->isAvailable()},
         {QStringLiteral("hotkeys"), [this] {
              QJsonArray hotkeys;
@@ -1004,4 +1017,14 @@ void PatchPrimeService::SetAppHidden(const QString &appKey, bool hidden)
     if (!m_apps->setHidden(appKey.toStdString(), hidden) && calledFromDBus()) {
         sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no app ") + appKey);
     }
+}
+
+void PatchPrimeService::SetTrayIcon(bool on)
+{
+    m_devices->setTrayIcon(on);
+}
+
+void PatchPrimeService::SetShowOsd(bool on)
+{
+    m_devices->setShowOsd(on);
 }

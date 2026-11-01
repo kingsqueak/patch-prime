@@ -95,6 +95,8 @@ public:
 
 Q_SIGNALS:
     void sceneRequested(const QString &name);
+    // What a key or button just did, for an on-screen message.
+    void feedback(const QString &icon, const QString &text);
     // The list or a hotkey's keys changed.
     void changed();
 

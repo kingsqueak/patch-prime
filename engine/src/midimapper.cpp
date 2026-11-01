@@ -30,6 +30,7 @@ MidiMapper::MidiMapper(DeviceModel *devices, MidiPort *port, QObject *parent)
     , m_targets(devices)
 {
     m_targets.setSceneHandler([this](const QString &name) { Q_EMIT sceneRequested(name); });
+    m_targets.setFeedback([this](const QString &icon, const QString &text) { Q_EMIT feedback(icon, text); });
     m_feedbackTimer.setSingleShot(true);
     m_feedbackTimer.setInterval(20);
     connect(&m_feedbackTimer, &QTimer::timeout, this, &MidiMapper::sendFeedback);

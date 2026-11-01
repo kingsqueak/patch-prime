@@ -216,6 +216,12 @@ public:
     void setMidiMappings(std::vector<MidiMapping> mappings) { m_midiMappings = std::move(mappings); }
     // Global hotkeys (their keys are kept by the desktop); like the
     // mappings, they follow their strips.
+    // Desktop integration: a tray icon (patchprime-tray), and Plasma's
+    // on-screen messages when a hotkey or controller changes something.
+    [[nodiscard]] bool trayIcon() const { return m_trayIcon; }
+    void setTrayIcon(bool on) { m_trayIcon = on; }
+    [[nodiscard]] bool showOsd() const { return m_showOsd; }
+    void setShowOsd(bool on) { m_showOsd = on; }
     [[nodiscard]] const std::vector<Hotkey> &hotkeys() const { return m_hotkeys; }
     void setHotkeys(std::vector<Hotkey> hotkeys) { m_hotkeys = std::move(hotkeys); }
 
@@ -249,6 +255,8 @@ private:
     std::string m_midiController;
     std::vector<MidiMapping> m_midiMappings;
     std::vector<Hotkey> m_hotkeys;
+    bool m_trayIcon = true;
+    bool m_showOsd = true;
     std::map<std::string, DeviceSettings> m_entries;
 };
 

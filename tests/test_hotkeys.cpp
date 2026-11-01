@@ -185,6 +185,32 @@ private Q_SLOTS:
         QCOMPARE(volume(), -28.0);
     }
 
+    // What's shown on screen when a key changes something.
+    void feedback()
+    {
+        FakeShortcuts shortcuts;
+        Hotkeys hotkeys(m_devices.get(), &shortcuts);
+        QSignalSpy shown(&hotkeys, &Hotkeys::feedback);
+        const auto mute = hotkeys.add(HotkeyMode::Toggle, target(MidiAction::Mute, m_mic));
+        const auto ptt = hotkeys.add(HotkeyMode::PushToTalk, target(MidiAction::Mute, m_mic));
+        const auto up = hotkeys.add(HotkeyMode::LevelUp, target(MidiAction::Volume, m_mic));
+
+        shortcuts.press(mute);
+        QCOMPARE(shown.size(), 1);
+        QCOMPARE(shown.at(0).at(0).toString(), QStringLiteral("microphone-sensitivity-muted")); // an input
+        QCOMPARE(shown.at(0).at(1).toString(), QStringLiteral("Mic muted"));
+        shortcuts.press(mute);
+        QCOMPARE(shown.at(1).at(1).toString(), QStringLiteral("Mic on"));
+
+        shortcuts.press(ptt); // push to talk: the tray shows it, no message
+        shortcuts.release(ptt);
+        QCOMPARE(shown.size(), 2);
+
+        m_devices->setVolume(0, -4.0);
+        shortcuts.press(up);
+        QCOMPARE(shown.at(2).at(1).toString(), QStringLiteral("Mic: level -3.0 dB"));
+    }
+
     void followTheStrips()
     {
         FakeShortcuts shortcuts;

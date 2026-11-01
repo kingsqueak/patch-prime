@@ -246,6 +246,8 @@ bool DeviceStore::load()
     m_midiController.clear();
     m_midiMappings.clear();
     m_hotkeys.clear();
+    m_trayIcon = true;
+    m_showOsd = true;
     m_lastError.clear();
     QFile file(m_path);
     if (!file.exists()) {
@@ -273,6 +275,8 @@ bool DeviceStore::load()
     m_currentScene = root.value(QLatin1String("currentScene")).toString().toStdString();
     m_controlSurface = root.value(QLatin1String("controlSurface")).toString().toStdString();
     m_midiController = root.value(QLatin1String("midiController")).toString().toStdString();
+    m_trayIcon = root.value(QLatin1String("trayIcon")).toBool(true);
+    m_showOsd = root.value(QLatin1String("showOsd")).toBool(true);
     for (const auto &m : root.value(QLatin1String("midiMappings")).toArray()) {
         if (auto mapping = midiMappingFromJson(m.toObject())) {
             m_midiMappings.push_back(std::move(*mapping));
@@ -317,6 +321,8 @@ bool DeviceStore::save()
         {QStringLiteral("currentScene"), qs(m_currentScene)},
         {QStringLiteral("controlSurface"), qs(m_controlSurface)},
         {QStringLiteral("midiController"), qs(m_midiController)},
+        {QStringLiteral("trayIcon"), m_trayIcon},
+        {QStringLiteral("showOsd"), m_showOsd},
         {QStringLiteral("midiMappings"), [this] {
              QJsonArray mappings;
              for (const auto &m : m_midiMappings) {

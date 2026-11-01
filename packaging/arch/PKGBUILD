@@ -13,7 +13,7 @@ pkgdesc="Virtual audio mixer and router for KDE Plasma on PipeWire"
 arch=(x86_64 aarch64)
 url="https://github.com/kingsqueak/patch-prime"
 license=(GPL-3.0-or-later)
-depends=(glibc gcc-libs libpipewire libsndfile lilv libx11 alsa-lib pipewire wireplumber qt6-base qt6-declarative
+depends=(glibc gcc-libs libpipewire libsndfile lilv libx11 alsa-lib kstatusnotifieritem pipewire wireplumber qt6-base qt6-declarative
          kirigami kdeclarative qqc2-desktop-style)
 makedepends=(cmake ninja lv2)
 install=patchprime.install
@@ -31,6 +31,7 @@ build() {
         -DCMAKE_BUILD_TYPE=None \
         -DCMAKE_INSTALL_PREFIX=/usr \
         -DPATCHPRIME_SYSTEMD_USER_UNIT_DIR=lib/systemd/user \
+        -DPATCHPRIME_REQUIRE_TRAY=ON \
         -DFETCHCONTENT_SOURCE_DIR_RNNOISE="$srcdir/rnnoise-0.2" \
         -DFETCHCONTENT_SOURCE_DIR_CLAP="$srcdir/clap-1.2.10" \
         -DFETCHCONTENT_SOURCE_DIR_VST3PLUGINTERFACES="$srcdir/vst3_pluginterfaces-3.8.0_build_66"

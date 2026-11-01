@@ -232,6 +232,11 @@ public Q_SLOTS:
     void SetHotkeyKey(const QString &id, int key);
     // A MIDI/hotkey target ({action, key, ...}) for people: "Mic: mute".
     QString DescribeTarget(const QString &target) const;
+    // Desktop integration (in the state as "trayIcon", "showOsd"): the tray
+    // icon (patchprime-tray quits when it's turned off), and Plasma's
+    // on-screen messages when a hotkey or MIDI button changes something.
+    void SetTrayIcon(bool on);
+    void SetShowOsd(bool on);
 
 Q_SIGNALS:
     void StateChanged(const QString &state);
@@ -241,6 +246,7 @@ private:
     [[nodiscard]] int rowFor(const QString &key);
     [[nodiscard]] QString clockNow() const;
     void scheduleState();
+    void showFeedback(const QString &icon, const QString &text);
     void updateMetering();
     void updateEffectMetering();
     void emitLevels();

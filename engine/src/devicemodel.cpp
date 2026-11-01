@@ -471,6 +471,24 @@ void DeviceModel::setMidiMappings(std::vector<MidiMapping> mappings)
     Q_EMIT midiMappingsChanged();
 }
 
+void DeviceModel::setTrayIcon(bool on)
+{
+    if (on != m_store->trayIcon()) {
+        m_store->setTrayIcon(on);
+        saveStore();
+        Q_EMIT desktopSettingsChanged();
+    }
+}
+
+void DeviceModel::setShowOsd(bool on)
+{
+    if (on != m_store->showOsd()) {
+        m_store->setShowOsd(on);
+        saveStore();
+        Q_EMIT desktopSettingsChanged();
+    }
+}
+
 void DeviceModel::setHotkeys(std::vector<Hotkey> hotkeys)
 {
     if (hotkeys == m_store->hotkeys()) {

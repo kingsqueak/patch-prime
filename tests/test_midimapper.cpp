@@ -183,6 +183,28 @@ private Q_SLOTS:
         QCOMPARE(scenes.at(0).at(0).toString(), QStringLiteral("Live"));
     }
 
+    // On-screen messages: for buttons, not for faders.
+    void onScreen()
+    {
+        FakePort port;
+        MidiMapper mapper(m_devices.get(), &port);
+        QSignalSpy shown(&mapper, &MidiMapper::feedback);
+        mapper.startLearn({.action = MidiAction::Cue, .key = m_mic});
+        port.feed(note(36));
+        mapper.startLearn({.action = MidiAction::Volume, .key = m_mic});
+        port.feed(cc(7, ccFor(0.0)));
+        QCOMPARE(shown.size(), 0); // learning shows nothing
+        port.feed(cc(7, ccFor(-10.0)));
+        QCOMPARE(shown.size(), 0); // a fader: nothing
+        // Cue needs a hardware output to play to.
+        m_devices->upsertNode(node(20, "Audio/Sink", "phones", "Phones"), nullptr);
+        m_devices->setEnabled(m_devices->rowForKey("Audio/Sink|phones"), true);
+        m_devices->setCueOutput("Audio/Sink|phones");
+        port.feed(note(36));
+        QCOMPARE(shown.size(), 1);
+        QCOMPARE(shown.at(0).at(1).toString(), QStringLiteral("Mic cued"));
+    }
+
     void feedback()
     {
         FakePort port;

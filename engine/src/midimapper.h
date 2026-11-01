@@ -55,6 +55,8 @@ Q_SIGNALS:
     void learningChanged();
     // A scene control was pressed.
     void sceneRequested(const QString &name);
+    // What a key or button just did, for an on-screen message.
+    void feedback(const QString &icon, const QString &text);
 
 private:
     // What a mapping last saw and sent (not saved).

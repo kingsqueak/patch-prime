@@ -8,7 +8,7 @@ find_package(Qt6 6.10 REQUIRED COMPONENTS DBus Gui Qml Quick QuickControls2)
 qt_policy(SET QTP0001 NEW)
 qt_policy(SET QTP0004 NEW)
 
-qt_add_executable(patchprime main.cpp src/daemonclient.cpp src/daemonclient.h)
+qt_add_executable(patchprime main.cpp src/daemonclient.cpp src/daemonclient.h src/windowservice.cpp src/windowservice.h)
 set_source_files_properties(qml/Style.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(patchprime

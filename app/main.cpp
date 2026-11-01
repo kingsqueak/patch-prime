@@ -2,7 +2,9 @@
 // SPDX-FileCopyrightText: 2026 KC2RGW Chris
 
 #include "daemonclient.h"
+#include "windowservice.h"
 
+#include <QDBusConnection>
 #include <QFile>
 #include <QGuiApplication>
 #include <QImage>
@@ -22,6 +24,13 @@ int main(int argc, char *argv[])
     QGuiApplication::setOrganizationDomain(QStringLiteral("kingsqueak.org"));
     QGuiApplication::setDesktopFileName(QStringLiteral("org.kingsqueak.patchprime"));
     QGuiApplication::setApplicationVersion(QStringLiteral(PATCHPRIME_VERSION));
+
+    // One window: a second start brings the first forward (screenshots,
+    // a developer aid, may run alongside).
+    const bool screenshot = qEnvironmentVariableIsSet("PATCHPRIME_SCREENSHOT");
+    if (!screenshot && !WindowService::claimOrActivate()) {
+        return 0;
+    }
 
     // Use the Plasma style unless the user picked one.
     if (qEnvironmentVariableIsEmpty("QT_QUICK_CONTROLS_STYLE")) {
@@ -47,6 +56,13 @@ int main(int argc, char *argv[])
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
         [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.loadFromModule("org.kingsqueak.patchprime", "Main");
+
+    WindowService windowService;
+    if (!screenshot && !engine.rootObjects().isEmpty()) {
+        windowService.setWindow(qobject_cast<QWindow *>(engine.rootObjects().first()));
+        QDBusConnection::sessionBus().registerObject(QLatin1String(WindowService::objectPath), &windowService,
+                                                     QDBusConnection::ExportAllSlots);
+    }
 
     // Developer aid: PATCHPRIME_WINDOW_SIZE=<width>x<height> sizes the window
     // (for screenshots at a given size).

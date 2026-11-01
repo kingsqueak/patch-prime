@@ -58,6 +58,9 @@ class DaemonClient : public QAbstractListModel
     // the desktop has global shortcuts at all.
     Q_PROPERTY(QVariantList hotkeys READ hotkeys NOTIFY hotkeysChanged)
     Q_PROPERTY(bool hotkeysAvailable READ hotkeysAvailable NOTIFY hotkeysChanged)
+    // The tray icon (patchprime-tray) and Plasma's on-screen messages.
+    Q_PROPERTY(bool trayIcon READ trayIcon NOTIFY desktopSettingsChanged)
+    Q_PROPERTY(bool showOsd READ showOsd NOTIFY desktopSettingsChanged)
     // Built-in effects on offer: [{type, label, params: [{name, label, unit,
     // minimum, maximum, initial}]}]. A strip's chain is its "effects" role.
     Q_PROPERTY(QVariantList effectTypes READ effectTypes NOTIFY effectTypesChanged)
@@ -161,6 +164,11 @@ public:
     [[nodiscard]] Q_INVOKABLE QVariantMap midiMappingFor(const QVariantMap &target) const;
     [[nodiscard]] QVariantList hotkeys() const { return m_hotkeys; }
     [[nodiscard]] bool hotkeysAvailable() const { return m_hotkeysAvailable; }
+    [[nodiscard]] bool trayIcon() const { return m_trayIcon; }
+    [[nodiscard]] bool showOsd() const { return m_showOsd; }
+    // Turning the tray icon on starts it now (it starts at login anyway).
+    Q_INVOKABLE void setTrayIcon(bool on);
+    Q_INVOKABLE void setShowOsd(bool on);
     // A new hotkey ({mode, target}; see the daemon's AddHotkey) with this
     // key (a QKeySequence; empty for none); returns its id, "" on failure.
     Q_INVOKABLE QString addHotkey(const QVariantMap &hotkey, const QVariant &keySequence);
@@ -279,6 +287,7 @@ Q_SIGNALS:
     void controlSurfaceChanged();
     void midiChanged();
     void hotkeysChanged();
+    void desktopSettingsChanged();
     void effectMetersChanged();
     void recordingChanged();
     void recordingTimesChanged();
@@ -345,6 +354,9 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QString m_midiLearningText;
     QVariantList m_hotkeys;
     bool m_hotkeysAvailable = false;
+    bool m_trayIcon = true;
+    bool m_trayStarted = false;
+    bool m_showOsd = true;
     QVariantMap m_effectMeters;
     QVariantMap m_effectLevels;
     QHash<QString, int> m_effectLevelWatches; // strip key -> windows showing it

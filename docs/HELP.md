@@ -18,6 +18,7 @@ Patch Prime turns your computer's audio into a small mixing console. This guide 
 - [MIDI controllers (MIDI Learn)](#midi-controllers-midi-learn)
 - [Global hotkeys](#global-hotkeys)
 - [Scripts and Stream Deck (patchprime-ctl)](#scripts-and-stream-deck-patchprime-ctl)
+- [Tray icon and on-screen messages](#tray-icon-and-on-screen-messages)
 - [Unplugging and plugging in devices](#unplugging-and-plugging-in-devices)
 - [Recipes](#recipes)
 - [Troubleshooting](#troubleshooting)
@@ -384,6 +385,20 @@ patchprime-ctl get Mic muted             # yes or no: for a button's state
 `patchprime-ctl --help` lists everything. `list --json` gives the strips as JSON. Two strips with the same label are told apart by their key, which `list --json` shows.
 
 **Stream Deck:** in StreamController, give a button the **Run command** action with, for example, `patchprime-ctl mute Mic`. For push to talk, run `patchprime-ctl mute Mic off` on press and `patchprime-ctl mute Mic on` on release.
+
+## Tray icon and on-screen messages
+
+Patch Prime puts an icon in the system tray, from login, even with its window closed. It shows your microphone: the strip that's the system default input (or the first hardware input).
+
+- **The icon** is a microphone while it's live, and a crossed-out microphone while it's muted. Hover for its name and level.
+- **Click** to open Patch Prime (or bring its window forward).
+- **Middle-click** to mute or unmute the mic.
+- **Scroll** over it to set the mic's level, 1 dB per notch.
+- **Its menu** has the mute, your scenes, and Open Patch Prime.
+
+**On-screen messages:** when a hotkey or a MIDI button changes something (mutes the mic, cues a strip, turns a send or an effect on or off, starts recording, loads a scene), Plasma shows what happened in the middle of the screen, as it does for the volume keys. Level hotkeys show the new level. Push to talk shows nothing; the tray icon already shows it.
+
+Both can be turned off on the **Devices** page, under **Desktop**.
 
 ## Unplugging and plugging in devices
 

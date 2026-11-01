@@ -33,6 +33,10 @@ public:
     // Called when a scene target is toggled (loading scenes isn't the
     // model's job).
     void setSceneHandler(std::function<void(const QString &)> handler) { m_onScene = std::move(handler); }
+    // Told what a toggle did, for an on-screen message: an icon name and
+    // the text ("Mic muted").
+    using Feedback = std::function<void(const QString &icon, const QString &text)>;
+    void setFeedback(Feedback feedback) { m_feedback = std::move(feedback); }
 
     // What a target is, for people: "Mic: level", "Mic → Stream Mix: send".
     [[nodiscard]] std::string describe(const MidiTarget &target) const;
@@ -50,6 +54,9 @@ private:
     DeviceModel *m_devices;
     RecordingManager *m_recordings = nullptr;
     std::function<void(const QString &)> m_onScene;
+    Feedback m_feedback;
+
+    void announce(const MidiTarget &target) const;
 };
 
 } // namespace pp

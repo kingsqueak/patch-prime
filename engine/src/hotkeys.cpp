@@ -91,6 +91,7 @@ Hotkeys::Hotkeys(DeviceModel *devices, ShortcutBackend *backend, QObject *parent
     , m_targets(devices)
 {
     m_targets.setSceneHandler([this](const QString &name) { Q_EMIT sceneRequested(name); });
+    m_targets.setFeedback([this](const QString &icon, const QString &text) { Q_EMIT feedback(icon, text); });
     connect(m_backend, &ShortcutBackend::pressed, this, [this](const QString &id) { press(id, false); });
     connect(m_backend, &ShortcutBackend::repeated, this, [this](const QString &id) { press(id, true); });
     connect(m_backend, &ShortcutBackend::released, this, &Hotkeys::release);
@@ -234,14 +235,21 @@ void Hotkeys::press(const QString &id, bool repeat)
         if (row < 0) {
             break;
         }
+        double now = 0.0;
         if (target.action == MidiAction::Volume) {
             const double db = roleAt(*m_devices, row, DeviceModel::VolumeRole).toDouble();
             m_devices->setVolume(row, std::round(db + step));
+            now = roleAt(*m_devices, row, DeviceModel::VolumeRole).toDouble();
         } else {
             const auto destination = QString::fromStdString(target.destination);
             const double db = roleAt(*m_devices, row, DeviceModel::SendLevelsRole).toMap().value(destination, 0.0).toDouble();
             m_devices->setSendLevel(row, destination, std::round(db + step));
+            now = roleAt(*m_devices, row, DeviceModel::SendLevelsRole).toMap().value(destination, 0.0).toDouble();
         }
+        Q_EMIT feedback(step > 0 ? QStringLiteral("audio-volume-high") : QStringLiteral("audio-volume-low"),
+                        QString::fromStdString(m_targets.describe(target)) + QStringLiteral(" ") +
+                            (now <= DeviceModel::minimumVolumeDb() ? QStringLiteral("−∞ dB")
+                                                                   : QStringLiteral("%1 dB").arg(now, 0, 'f', 1)));
         break;
     }
     }

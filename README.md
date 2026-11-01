@@ -24,6 +24,7 @@ A virtual audio mixer and router for KDE Plasma, built on PipeWire. Think of it 
 - **Cue.** Listen to any strip alone in your headphones without changing the mix.
 - **Control surfaces.** Drive the mixer from a Mackie Control (or a controller in its Mackie mode, such as a Behringer X-Touch or a PreSonus FaderPort): motorised faders, mute, cue, record, send levels on the V-Pots, the strip names on its display, meters, and scenes on the function keys. Any other MIDI controller works through **MIDI Learn**: right-click a fader, button, send or effect setting and move a control.
 - **Global hotkeys.** Keys that work in every app: mute or push-to-talk on your mic, duck the music while held, nudge levels, load scenes, toggle cues, sends, effects and recording. They're KDE global shortcuts, so they work on X11 and Wayland and show in System Settings.
+- **Tray icon and on-screen messages.** The microphone's mute state in the system tray (middle-click to mute, scroll for its level, scenes in its menu), and Plasma's on-screen messages when a hotkey or MIDI button changes something.
 - **Scripting and Stream Deck.** `patchprime-ctl` mutes, sets levels and sends, toggles cues, effects and recording, and loads scenes from a terminal, a script or a Stream Deck button (`patchprime-ctl mute Mic`).
 - **Metering.** Peak, RMS and peak hold on every strip, short-term loudness (LUFS) on mix buses and outputs, and gain-reduction meters in the effects.
 - **Pro-audio friendly.** Choose the sample rate and block size, use one hardware interface as the master clock or let Patch Prime keep time, pick stereo pairs on multichannel cards, and have hot-plugged devices recovered automatically.
@@ -47,7 +48,7 @@ Build dependencies on Ubuntu 26.04:
 
 ```sh
 sudo apt install cmake ninja-build g++ qt6-base-dev qt6-declarative-dev \
-    libpipewire-0.3-dev libspa-0.2-dev libsndfile1-dev liblilv-dev lv2-dev libx11-dev libasound2-dev libkirigami-dev kirigami-addons-dev qml6-module-org-kde-kquickcontrols
+    libpipewire-0.3-dev libspa-0.2-dev libsndfile1-dev liblilv-dev lv2-dev libx11-dev libasound2-dev libkf6statusnotifieritem-dev libkirigami-dev kirigami-addons-dev qml6-module-org-kde-kquickcontrols
 ```
 
 ```sh

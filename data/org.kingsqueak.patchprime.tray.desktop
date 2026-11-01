@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 KC2RGW Chris
+
+[Desktop Entry]
+Type=Application
+Name=Patch Prime Tray
+Comment=The microphone's mute and quick mixer controls in the system tray
+Exec=patchprime-tray
+Icon=audio-card
+NoDisplay=true
+X-KDE-autostart-phase=2
+X-GNOME-Autostart-enabled=true

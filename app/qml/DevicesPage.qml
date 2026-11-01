@@ -408,6 +408,40 @@ Kirigami.ScrollablePage {
                     id: addHotkeyDialog
                 }
             }
+
+            Kirigami.ListSectionHeader {
+                Layout.fillWidth: true
+                text: qsTr("Desktop")
+            }
+
+            Kirigami.FormLayout {
+                Layout.fillWidth: true
+                Layout.margins: Kirigami.Units.largeSpacing
+
+                QQC2.Switch {
+                    Kirigami.FormData.label: qsTr("Tray icon:")
+                    text: qsTr("Show the microphone's state in the system tray")
+                    enabled: Devices.daemonRunning
+                    checked: Devices.trayIcon
+                    onToggled: Devices.setTrayIcon(checked)
+                }
+
+                QQC2.Switch {
+                    Kirigami.FormData.label: qsTr("On-screen messages:")
+                    text: qsTr("When a hotkey or MIDI button changes something")
+                    enabled: Devices.daemonRunning
+                    checked: Devices.showOsd
+                    onToggled: Devices.setShowOsd(checked)
+                }
+
+                QQC2.Label {
+                    Layout.maximumWidth: Kirigami.Units.gridUnit * 30
+                    wrapMode: Text.Wrap
+                    font: Kirigami.Theme.smallFont
+                    color: Kirigami.Theme.disabledTextColor
+                    text: qsTr("The tray icon shows whether your microphone (the default input's strip) is muted. Click it to open Patch Prime, middle-click to mute or unmute, scroll to set the mic's level; its menu loads scenes.")
+                }
+            }
         }
 
         Kirigami.PlaceholderMessage {

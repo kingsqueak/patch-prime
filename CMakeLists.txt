@@ -53,6 +53,7 @@ add_subdirectory(probe)
 
 if(PATCHPRIME_BUILD_APP)
     add_subdirectory(app)
+    add_subdirectory(tray)
 endif()
 
 if(PATCHPRIME_BUILD_TESTS)

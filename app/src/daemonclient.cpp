@@ -14,6 +14,7 @@
 #include <QDBusPendingReply>
 #include <QDBusReply>
 #include <QFile>
+#include <QGuiApplication>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -449,6 +450,19 @@ QString DaemonClient::addHotkey(const QVariantMap &hotkey, const QVariant &keySe
     return reply.value();
 }
 
+void DaemonClient::setTrayIcon(bool on)
+{
+    call(QStringLiteral("SetTrayIcon"), {on});
+    if (on) {
+        QProcess::startDetached(QStringLiteral("patchprime-tray"), {});
+    }
+}
+
+void DaemonClient::setShowOsd(bool on)
+{
+    call(QStringLiteral("SetShowOsd"), {on});
+}
+
 void DaemonClient::removeHotkey(const QString &id)
 {
     call(QStringLiteral("RemoveHotkey"), {id});
@@ -758,6 +772,21 @@ void DaemonClient::onStateChanged(const QString &state)
             m_midiLearningText = learningText;
             Q_EMIT midiChanged();
         }
+    }
+
+    if (const bool tray = root.value(QLatin1String("trayIcon")).toBool(true),
+        osd = root.value(QLatin1String("showOsd")).toBool(true);
+        tray != m_trayIcon || osd != m_showOsd) {
+        m_trayIcon = tray;
+        m_showOsd = osd;
+        Q_EMIT desktopSettingsChanged();
+    }
+    // The tray icon starts at login; just installed, or quit from its
+    // menu, it starts with the window too (a second one leaves at once).
+    // Not for screenshots and other runs without a display.
+    if (m_trayIcon && !m_trayStarted && !qEnvironmentVariableIsSet("PATCHPRIME_SCREENSHOT") &&
+        QGuiApplication::platformName() != QLatin1String("offscreen")) {
+        m_trayStarted = QProcess::startDetached(QStringLiteral("patchprime-tray"), {});
     }
 
     if (const auto hotkeys = root.value(QLatin1String("hotkeys")).toArray().toVariantList();
