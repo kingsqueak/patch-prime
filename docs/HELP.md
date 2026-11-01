@@ -15,6 +15,7 @@ Patch Prime turns your computer's audio into a small mixing console. This guide 
 - [Meters](#meters)
 - [Audio engine settings](#audio-engine-settings)
 - [Control surface (Mackie Control)](#control-surface-mackie-control)
+- [MIDI controllers (MIDI Learn)](#midi-controllers-midi-learn)
 - [Unplugging and plugging in devices](#unplugging-and-plugging-in-devices)
 - [Recipes](#recipes)
 - [Troubleshooting](#troubleshooting)
@@ -287,7 +288,7 @@ Each hardware device has a **settings button** (the sliders icon) for its own sa
 
 Patch Prime can be driven from a hardware controller that speaks Mackie Control: a Mackie Control Universal, or a controller in its Mackie (MCU) mode, such as a Behringer X-Touch, an Icon Platform or a PreSonus FaderPort 8.
 
-To set it up, plug the controller in, then on the **Devices** page, under **Control surface**, pick its MIDI port as **Mackie Control**. The status says when it's connected. Patch Prime remembers the choice and reconnects whenever the controller is plugged in.
+To set it up, plug the controller in, then on the **Devices** page, under **Controllers**, pick its MIDI port as **Mackie Control**. The status says when it's connected. Patch Prime remembers the choice and reconnects whenever the controller is plugged in.
 
 The controller's eight strips show eight of the mixer's strips, in the mixer's order: inputs, then mix buses, then outputs. **BANK** moves them eight at a time and **CHANNEL** one at a time.
 
@@ -303,6 +304,27 @@ On each strip:
 To choose where the V-Pots send, press **SELECT** on a mix bus or an output, or press **SEND** to step through them. The display names the destination for a moment, and that strip's SELECT light stays on. Press its SELECT again to turn the V-Pots off.
 
 The **master fader** sets the default output's level (or the first output's). **F1** to **F8** load your first eight scenes, in alphabetical order.
+
+## MIDI controllers (MIDI Learn)
+
+Any other MIDI controller (a fader box, a knob controller, a pad controller, a keyboard's knobs) can drive Patch Prime once you've taught it what each control does.
+
+1. Plug the controller in. On the **Devices** page, under **Controllers**, pick its port as **MIDI controller**.
+2. Right-click the control you want in Patch Prime and choose **MIDI Learn**:
+   - a strip's fader, **M** (mute), **C** (cue) or **Record** button
+   - a send's button or level on the **Routing** page
+   - an effect's parameter or on/off button in the effects window
+   - **Load** in the scene row (for the scene picked there)
+3. A bar at the bottom of the window says Patch Prime is listening. Move a fader or knob, or press a button, on the controller. That's it. **Cancel** stops listening.
+
+How controls behave:
+
+- **Faders and knobs** set levels and parameters. When the value has been changed somewhere else (in the app, or by a scene), the knob takes over only once you turn it past the current value, so nothing jumps.
+- **Endless encoders** (knobs that turn forever): tick **Endless encoder** next to the mapping, so each click moves the value up or down.
+- **Buttons** turn mutes, cues, sends, effects and recording on and off, or load a scene.
+- Controllers with lights or motorised faders are sent the current values back.
+
+Learning a control again moves it to the new job, and a control learned for something already mapped replaces the old one. The **MIDI mappings** list on the Devices page shows them all, with a button to forget each. Right-clicking a control also offers **Forget MIDI Control**. Mappings are saved, and follow an effect when you move it in the chain.
 
 ## Unplugging and plugging in devices
 

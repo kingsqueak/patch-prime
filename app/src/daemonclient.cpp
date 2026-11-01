@@ -375,6 +375,53 @@ void DaemonClient::setControlSurface(const QString &id)
     call(QStringLiteral("SetControlSurface"), {id});
 }
 
+void DaemonClient::setMidiController(const QString &id)
+{
+    call(QStringLiteral("SetMidiController"), {id});
+}
+
+void DaemonClient::startMidiLearn(const QVariantMap &target)
+{
+    call(QStringLiteral("StartMidiLearn"),
+         {QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(target)).toJson(QJsonDocument::Compact))});
+}
+
+void DaemonClient::cancelMidiLearn()
+{
+    call(QStringLiteral("CancelMidiLearn"), {});
+}
+
+void DaemonClient::removeMidiMapping(const QString &id)
+{
+    call(QStringLiteral("RemoveMidiMapping"), {id});
+}
+
+void DaemonClient::setMidiMappingRelative(const QString &id, bool relative)
+{
+    call(QStringLiteral("SetMidiMappingRelative"), {id, relative});
+}
+
+QVariantMap DaemonClient::midiMappingFor(const QVariantMap &target) const
+{
+    // Same target: the same fields, with missing ones as their defaults.
+    const auto same = [](const QVariantMap &a, const QVariantMap &b) {
+        for (const auto *field : {"action", "key", "destination", "param", "scene"}) {
+            const auto name = QLatin1String(field);
+            if (a.value(name).toString() != b.value(name).toString()) {
+                return false;
+            }
+        }
+        return a.value(QStringLiteral("effect"), -1).toInt() == b.value(QStringLiteral("effect"), -1).toInt();
+    };
+    for (const auto &m : m_midiMappings) {
+        const auto mapping = m.toMap();
+        if (same(mapping.value(QStringLiteral("target")).toMap(), target)) {
+            return mapping;
+        }
+    }
+    return {};
+}
+
 void DaemonClient::setCue(const QString &key, bool cued)
 {
     call(QStringLiteral("SetCue"), {key, cued});
@@ -627,6 +674,24 @@ void DaemonClient::onStateChanged(const QString &state)
         surface != m_controlSurface) {
         m_controlSurface = surface;
         Q_EMIT controlSurfaceChanged();
+    }
+
+    {
+        const QVariantMap controller{
+            {QStringLiteral("id"), root.value(QLatin1String("midiController")).toString()},
+            {QStringLiteral("connected"), root.value(QLatin1String("midiControllerConnected")).toBool()},
+        };
+        const auto mappings = root.value(QLatin1String("midiMappings")).toArray().toVariantList();
+        const auto learning = root.value(QLatin1String("midiLearning")).toVariant();
+        const auto learningText = root.value(QLatin1String("midiLearningText")).toString();
+        if (controller != m_midiController || mappings != m_midiMappings || learning != m_midiLearning ||
+            learningText != m_midiLearningText) {
+            m_midiController = controller;
+            m_midiMappings = mappings;
+            m_midiLearning = learning;
+            m_midiLearningText = learningText;
+            Q_EMIT midiChanged();
+        }
     }
 
     if (const auto types = root.value(QLatin1String("effectTypes")).toArray().toVariantList();

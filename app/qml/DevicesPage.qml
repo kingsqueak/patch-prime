@@ -199,7 +199,7 @@ Kirigami.ScrollablePage {
 
             Kirigami.ListSectionHeader {
                 Layout.fillWidth: true
-                text: qsTr("Control surface")
+                text: qsTr("Controllers")
             }
 
             Kirigami.FormLayout {
@@ -240,6 +240,101 @@ Kirigami.ScrollablePage {
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
                     text: qsTr("Faders, MUTE, SOLO (cue) and REC work on eight strips at a time (BANK and CHANNEL move them); SELECT a mix bus or output, and the V-Pots set each strip's send to it. F1 to F8 load your first eight scenes.")
+                }
+
+                // Any other MIDI controller: its controls are taught with
+                // MIDI Learn on the app's controls.
+                QQC2.ComboBox {
+                    readonly property var surface: Devices.controlSurface
+                    Kirigami.FormData.label: qsTr("MIDI controller:")
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                    enabled: Devices.daemonRunning && surface.available === true
+                    textRole: "text"
+                    valueRole: "value"
+                    model: {
+                        const ports = (surface.ports || []).map(p => ({ value: p.id, text: p.name }));
+                        const chosen = Devices.midiController.id || "";
+                        if (chosen !== "" && !ports.some(p => p.value === chosen))
+                            ports.push({ value: chosen,
+                                         text: qsTr("%1 (unplugged)").arg(chosen.slice(chosen.indexOf(":") + 1)) });
+                        return [{ value: "", text: qsTr("None") }].concat(ports);
+                    }
+                    currentIndex: Math.max(0, model.findIndex(m => m.value === (Devices.midiController.id || "")))
+                    onActivated: Devices.setMidiController(currentValue)
+                }
+
+                QQC2.Label {
+                    Kirigami.FormData.label: qsTr("Status:")
+                    visible: (Devices.midiController.id || "") !== ""
+                    text: Devices.midiController.connected ? qsTr("Connected") : qsTr("Not connected: plug it in")
+                }
+
+                QQC2.Label {
+                    Layout.maximumWidth: Kirigami.Units.gridUnit * 30
+                    wrapMode: Text.Wrap
+                    font: Kirigami.Theme.smallFont
+                    color: Kirigami.Theme.disabledTextColor
+                    text: qsTr("To use a control on it, right-click a fader, button, send or effect setting in Patch Prime, choose MIDI Learn, then move the control.")
+                }
+            }
+
+            // What the MIDI controller's controls do.
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing * 2
+                Layout.rightMargin: Kirigami.Units.largeSpacing * 2
+                Layout.bottomMargin: Kirigami.Units.largeSpacing
+                visible: Devices.midiMappings.length > 0
+                spacing: 0
+
+                QQC2.Label {
+                    text: qsTr("MIDI mappings")
+                    font.bold: true
+                }
+
+                Repeater {
+                    model: Devices.midiMappings
+
+                    delegate: RowLayout {
+                        id: mappingRow
+
+                        required property var modelData
+
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.largeSpacing
+
+                        QQC2.Label {
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 10
+                            text: mappingRow.modelData.control
+                            color: Kirigami.Theme.disabledTextColor
+                        }
+
+                        QQC2.Label {
+                            Layout.fillWidth: true
+                            text: mappingRow.modelData.description
+                            elide: Text.ElideRight
+                        }
+
+                        QQC2.CheckBox {
+                            visible: mappingRow.modelData.kind === "cc"
+                            text: qsTr("Endless encoder")
+                            checked: mappingRow.modelData.relative
+                            onToggled: Devices.setMidiMappingRelative(mappingRow.modelData.id, checked)
+                            QQC2.ToolTip.text: qsTr("For a knob that turns forever and sends up/down steps (1–63 up, 65–127 down) instead of a position.")
+                            QQC2.ToolTip.visible: hovered
+                            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        }
+
+                        QQC2.ToolButton {
+                            icon.name: "edit-delete-remove"
+                            text: qsTr("Forget")
+                            display: QQC2.AbstractButton.IconOnly
+                            onClicked: Devices.removeMidiMapping(mappingRow.modelData.id)
+                            QQC2.ToolTip.text: qsTr("Forget this mapping")
+                            QQC2.ToolTip.visible: hovered
+                            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        }
+                    }
                 }
             }
         }

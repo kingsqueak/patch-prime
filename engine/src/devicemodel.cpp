@@ -451,6 +451,40 @@ void DeviceModel::setControlSurface(const std::string &id)
     Q_EMIT controlSurfaceChanged();
 }
 
+void DeviceModel::setMidiController(const std::string &id)
+{
+    if (id == m_store->midiController()) {
+        return;
+    }
+    m_store->setMidiController(id);
+    saveStore();
+    Q_EMIT midiControllerChanged();
+}
+
+void DeviceModel::setMidiMappings(std::vector<MidiMapping> mappings)
+{
+    if (mappings == m_store->midiMappings()) {
+        return;
+    }
+    m_store->setMidiMappings(std::move(mappings));
+    saveStore();
+    Q_EMIT midiMappingsChanged();
+}
+
+void DeviceModel::remapEffects(int row, const std::function<int(int)> &map)
+{
+    const auto &key = m_rows.at(static_cast<std::size_t>(row)).endpoint.key;
+    auto mappings = m_store->midiMappings();
+    std::erase_if(mappings, [&](MidiMapping &m) {
+        if (m.target.key != key || m.target.effect < 0) {
+            return false;
+        }
+        m.target.effect = map(m.target.effect);
+        return m.target.effect < 0;
+    });
+    setMidiMappings(std::move(mappings));
+}
+
 void DeviceModel::setCurrentScene(const std::string &name)
 {
     if (name != m_store->currentScene()) {
@@ -628,18 +662,26 @@ void DeviceModel::addEffect(int row, const QString &type)
 
 void DeviceModel::removeEffect(int row, int index)
 {
-    editEffects(row, [index](std::vector<EffectSettings> &effects) {
+    const bool removed = editEffects(row, [index](std::vector<EffectSettings> &effects) {
         if (index < 0 || std::cmp_greater_equal(index, effects.size())) {
             return false;
         }
         effects.erase(effects.begin() + index);
         return true;
     });
+    if (removed) {
+        remapEffects(row, [index](int i) {
+            if (i == index) {
+                return -1;
+            }
+            return i > index ? i - 1 : i;
+        });
+    }
 }
 
 void DeviceModel::moveEffect(int row, int from, int to)
 {
-    editEffects(row, [from, to](std::vector<EffectSettings> &effects) {
+    const bool changed = editEffects(row, [from, to](std::vector<EffectSettings> &effects) {
         const auto size = static_cast<int>(effects.size());
         if (from < 0 || from >= size || to < 0 || to >= size || from == to) {
             return false;
@@ -649,6 +691,20 @@ void DeviceModel::moveEffect(int row, int from, int to)
         effects.insert(effects.begin() + to, std::move(moved));
         return true;
     });
+    if (changed) {
+        remapEffects(row, [from, to](int i) {
+            if (i == from) {
+                return to;
+            }
+            if (from < to && i > from && i <= to) {
+                return i - 1;
+            }
+            if (from > to && i >= to && i < from) {
+                return i + 1;
+            }
+            return i;
+        });
+    }
 }
 
 void DeviceModel::setEffectEnabled(int row, int index, bool enabled)

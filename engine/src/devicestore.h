@@ -4,6 +4,7 @@
 #pragma once
 
 #include "endpoint.h"
+#include "midimapping.h"
 
 #include <QDateTime>
 #include <QJsonArray>
@@ -205,6 +206,13 @@ public:
     // or empty for none.
     [[nodiscard]] const std::string &controlSurface() const { return m_controlSurface; }
     void setControlSurface(std::string id) { m_controlSurface = std::move(id); }
+    // The MIDI port of a generic controller (MIDI learn), or empty for none,
+    // and what its controls do. Mappings follow their strips when rekeyed,
+    // and go with them when removed.
+    [[nodiscard]] const std::string &midiController() const { return m_midiController; }
+    void setMidiController(std::string id) { m_midiController = std::move(id); }
+    [[nodiscard]] const std::vector<MidiMapping> &midiMappings() const { return m_midiMappings; }
+    void setMidiMappings(std::vector<MidiMapping> mappings) { m_midiMappings = std::move(mappings); }
 
     [[nodiscard]] const std::map<std::string, DeviceSettings> &entries() const { return m_entries; }
     [[nodiscard]] const DeviceSettings *find(const std::string &key) const;
@@ -233,6 +241,8 @@ private:
     std::string m_playerTarget;
     std::string m_currentScene;
     std::string m_controlSurface;
+    std::string m_midiController;
+    std::vector<MidiMapping> m_midiMappings;
     std::map<std::string, DeviceSettings> m_entries;
 };
 

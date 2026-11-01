@@ -129,6 +129,11 @@ public:
     // The control surface's MIDI port (see DeviceStore); emits
     // controlSurfaceChanged.
     void setControlSurface(const std::string &id);
+    // MIDI learn (see DeviceStore): the controller's port and the mappings;
+    // emit midiControllerChanged and midiMappingsChanged. Removing or moving
+    // an effect moves its mappings with it.
+    void setMidiController(const std::string &id);
+    void setMidiMappings(std::vector<MidiMapping> mappings);
     Q_INVOKABLE void setCue(int row, bool cued);
     [[nodiscard]] const std::set<std::string> &cued() const { return m_cued; }
     // Sets a strip's mix from a scene (see mixFromJson), keeping only what
@@ -184,6 +189,8 @@ Q_SIGNALS:
     // The recording format or the player's target.
     void recordingSettingsChanged();
     void controlSurfaceChanged();
+    void midiControllerChanged();
+    void midiMappingsChanged();
 
 private:
     const PluginCatalog *m_pluginCatalog = nullptr;
@@ -203,6 +210,9 @@ private:
     // returns true, saves and announces the change.
     bool editEffects(int row, const std::function<bool(std::vector<EffectSettings> &)> &edit);
     std::set<std::string> m_cued;
+    // Effect mappings on a strip after its chain changed: map(old index) is
+    // the new index, or -1 for gone.
+    void remapEffects(int row, const std::function<int(int)> &map);
 
     DeviceStore *m_store;
     PipeWireGraph *m_graph = nullptr;

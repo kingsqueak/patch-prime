@@ -49,6 +49,7 @@ QQC2.ApplicationWindow {
     minimumWidth: Kirigami.Units.gridUnit * 28
     minimumHeight: Kirigami.Units.gridUnit * 16
     color: Kirigami.Theme.backgroundColor
+    footer: MidiLearnBanner {}
 
     QQC2.ScrollView {
         id: scroll
@@ -128,6 +129,16 @@ QQC2.ApplicationWindow {
                             on: slot.modelData.enabled
                             enabled: Devices.daemonRunning
                             onRequested: on => Devices.setEffectEnabled(panel.key, slot.index, on)
+
+                            // Right-click: MIDI Learn.
+                            TapHandler {
+                                acceptedButtons: Qt.RightButton
+                                onTapped: enabledMidi.popup()
+                            }
+                            MidiLearnMenu {
+                                id: enabledMidi
+                                target: ({ action: "effectEnabled", key: panel.key, effect: slot.index })
+                            }
                         }
 
                         QQC2.Label {

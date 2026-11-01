@@ -243,6 +243,8 @@ bool DeviceStore::load()
     m_playerTarget.clear();
     m_currentScene.clear();
     m_controlSurface.clear();
+    m_midiController.clear();
+    m_midiMappings.clear();
     m_lastError.clear();
     QFile file(m_path);
     if (!file.exists()) {
@@ -269,6 +271,12 @@ bool DeviceStore::load()
     m_playerTarget = root.value(QLatin1String("playerTarget")).toString().toStdString();
     m_currentScene = root.value(QLatin1String("currentScene")).toString().toStdString();
     m_controlSurface = root.value(QLatin1String("controlSurface")).toString().toStdString();
+    m_midiController = root.value(QLatin1String("midiController")).toString().toStdString();
+    for (const auto &m : root.value(QLatin1String("midiMappings")).toArray()) {
+        if (auto mapping = midiMappingFromJson(m.toObject())) {
+            m_midiMappings.push_back(std::move(*mapping));
+        }
+    }
     const auto devices = document.object().value(QLatin1String("devices")).toObject();
     for (auto it = devices.begin(); it != devices.end(); ++it) {
         auto settings = fromJson(it.value().toObject());
@@ -302,6 +310,14 @@ bool DeviceStore::save()
         {QStringLiteral("playerTarget"), qs(m_playerTarget)},
         {QStringLiteral("currentScene"), qs(m_currentScene)},
         {QStringLiteral("controlSurface"), qs(m_controlSurface)},
+        {QStringLiteral("midiController"), qs(m_midiController)},
+        {QStringLiteral("midiMappings"), [this] {
+             QJsonArray mappings;
+             for (const auto &m : m_midiMappings) {
+                 mappings.append(midiMappingToJson(m));
+             }
+             return mappings;
+         }()},
         {QStringLiteral("devices"), devices},
     };
 
@@ -349,6 +365,9 @@ bool DeviceStore::remove(const std::string &key)
         std::erase(settings.sends, key);
         settings.sendLevels.erase(key);
     }
+    std::erase_if(m_midiMappings, [&key](const MidiMapping &m) {
+        return m.target.key == key || m.target.destination == key;
+    });
     return true;
 }
 
@@ -371,6 +390,14 @@ bool DeviceStore::rekey(const std::string &from, const std::string &to)
     }
     if (m_cueOutput == from) {
         m_cueOutput = to;
+    }
+    for (auto &m : m_midiMappings) {
+        if (m.target.key == from) {
+            m.target.key = to;
+        }
+        if (m.target.destination == from) {
+            m.target.destination = to;
+        }
     }
     for (auto &[key, settings] : m_entries) {
         std::ranges::replace(settings.sends, from, to);

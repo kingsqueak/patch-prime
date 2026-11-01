@@ -7,6 +7,8 @@
 #include <QObject>
 #include <QTimer>
 
+#include "midiport.h"
+
 #include <array>
 #include <cstdint>
 #include <optional>
@@ -17,7 +19,6 @@ namespace pp {
 
 class BusManager;
 class DeviceModel;
-class MidiPort;
 class RecordingManager;
 
 // The fader law: a Mackie fader's 14-bit position (0..16383) as a level in
@@ -25,6 +26,10 @@ class RecordingManager;
 // Unity gain sits three quarters of the way up, as on a console.
 double mackieFaderDb(int value);
 int mackieFaderValue(double db);
+// The same law on a 0..1 scale (any fader-like control: a MIDI fader or
+// knob's position), unrounded.
+double faderLawPosition(double db);
+double faderLawDb(double position);
 // A level (dB) as a Mackie meter step, 0 (below -60 dB) to 12 (0 dB).
 int mackieMeterStep(double db);
 // The answer to a Mackie Control's "host connection query" challenge.
@@ -119,7 +124,7 @@ private:
     BusManager *m_buses = nullptr;
     RecordingManager *m_recordings = nullptr;
 
-    std::vector<std::uint8_t> m_incoming; // a message being received
+    MidiParser m_parser;
     int m_bank = 0;
     std::string m_sendTarget;
     std::array<bool, stripCount + 1> m_touched{}; // the master's last

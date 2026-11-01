@@ -115,7 +115,7 @@ std::pair<int, int> AlsaMidi::Impl::find(const std::string &id) const
     return {-1, -1};
 }
 
-AlsaMidi::AlsaMidi(QObject *parent)
+AlsaMidi::AlsaMidi(const char *portName, QObject *parent)
     : MidiPort(parent)
     , d(std::make_unique<Impl>())
 {
@@ -129,7 +129,7 @@ AlsaMidi::AlsaMidi(QObject *parent)
     d->seq = seq;
     snd_seq_set_client_name(seq, "Patch Prime");
     d->port = snd_seq_create_simple_port(
-        seq, "Control Surface",
+        seq, portName,
         SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ | SND_SEQ_PORT_CAP_WRITE |
             SND_SEQ_PORT_CAP_SUBS_WRITE,
         SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION);
@@ -184,7 +184,8 @@ std::vector<AlsaMidi::Port> AlsaMidi::ports() const
     while (snd_seq_query_next_client(d->seq, c) >= 0) {
         const int number = snd_seq_client_info_get_client(c);
         const auto clientName = trimmed(snd_seq_client_info_get_name(c));
-        if (number == SND_SEQ_CLIENT_SYSTEM || number == d->client || clientName == "Midi Through") {
+        if (number == SND_SEQ_CLIENT_SYSTEM || number == d->client || clientName == "Midi Through" ||
+            clientName == "Patch Prime") {
             continue;
         }
         snd_seq_port_info_set_client(p, number);

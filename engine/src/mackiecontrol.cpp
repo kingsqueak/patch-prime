@@ -55,7 +55,7 @@ constexpr std::array<std::pair<double, double>, 6> faderLaw{{
     {1.0, DeviceModel::maximumVolumeDb()},
 }};
 
-double faderPosition(double db)
+double faderPositionImpl(double db)
 {
     db = std::clamp(db, faderLaw.front().second, faderLaw.back().second);
     for (std::size_t i = 1; i < faderLaw.size(); ++i) {
@@ -124,23 +124,33 @@ std::string dbText(double db)
 
 } // namespace
 
-double mackieFaderDb(int value)
+double faderLawPosition(double db)
 {
-    const double p = std::clamp(value, 0, faderTop) / static_cast<double>(faderTop);
+    return faderPositionImpl(db);
+}
+
+double faderLawDb(double position)
+{
+    const double p = std::clamp(position, 0.0, 1.0);
     for (std::size_t i = 1; i < faderLaw.size(); ++i) {
         const auto [p0, d0] = faderLaw.at(i - 1);
         const auto [p1, d1] = faderLaw.at(i);
         if (p <= p1) {
-            const double db = d0 + ((p - p0) / (p1 - p0) * (d1 - d0));
-            return std::round(db * 10.0) / 10.0;
+            return d0 + ((p - p0) / (p1 - p0) * (d1 - d0));
         }
     }
     return faderLaw.back().second;
 }
 
+double mackieFaderDb(int value)
+{
+    const double db = faderLawDb(std::clamp(value, 0, faderTop) / static_cast<double>(faderTop));
+    return std::round(db * 10.0) / 10.0;
+}
+
 int mackieFaderValue(double db)
 {
-    return static_cast<int>(std::lround(faderPosition(db) * faderTop));
+    return static_cast<int>(std::lround(faderLawPosition(db) * faderTop));
 }
 
 int mackieMeterStep(double db)
@@ -296,7 +306,7 @@ MackieControl::StripView MackieControl::viewOf(const std::string &key) const
             const double level =
                 roleAt(*m_devices, row, DeviceModel::SendLevelsRole).toMap().value(target, 0.0).toDouble();
             constexpr int ringFill = 0x20; // lit from the left up to the position
-            view.ring = ringFill | (1 + static_cast<int>(std::lround(faderPosition(level) * 10)));
+            view.ring = ringFill | (1 + static_cast<int>(std::lround(faderLawPosition(level) * 10)));
             view.bottom = dbText(level);
         } else {
             view.bottom = "  off  ";
@@ -312,7 +322,7 @@ void MackieControl::connectionChanged()
         m_meterTimer.start();
     } else {
         m_meterTimer.stop();
-        m_incoming.clear();
+        m_parser.reset();
         m_touched = {};
     }
 }
@@ -334,34 +344,7 @@ void MackieControl::resetSurface()
 
 void MackieControl::receive(const QByteArray &bytes)
 {
-    for (const char c : bytes) {
-        const auto b = static_cast<std::uint8_t>(c);
-        if (b >= 0xF8) {
-            continue; // real-time messages (clock, active sensing)
-        }
-        const bool inSysex = !m_incoming.empty() && m_incoming.front() == 0xF0;
-        if (b == 0xF0 || (b >= 0x80 && b != 0xF7)) {
-            m_incoming.assign(1, b); // a new message (an unfinished one is dropped)
-            continue;
-        }
-        if (m_incoming.empty()) {
-            continue; // data with no status
-        }
-        m_incoming.push_back(b);
-        if (inSysex) {
-            if (b == 0xF7) {
-                handle(m_incoming);
-                m_incoming.clear();
-            }
-            continue;
-        }
-        const std::uint8_t status = m_incoming.front();
-        const std::size_t length = (status & 0xF0) == 0xC0 || (status & 0xF0) == 0xD0 ? 2 : 3;
-        if (m_incoming.size() == length) {
-            handle(m_incoming);
-            m_incoming.assign(1, status); // running status
-        }
-    }
+    m_parser.feed(bytes, [this](const std::vector<std::uint8_t> &message) { handle(message); });
 }
 
 void MackieControl::handle(const std::vector<std::uint8_t> &message)

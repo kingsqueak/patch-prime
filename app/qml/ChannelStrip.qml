@@ -229,6 +229,16 @@ QQC2.Control {
                 onRequested: db => Devices.setVolume(strip.key, db)
                 onPressedChanged: readout.dragging = pressed
                 onValueChanged: readout.draggedDb = value
+
+                // Right-click: MIDI Learn.
+                TapHandler {
+                    acceptedButtons: Qt.RightButton
+                    onTapped: faderMidi.popup()
+                }
+                MidiLearnMenu {
+                    id: faderMidi
+                    target: ({ action: "volume", key: strip.key })
+                }
             }
 
             Item { Layout.fillWidth: true }
@@ -261,6 +271,16 @@ QQC2.Control {
                 on: strip.muted
                 enabled: Devices.daemonRunning
                 onRequested: on => Devices.setMuted(strip.key, on)
+
+                // Right-click: MIDI Learn.
+                TapHandler {
+                    acceptedButtons: Qt.RightButton
+                    onTapped: muteMidi.popup()
+                }
+                MidiLearnMenu {
+                    id: muteMidi
+                    target: ({ action: "mute", key: strip.key })
+                }
             }
 
             StripToggle {
@@ -273,6 +293,16 @@ QQC2.Control {
                 on: strip.cued
                 enabled: Devices.daemonRunning
                 onRequested: on => Devices.setCue(strip.key, on)
+
+                // Right-click: MIDI Learn.
+                TapHandler {
+                    acceptedButtons: Qt.RightButton
+                    onTapped: cueMidi.popup()
+                }
+                MidiLearnMenu {
+                    id: cueMidi
+                    target: ({ action: "cue", key: strip.key })
+                }
             }
 
             StripToggle {
@@ -356,6 +386,16 @@ QQC2.Control {
                 onToggled: checked ? Devices.startRecording(strip.key) : Devices.stopRecording(strip.key)
                 Binding on checked {
                     value: strip.recording
+                }
+
+                // Right-click: MIDI Learn.
+                TapHandler {
+                    acceptedButtons: Qt.RightButton
+                    onTapped: recordMidi.popup()
+                }
+                MidiLearnMenu {
+                    id: recordMidi
+                    target: ({ action: "record", key: strip.key })
                 }
 
                 // Drawn here: the desktop style draws a button's label in its

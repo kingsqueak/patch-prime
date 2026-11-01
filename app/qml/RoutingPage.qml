@@ -224,6 +224,16 @@ Kirigami.Page {
                                                                 : qsTr("Send %1 to %2").arg(inputRow.model.label).arg(cell.model.label)
                                 QQC2.ToolTip.visible: hovered
                                 QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+
+                                // Right-click: MIDI Learn.
+                                TapHandler {
+                                    acceptedButtons: Qt.RightButton
+                                    onTapped: sendMidi.popup()
+                                }
+                                MidiLearnMenu {
+                                    id: sendMidi
+                                    target: ({ action: "send", key: inputRow.key, destination: cell.model.key })
+                                }
                             }
 
                             // The send's level, once it's on.
@@ -241,6 +251,16 @@ Kirigami.Page {
                                 volumeDb: cell.levelDb
                                 accessibleName: qsTr("Level of %1 into %2").arg(inputRow.model.label).arg(cell.model.label)
                                 onRequested: db => Devices.setSendLevel(inputRow.key, cell.model.key, db)
+
+                                // Right-click: MIDI Learn.
+                                TapHandler {
+                                    acceptedButtons: Qt.RightButton
+                                    onTapped: levelMidi.popup()
+                                }
+                                MidiLearnMenu {
+                                    id: levelMidi
+                                    target: ({ action: "sendLevel", key: inputRow.key, destination: cell.model.key })
+                                }
                             }
 
                             // Click to type the send level.

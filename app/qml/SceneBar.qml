@@ -35,6 +35,16 @@ RowLayout {
         icon.name: "document-open"
         enabled: Devices.daemonRunning && Devices.scenes.length > 0
         onClicked: Devices.loadScene(choice.currentText)
+
+        // Right-click: MIDI Learn.
+        TapHandler {
+            acceptedButtons: Qt.RightButton
+            onTapped: sceneMidi.popup()
+        }
+        MidiLearnMenu {
+            id: sceneMidi
+            target: ({ action: "scene", scene: choice.currentText })
+        }
         QQC2.ToolTip.text: qsTr("Set the mix to this scene: levels, mutes, sends, app routes and defaults")
         QQC2.ToolTip.visible: hovered
         QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay

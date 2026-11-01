@@ -13,6 +13,7 @@
 #include "devicestore.h"
 #include "hotplugrecovery.h"
 #include "mackiecontrol.h"
+#include "midimapper.h"
 #include "notifier.h"
 #include "pipewiregraph.h"
 #include "plugins.h"
@@ -160,6 +161,14 @@ int run(int &argc, char **argv)
     QObject::connect(&devices, &pp::DeviceModel::controlSurfaceChanged, &midi,
                      [&midi, &devices] { midi.setTarget(devices.store().controlSurface()); });
     service.setControlSurface(&midi, &mackie);
+    // Any other MIDI controller, through MIDI learn.
+    pp::AlsaMidi controllerMidi("MIDI Controller");
+    pp::MidiMapper mapper(&devices, &controllerMidi);
+    mapper.setRecordings(&recordings);
+    controllerMidi.setTarget(devices.store().midiController());
+    QObject::connect(&devices, &pp::DeviceModel::midiControllerChanged, &controllerMidi,
+                     [&controllerMidi, &devices] { controllerMidi.setTarget(devices.store().midiController()); });
+    service.setMidiMapper(&controllerMidi, &mapper);
     bus.registerObject(QString::fromLatin1(PatchPrimeService::objectPath), &service,
                        QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);
 

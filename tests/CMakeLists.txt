@@ -23,7 +23,8 @@ patchprime_add_test(test_hotplugrecovery test_hotplugrecovery.cpp)
 patchprime_add_test(test_scenes test_scenes.cpp)
 patchprime_add_test(test_effects test_effects.cpp)
 patchprime_add_test(test_recording test_recording.cpp)
-patchprime_add_test(test_mackie test_mackie.cpp)
+patchprime_add_test(test_mackie test_mackie.cpp fakemidiport.h)
+patchprime_add_test(test_midimapper test_midimapper.cpp fakemidiport.h)
 target_link_libraries(test_mackie PRIVATE PkgConfig::Alsa) # its stand-in controller
 
 # A tiny LV2 plugin (gain, and a switch that crashes it) for the plugin

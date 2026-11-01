@@ -15,6 +15,7 @@ namespace pp {
 class AlsaMidi;
 class AppRouter;
 class MackieControl;
+class MidiMapper;
 class SceneStore;
 class BusManager;
 class DeviceModel;
@@ -60,6 +61,9 @@ public:
     // The Mackie Control surface (optional): its port in the state, its
     // meters, and its F1..F8 loading scenes.
     void setControlSurface(pp::AlsaMidi *midi, pp::MackieControl *mackie);
+    // MIDI learn for any controller (optional): its port and mappings in
+    // the state, and its scene buttons.
+    void setMidiMapper(pp::AlsaMidi *midi, pp::MidiMapper *mapper);
 
 public Q_SLOTS:
     QString GetState() const;
@@ -186,6 +190,21 @@ public Q_SLOTS:
     // sequencer at all). Saved; the controller is connected whenever it's
     // plugged in.
     void SetControlSurface(const QString &id);
+    // MIDI learn, for any MIDI controller: its port (an id from
+    // "controlSurfacePorts", or "" for none; in the state as
+    // "midiController", "midiControllerConnected"). StartMidiLearn(target)
+    // waits for the next control moved on it, which then controls target
+    // (JSON: {action, key, destination, effect, param, scene}; action one of
+    // volume, mute, cue, sendLevel, send, effectParam, effectEnabled, record,
+    // scene); the state's "midiLearning" is that target (null otherwise)
+    // with "midiLearningText". "midiMappings" = [{id, kind, channel, number,
+    // relative, target, control, description}].
+    void SetMidiController(const QString &id);
+    void StartMidiLearn(const QString &target);
+    void CancelMidiLearn();
+    void RemoveMidiMapping(const QString &id);
+    // A CC from an endless encoder: 1..63 turns up, 65..127 down.
+    void SetMidiMappingRelative(const QString &id, bool relative);
 
 Q_SIGNALS:
     void StateChanged(const QString &state);
@@ -207,6 +226,8 @@ private:
     pp::PluginCatalog *m_plugins;
     pp::AlsaMidi *m_midi = nullptr;
     pp::MackieControl *m_mackie = nullptr;
+    pp::AlsaMidi *m_controllerMidi = nullptr;
+    pp::MidiMapper *m_mapper = nullptr;
     int m_recordingsRevision = 0;
     pp::SceneStore *m_scenes;
     QTimer m_stateTimer;

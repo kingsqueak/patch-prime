@@ -50,6 +50,11 @@ add_library(patchprime-engine STATIC
     src/hotplugrecovery.h
     src/mackiecontrol.cpp
     src/mackiecontrol.h
+    src/midimapper.cpp
+    src/midimapper.h
+    src/midimapping.cpp
+    src/midimapping.h
+    src/midiport.cpp
     src/midiport.h
     src/pipewiregraph.cpp
     src/pipewiregraph.h

@@ -10,6 +10,7 @@
 #include "devicemodel.h"
 #include "endpoint.h"
 #include "mackiecontrol.h"
+#include "midimapper.h"
 #include "pipewiregraph.h"
 #include "plugins.h"
 #include "recordingmanager.h"
@@ -90,6 +91,17 @@ void PatchPrimeService::setControlSurface(pp::AlsaMidi *midi, pp::MackieControl 
         }
     });
     updateMetering();
+}
+
+void PatchPrimeService::setMidiMapper(pp::AlsaMidi *midi, pp::MidiMapper *mapper)
+{
+    m_controllerMidi = midi;
+    m_mapper = mapper;
+    connect(midi, &pp::MidiPort::connectedChanged, this, &PatchPrimeService::scheduleState);
+    connect(mapper, &pp::MidiMapper::learningChanged, this, &PatchPrimeService::scheduleState);
+    connect(m_devices, &pp::DeviceModel::midiControllerChanged, this, &PatchPrimeService::scheduleState);
+    connect(m_devices, &pp::DeviceModel::midiMappingsChanged, this, &PatchPrimeService::scheduleState);
+    connect(mapper, &pp::MidiMapper::sceneRequested, this, [this](const QString &name) { LoadScene(name); });
 }
 
 QString PatchPrimeService::GetState() const
@@ -223,6 +235,25 @@ QString PatchPrimeService::GetState() const
         {QStringLiteral("controlSurface"), QString::fromStdString(m_devices->store().controlSurface())},
         {QStringLiteral("controlSurfaceAvailable"), m_midi != nullptr && m_midi->isAvailable()},
         {QStringLiteral("controlSurfaceConnected"), m_midi != nullptr && m_midi->isConnected()},
+        {QStringLiteral("midiController"), QString::fromStdString(m_devices->store().midiController())},
+        {QStringLiteral("midiControllerConnected"), m_controllerMidi != nullptr && m_controllerMidi->isConnected()},
+        {QStringLiteral("midiLearning"), m_mapper != nullptr && m_mapper->learning()
+                                              ? QJsonValue(pp::midiTargetToJson(*m_mapper->learning()))
+                                              : QJsonValue()},
+        {QStringLiteral("midiLearningText"), m_mapper != nullptr && m_mapper->learning()
+                                                  ? QString::fromStdString(m_mapper->describe(*m_mapper->learning()))
+                                                  : QString()},
+        {QStringLiteral("midiMappings"), [this] {
+             QJsonArray mappings;
+             for (const auto &m : m_devices->store().midiMappings()) {
+                 auto json = pp::midiMappingToJson(m);
+                 json.insert(QStringLiteral("control"), QString::fromStdString(pp::describeMidiControl(m)));
+                 json.insert(QStringLiteral("description"),
+                             m_mapper != nullptr ? QString::fromStdString(m_mapper->describe(m.target)) : QString());
+                 mappings.append(json);
+             }
+             return mappings;
+         }()},
         {QStringLiteral("controlSurfacePorts"), [this] {
              QJsonArray ports;
              if (m_midi != nullptr) {
@@ -827,4 +858,42 @@ void PatchPrimeService::emitLevels()
 void PatchPrimeService::SetControlSurface(const QString &id)
 {
     m_devices->setControlSurface(id.trimmed().toStdString());
+}
+
+void PatchPrimeService::SetMidiController(const QString &id)
+{
+    m_devices->setMidiController(id.trimmed().toStdString());
+}
+
+void PatchPrimeService::StartMidiLearn(const QString &target)
+{
+    const auto parsed = pp::midiTargetFromJson(QJsonDocument::fromJson(target.toUtf8()).object());
+    if (!parsed || m_mapper == nullptr) {
+        if (calledFromDBus()) {
+            sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("not a MIDI target: ") + target);
+        }
+        return;
+    }
+    m_mapper->startLearn(*parsed);
+}
+
+void PatchPrimeService::CancelMidiLearn()
+{
+    if (m_mapper != nullptr) {
+        m_mapper->cancelLearn();
+    }
+}
+
+void PatchPrimeService::RemoveMidiMapping(const QString &id)
+{
+    if (m_mapper != nullptr) {
+        m_mapper->remove(id.toStdString());
+    }
+}
+
+void PatchPrimeService::SetMidiMappingRelative(const QString &id, bool relative)
+{
+    if (m_mapper != nullptr) {
+        m_mapper->setRelative(id.toStdString(), relative);
+    }
 }

@@ -13,8 +13,8 @@ class QSocketNotifier;
 
 namespace pp {
 
-// A MIDI port on the ALSA sequencer: client "Patch Prime" with one port,
-// "Control Surface", connected both ways to the controller chosen with
+// A MIDI port on the ALSA sequencer: a client "Patch Prime" with one port
+// ("Control Surface", say), connected both ways to the controller chosen with
 // setTarget. Controllers are named "<client>:<port>", never by number, and
 // the connection is made again whenever the controller (re)appears.
 // Main thread only; nothing here blocks.
@@ -23,7 +23,7 @@ class AlsaMidi : public MidiPort
     Q_OBJECT
 
 public:
-    explicit AlsaMidi(QObject *parent = nullptr);
+    explicit AlsaMidi(const char *portName = "Control Surface", QObject *parent = nullptr);
     ~AlsaMidi() override;
     AlsaMidi(const AlsaMidi &) = delete;
     AlsaMidi &operator=(const AlsaMidi &) = delete;
@@ -41,7 +41,7 @@ public:
         std::string name; // for people: the port's name
     };
     // Ports a controller could be on: other clients' ports that send MIDI,
-    // except the system's, Midi Through and our own.
+    // except the system's, Midi Through and Patch Prime's own.
     [[nodiscard]] std::vector<Port> ports() const;
 
     // The controller to connect to (a Port::id); empty for none.

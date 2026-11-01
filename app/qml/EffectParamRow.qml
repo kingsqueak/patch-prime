@@ -47,6 +47,16 @@ RowLayout {
 
     Layout.fillWidth: true
 
+    // Right-click: MIDI Learn.
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        onTapped: paramMidi.popup()
+    }
+    MidiLearnMenu {
+        id: paramMidi
+        target: ({ action: "effectParam", key: row.stripKey, effect: row.effectIndex, param: row.info.name })
+    }
+
     QQC2.Label {
         Layout.preferredWidth: Kirigami.Units.gridUnit * 7
         text: row.info.label

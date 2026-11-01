@@ -44,6 +44,13 @@ class DaemonClient : public QAbstractListModel
     Q_PROPERTY(QString cueOutput READ cueOutput NOTIFY cueOutputChanged)
     // The Mackie Control surface: {id, available, connected, ports: [{id, name}]}.
     Q_PROPERTY(QVariantMap controlSurface READ controlSurface NOTIFY controlSurfaceChanged)
+    // MIDI learn: {id, connected} of the controller's port; the mappings
+    // ([{id, kind, channel, number, relative, target, control, description}]);
+    // the target being learned (null when none) and what it is.
+    Q_PROPERTY(QVariantMap midiController READ midiController NOTIFY midiChanged)
+    Q_PROPERTY(QVariantList midiMappings READ midiMappings NOTIFY midiChanged)
+    Q_PROPERTY(QVariant midiLearning READ midiLearning NOTIFY midiChanged)
+    Q_PROPERTY(QString midiLearningText READ midiLearningText NOTIFY midiChanged)
     // Built-in effects on offer: [{type, label, params: [{name, label, unit,
     // minimum, maximum, initial}]}]. A strip's chain is its "effects" role.
     Q_PROPERTY(QVariantList effectTypes READ effectTypes NOTIFY effectTypesChanged)
@@ -132,6 +139,19 @@ public:
     [[nodiscard]] QVariantMap controlSurface() const { return m_controlSurface; }
     // The control surface's MIDI port (an id from controlSurface.ports), or "".
     Q_INVOKABLE void setControlSurface(const QString &id);
+    [[nodiscard]] QVariantMap midiController() const { return m_midiController; }
+    [[nodiscard]] QVariantList midiMappings() const { return m_midiMappings; }
+    [[nodiscard]] QVariant midiLearning() const { return m_midiLearning; }
+    [[nodiscard]] QString midiLearningText() const { return m_midiLearningText; }
+    Q_INVOKABLE void setMidiController(const QString &id);
+    // target: {action, key, destination, effect, param, scene} (see the
+    // daemon's StartMidiLearn).
+    Q_INVOKABLE void startMidiLearn(const QVariantMap &target);
+    Q_INVOKABLE void cancelMidiLearn();
+    Q_INVOKABLE void removeMidiMapping(const QString &id);
+    Q_INVOKABLE void setMidiMappingRelative(const QString &id, bool relative);
+    // The mapping for a target, or an empty map.
+    [[nodiscard]] Q_INVOKABLE QVariantMap midiMappingFor(const QVariantMap &target) const;
     [[nodiscard]] QVariantMap effectMeters() const { return m_effectMeters; }
     [[nodiscard]] QVariantMap effectLevels() const { return m_effectLevels; }
     [[nodiscard]] QVariantList playbackTargets() const { return m_playbackTargets; }
@@ -231,6 +251,7 @@ Q_SIGNALS:
     void pluginsChanged();
     void cueOutputChanged();
     void controlSurfaceChanged();
+    void midiChanged();
     void effectMetersChanged();
     void recordingChanged();
     void recordingTimesChanged();
@@ -290,6 +311,10 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QVariantMap m_pluginWindowErrors;
     QString m_cueOutput;
     QVariantMap m_controlSurface;
+    QVariantMap m_midiController;
+    QVariantList m_midiMappings;
+    QVariant m_midiLearning;
+    QString m_midiLearningText;
     QVariantMap m_effectMeters;
     QVariantMap m_effectLevels;
     QHash<QString, int> m_effectLevelWatches; // strip key -> windows showing it

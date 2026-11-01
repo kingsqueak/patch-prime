@@ -144,6 +144,8 @@ Kirigami.ApplicationWindow {
         }
     }
 
+    footer: MidiLearnBanner {}
+
     UserGuide {
         id: userGuide
         markdown: root.guideText

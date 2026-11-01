@@ -7,7 +7,9 @@
 #include <QObject>
 
 #include <cstdint>
+#include <functional>
 #include <span>
+#include <vector>
 
 namespace pp {
 
@@ -31,6 +33,18 @@ Q_SIGNALS:
     // calls (long system exclusive ones are).
     void received(const QByteArray &bytes);
     void connectedChanged();
+};
+
+// Cuts a MIDI byte stream into whole messages: channel messages (running
+// status included) and system exclusive ones; real-time bytes are dropped.
+class MidiParser
+{
+public:
+    void reset() { m_incoming.clear(); }
+    void feed(const QByteArray &bytes, const std::function<void(const std::vector<std::uint8_t> &)> &message);
+
+private:
+    std::vector<std::uint8_t> m_incoming; // a message being received
 };
 
 } // namespace pp
