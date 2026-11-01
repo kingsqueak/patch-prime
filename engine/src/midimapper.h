@@ -5,6 +5,7 @@
 
 #include "midimapping.h"
 #include "midiport.h"
+#include "mixertargets.h"
 
 #include <QObject>
 #include <QTimer>
@@ -47,14 +48,8 @@ public:
 
     void remove(const std::string &id);
     void setRelative(const std::string &id, bool relative);
-    // What a target is, for people: "Mic: level", "Mic → Stream Mix: send".
-    [[nodiscard]] std::string describe(const MidiTarget &target) const;
-
-    // A target's position, 0..1 (levels and parameters), or nullopt when
-    // it's gone or isn't one.
-    [[nodiscard]] std::optional<double> position(const MidiTarget &target) const;
-    // Whether a toggle target is on, or nullopt.
-    [[nodiscard]] std::optional<bool> isOn(const MidiTarget &target) const;
+    // What a target is, for people (see MixerTargets::describe).
+    [[nodiscard]] std::string describe(const MidiTarget &target) const { return m_targets.describe(target); }
 
 Q_SIGNALS:
     void learningChanged();
@@ -74,15 +69,12 @@ private:
     void handle(const std::vector<std::uint8_t> &message);
     void learn(MidiKind kind, int channel, int number, int value);
     void apply(const MidiMapping &mapping, int value, bool pressed);
-    void setPosition(const MidiTarget &target, double position);
-    void toggle(const MidiTarget &target);
-    [[nodiscard]] bool isContinuous(const MidiTarget &target) const;
     void scheduleFeedback();
     void sendFeedback();
 
     DeviceModel *m_devices;
     MidiPort *m_port;
-    RecordingManager *m_recordings = nullptr;
+    MixerTargets m_targets;
     MidiParser m_parser;
     std::optional<MidiTarget> m_learning;
     std::map<std::string, Live> m_live; // by mapping id

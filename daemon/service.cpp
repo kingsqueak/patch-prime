@@ -9,6 +9,7 @@
 #include "effects.h"
 #include "devicemodel.h"
 #include "endpoint.h"
+#include "hotkeys.h"
 #include "mackiecontrol.h"
 #include "midimapper.h"
 #include "pipewiregraph.h"
@@ -102,6 +103,14 @@ void PatchPrimeService::setMidiMapper(pp::AlsaMidi *midi, pp::MidiMapper *mapper
     connect(m_devices, &pp::DeviceModel::midiControllerChanged, this, &PatchPrimeService::scheduleState);
     connect(m_devices, &pp::DeviceModel::midiMappingsChanged, this, &PatchPrimeService::scheduleState);
     connect(mapper, &pp::MidiMapper::sceneRequested, this, [this](const QString &name) { LoadScene(name); });
+}
+
+void PatchPrimeService::setHotkeys(pp::Hotkeys *hotkeys)
+{
+    m_hotkeys = hotkeys;
+    connect(hotkeys, &pp::Hotkeys::changed, this, &PatchPrimeService::scheduleState);
+    connect(m_devices, &pp::DeviceModel::hotkeysChanged, this, &PatchPrimeService::scheduleState);
+    connect(hotkeys, &pp::Hotkeys::sceneRequested, this, [this](const QString &name) { LoadScene(name); });
 }
 
 QString PatchPrimeService::GetState() const
@@ -253,6 +262,23 @@ QString PatchPrimeService::GetState() const
                  mappings.append(json);
              }
              return mappings;
+         }()},
+        {QStringLiteral("hotkeysAvailable"), m_hotkeys != nullptr && m_hotkeys->isAvailable()},
+        {QStringLiteral("hotkeys"), [this] {
+             QJsonArray hotkeys;
+             for (const auto &h : m_devices->store().hotkeys()) {
+                 auto json = pp::hotkeyToJson(h);
+                 QJsonArray keys;
+                 if (m_hotkeys != nullptr) {
+                     json.insert(QStringLiteral("description"), QString::fromStdString(m_hotkeys->describe(h)));
+                     for (const int key : m_hotkeys->keys(h.id)) {
+                         keys.append(key);
+                     }
+                 }
+                 json.insert(QStringLiteral("keys"), keys);
+                 hotkeys.append(json);
+             }
+             return hotkeys;
          }()},
         {QStringLiteral("controlSurfacePorts"), [this] {
              QJsonArray ports;
@@ -896,4 +922,38 @@ void PatchPrimeService::SetMidiMappingRelative(const QString &id, bool relative)
     if (m_mapper != nullptr) {
         m_mapper->setRelative(id.toStdString(), relative);
     }
+}
+
+QString PatchPrimeService::AddHotkey(const QString &hotkey)
+{
+    auto json = QJsonDocument::fromJson(hotkey.toUtf8()).object();
+    json.insert(QStringLiteral("id"), QStringLiteral("new")); // checked, then given a real one
+    const auto parsed = pp::hotkeyFromJson(json);
+    if (!parsed || m_hotkeys == nullptr) {
+        if (calledFromDBus()) {
+            sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("not a hotkey: ") + hotkey);
+        }
+        return {};
+    }
+    return QString::fromStdString(m_hotkeys->add(parsed->mode, parsed->target));
+}
+
+void PatchPrimeService::RemoveHotkey(const QString &id)
+{
+    if (m_hotkeys != nullptr) {
+        m_hotkeys->remove(id.toStdString());
+    }
+}
+
+void PatchPrimeService::SetHotkeyKey(const QString &id, int key)
+{
+    if (m_hotkeys != nullptr) {
+        m_hotkeys->setKeys(id.toStdString(), key == 0 ? QList<int>{} : QList<int>{key});
+    }
+}
+
+QString PatchPrimeService::DescribeTarget(const QString &target) const
+{
+    const auto parsed = pp::midiTargetFromJson(QJsonDocument::fromJson(target.toUtf8()).object());
+    return parsed && m_mapper != nullptr ? QString::fromStdString(m_mapper->describe(*parsed)) : QString();
 }

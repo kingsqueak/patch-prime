@@ -130,7 +130,7 @@ jobs:
       - name: Install build dependencies
         run: >
           pacman -Syu --noconfirm --needed base-devel git cmake ninja
-          qt6-base qt6-declarative pipewire wireplumber libsndfile lilv lv2 libx11 alsa-lib kirigami qqc2-desktop-style
+          qt6-base qt6-declarative pipewire wireplumber libsndfile lilv lv2 libx11 alsa-lib kirigami kdeclarative qqc2-desktop-style
 
       - uses: actions/checkout@v4
 

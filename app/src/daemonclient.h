@@ -51,6 +51,10 @@ class DaemonClient : public QAbstractListModel
     Q_PROPERTY(QVariantList midiMappings READ midiMappings NOTIFY midiChanged)
     Q_PROPERTY(QVariant midiLearning READ midiLearning NOTIFY midiChanged)
     Q_PROPERTY(QString midiLearningText READ midiLearningText NOTIFY midiChanged)
+    // Global hotkeys: [{id, mode, target, description, keys}], and whether
+    // the desktop has global shortcuts at all.
+    Q_PROPERTY(QVariantList hotkeys READ hotkeys NOTIFY hotkeysChanged)
+    Q_PROPERTY(bool hotkeysAvailable READ hotkeysAvailable NOTIFY hotkeysChanged)
     // Built-in effects on offer: [{type, label, params: [{name, label, unit,
     // minimum, maximum, initial}]}]. A strip's chain is its "effects" role.
     Q_PROPERTY(QVariantList effectTypes READ effectTypes NOTIFY effectTypesChanged)
@@ -152,6 +156,18 @@ public:
     Q_INVOKABLE void setMidiMappingRelative(const QString &id, bool relative);
     // The mapping for a target, or an empty map.
     [[nodiscard]] Q_INVOKABLE QVariantMap midiMappingFor(const QVariantMap &target) const;
+    [[nodiscard]] QVariantList hotkeys() const { return m_hotkeys; }
+    [[nodiscard]] bool hotkeysAvailable() const { return m_hotkeysAvailable; }
+    // A new hotkey ({mode, target}; see the daemon's AddHotkey) with this
+    // key (a QKeySequence; empty for none); returns its id, "" on failure.
+    Q_INVOKABLE QString addHotkey(const QVariantMap &hotkey, const QVariant &keySequence);
+    Q_INVOKABLE void removeHotkey(const QString &id);
+    Q_INVOKABLE void setHotkeyKey(const QString &id, const QVariant &keySequence);
+    // A hotkey's key (a Qt key combination) as a QKeySequence, for
+    // KeySequenceItem.
+    [[nodiscard]] Q_INVOKABLE QVariant keySequence(int key) const;
+    // A target for people ("Mic: mute"), asked of the daemon.
+    [[nodiscard]] Q_INVOKABLE QString describeTarget(const QVariantMap &target) const;
     [[nodiscard]] QVariantMap effectMeters() const { return m_effectMeters; }
     [[nodiscard]] QVariantMap effectLevels() const { return m_effectLevels; }
     [[nodiscard]] QVariantList playbackTargets() const { return m_playbackTargets; }
@@ -252,6 +268,7 @@ Q_SIGNALS:
     void cueOutputChanged();
     void controlSurfaceChanged();
     void midiChanged();
+    void hotkeysChanged();
     void effectMetersChanged();
     void recordingChanged();
     void recordingTimesChanged();
@@ -315,6 +332,8 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QVariantList m_midiMappings;
     QVariant m_midiLearning;
     QString m_midiLearningText;
+    QVariantList m_hotkeys;
+    bool m_hotkeysAvailable = false;
     QVariantMap m_effectMeters;
     QVariantMap m_effectLevels;
     QHash<QString, int> m_effectLevelWatches; // strip key -> windows showing it

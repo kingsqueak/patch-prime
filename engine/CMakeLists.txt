@@ -46,6 +46,8 @@ add_library(patchprime-engine STATIC
     src/graphsnapshot.cpp
     src/graphsnapshot.h
     src/graphtypes.h
+    src/hotkeys.cpp
+    src/hotkeys.h
     src/hotplugrecovery.cpp
     src/hotplugrecovery.h
     src/mackiecontrol.cpp
@@ -55,6 +57,8 @@ add_library(patchprime-engine STATIC
     src/midimapping.cpp
     src/midimapping.h
     src/midiport.cpp
+    src/mixertargets.cpp
+    src/mixertargets.h
     src/midiport.h
     src/pipewiregraph.cpp
     src/pipewiregraph.h

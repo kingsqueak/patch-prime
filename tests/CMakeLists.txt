@@ -25,6 +25,13 @@ patchprime_add_test(test_effects test_effects.cpp)
 patchprime_add_test(test_recording test_recording.cpp)
 patchprime_add_test(test_mackie test_mackie.cpp fakemidiport.h)
 patchprime_add_test(test_midimapper test_midimapper.cpp fakemidiport.h)
+patchprime_add_test(test_hotkeys test_hotkeys.cpp)
+# The daemon's kglobalaccel backend, against the session's kglobalaccel.
+find_package(Qt6 6.10 REQUIRED COMPONENTS DBus)
+patchprime_add_test(test_globalshortcuts test_globalshortcuts.cpp ${PROJECT_SOURCE_DIR}/daemon/globalshortcuts.cpp
+                    ${PROJECT_SOURCE_DIR}/daemon/globalshortcuts.h)
+target_include_directories(test_globalshortcuts PRIVATE ${PROJECT_SOURCE_DIR}/daemon)
+target_link_libraries(test_globalshortcuts PRIVATE Qt6::DBus)
 target_link_libraries(test_mackie PRIVATE PkgConfig::Alsa) # its stand-in controller
 
 # A tiny LV2 plugin (gain, and a switch that crashes it) for the plugin

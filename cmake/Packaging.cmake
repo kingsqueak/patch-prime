@@ -35,7 +35,7 @@ set(CPACK_DEBIAN_PACKAGE_SECTION "sound")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/kingsqueak/patch-prime")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_PACKAGE_DEPENDS
-    "pipewire (>= 1.6), wireplumber, qml6-module-org-kde-kirigami, \
+    "pipewire (>= 1.6), wireplumber, qml6-module-org-kde-kirigami, qml6-module-org-kde-kquickcontrols, \
 qml6-module-org-kde-desktop, qml6-module-qtquick-controls, \
 qml6-module-qtquick-layouts, qml6-module-qtquick-window, \
 qml6-module-qtquick-templates, qml6-module-qtqml-workerscript, qml6-module-qtcore")
@@ -57,7 +57,7 @@ set(CPACK_RPM_PACKAGE_GROUP "Applications/Multimedia")
 set(CPACK_RPM_PACKAGE_URL "https://github.com/kingsqueak/patch-prime")
 set(CPACK_RPM_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION}")
 set(CPACK_RPM_PACKAGE_REQUIRES
-    "pipewire >= 1.6, wireplumber, kf6-kirigami, kf6-qqc2-desktop-style, qt6-qtdeclarative, lilv-libs, alsa-lib")
+    "pipewire >= 1.6, wireplumber, kf6-kirigami, kf6-kdeclarative, kf6-qqc2-desktop-style, qt6-qtdeclarative, lilv-libs, alsa-lib")
 set(CPACK_RPM_POST_INSTALL_SCRIPT_FILE "${PROJECT_SOURCE_DIR}/packaging/rpm/postinstall")
 set(CPACK_RPM_PRE_UNINSTALL_SCRIPT_FILE "${PROJECT_SOURCE_DIR}/packaging/rpm/preuninstall")
 # Directories other packages own.

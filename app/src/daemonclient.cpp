@@ -18,6 +18,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QKeySequence>
 #include <QProcess>
 
 #include <algorithm>
@@ -422,6 +423,56 @@ QVariantMap DaemonClient::midiMappingFor(const QVariantMap &target) const
     return {};
 }
 
+namespace {
+
+// A key sequence's first key as a Qt key combination (0 for none).
+int keyOf(const QVariant &keySequence)
+{
+    const auto sequence = keySequence.value<QKeySequence>();
+    return sequence.isEmpty() ? 0 : sequence[0].toCombined();
+}
+
+} // namespace
+
+QString DaemonClient::addHotkey(const QVariantMap &hotkey, const QVariant &keySequence)
+{
+    auto message = QDBusMessage::createMethodCall(service, path, interface, QStringLiteral("AddHotkey"));
+    message.setArguments(
+        {QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(hotkey)).toJson(QJsonDocument::Compact))});
+    const QDBusReply<QString> reply = QDBusConnection::sessionBus().call(message);
+    if (!reply.isValid() || reply.value().isEmpty()) {
+        return {};
+    }
+    if (const int key = keyOf(keySequence); key != 0) {
+        call(QStringLiteral("SetHotkeyKey"), {reply.value(), key});
+    }
+    return reply.value();
+}
+
+void DaemonClient::removeHotkey(const QString &id)
+{
+    call(QStringLiteral("RemoveHotkey"), {id});
+}
+
+void DaemonClient::setHotkeyKey(const QString &id, const QVariant &keySequence)
+{
+    call(QStringLiteral("SetHotkeyKey"), {id, keyOf(keySequence)});
+}
+
+QString DaemonClient::describeTarget(const QVariantMap &target) const // NOLINT(readability-convert-member-functions-to-static): called from QML
+{
+    auto message = QDBusMessage::createMethodCall(service, path, interface, QStringLiteral("DescribeTarget"));
+    message.setArguments(
+        {QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(target)).toJson(QJsonDocument::Compact))});
+    const QDBusReply<QString> reply = QDBusConnection::sessionBus().call(message);
+    return reply.isValid() ? reply.value() : QString();
+}
+
+QVariant DaemonClient::keySequence(int key) const // NOLINT(readability-convert-member-functions-to-static): called from QML
+{
+    return QVariant::fromValue(key == 0 ? QKeySequence() : QKeySequence(QKeyCombination::fromCombined(key)));
+}
+
 void DaemonClient::setCue(const QString &key, bool cued)
 {
     call(QStringLiteral("SetCue"), {key, cued});
@@ -692,6 +743,13 @@ void DaemonClient::onStateChanged(const QString &state)
             m_midiLearningText = learningText;
             Q_EMIT midiChanged();
         }
+    }
+
+    if (const auto hotkeys = root.value(QLatin1String("hotkeys")).toArray().toVariantList();
+        hotkeys != m_hotkeys || root.value(QLatin1String("hotkeysAvailable")).toBool() != m_hotkeysAvailable) {
+        m_hotkeys = hotkeys;
+        m_hotkeysAvailable = root.value(QLatin1String("hotkeysAvailable")).toBool();
+        Q_EMIT hotkeysChanged();
     }
 
     if (const auto types = root.value(QLatin1String("effectTypes")).toArray().toVariantList();

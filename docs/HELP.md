@@ -16,6 +16,7 @@ Patch Prime turns your computer's audio into a small mixing console. This guide 
 - [Audio engine settings](#audio-engine-settings)
 - [Control surface (Mackie Control)](#control-surface-mackie-control)
 - [MIDI controllers (MIDI Learn)](#midi-controllers-midi-learn)
+- [Global hotkeys](#global-hotkeys)
 - [Unplugging and plugging in devices](#unplugging-and-plugging-in-devices)
 - [Recipes](#recipes)
 - [Troubleshooting](#troubleshooting)
@@ -325,6 +326,26 @@ How controls behave:
 - Controllers with lights or motorised faders are sent the current values back.
 
 Learning a control again moves it to the new job, and a control learned for something already mapped replaces the old one. The **MIDI mappings** list on the Devices page shows them all, with a button to forget each. Right-clicking a control also offers **Forget MIDI Control**. Mappings are saved, and follow an effect when you move it in the chain.
+
+## Global hotkeys
+
+Hotkeys work in every app, even with Patch Prime's window closed: mute your mic from a game, hold a key to talk, dip the music while you speak.
+
+To add one, either:
+
+- right-click a control (a fader, **M**, **C**, **Record**, a send, an effect's on/off button, **Load** for a scene) and choose **Add Hotkey…**, or
+- on the **Devices** page, under **Hotkeys**, click **Add Hotkey…** and choose what it does and to which strip.
+
+Then click the key button and press the key. A single key without Ctrl, Alt or Meta is allowed, which suits a spare key (F13, Pause) for push to talk. Patch Prime warns you when a key is already used.
+
+What a hotkey can do:
+
+- **Mute on/off**, **Cue on/off**, **Record on/off**, a send or an effect **on/off**, or **load a scene**.
+- **Push to talk**: the strip is unmuted while the key is held, and muted again when you let go. **Push to mute** is the opposite (a cough button).
+- **Duck while held**: the strip drops 15 dB while the key is held, and comes back when you let go (unless you changed its level in the meantime).
+- **Level up** and **Level down**: 1 dB per press. Hold the key to keep going.
+
+The **Hotkeys** list on the Devices page shows them all: click a key to change it, or remove a hotkey. They're KDE global shortcuts, so they also appear in **System Settings → Keyboard → Shortcuts → Patch Prime**, where keys can be changed too. They work on X11 and Wayland.
 
 ## Unplugging and plugging in devices
 

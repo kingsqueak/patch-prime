@@ -14,6 +14,7 @@
 namespace pp {
 class AlsaMidi;
 class AppRouter;
+class Hotkeys;
 class MackieControl;
 class MidiMapper;
 class SceneStore;
@@ -64,6 +65,8 @@ public:
     // MIDI learn for any controller (optional): its port and mappings in
     // the state, and its scene buttons.
     void setMidiMapper(pp::AlsaMidi *midi, pp::MidiMapper *mapper);
+    // Global hotkeys (optional): in the state, and their scene keys.
+    void setHotkeys(pp::Hotkeys *hotkeys);
 
 public Q_SLOTS:
     QString GetState() const;
@@ -205,6 +208,19 @@ public Q_SLOTS:
     void RemoveMidiMapping(const QString &id);
     // A CC from an endless encoder: 1..63 turns up, 65..127 down.
     void SetMidiMappingRelative(const QString &id, bool relative);
+    // Global hotkeys (in the state as "hotkeys" = [{id, mode, target,
+    // description, keys}], keys as Qt key combinations; "hotkeysAvailable"
+    // says whether the desktop has global shortcuts). AddHotkey takes
+    // {mode, target}: mode "toggle" (an on/off target or a scene),
+    // "pushToTalk"/"pushToMute" (a mute target), "duck" (a volume target),
+    // "levelUp"/"levelDown" (a volume or sendLevel target); it returns the
+    // new hotkey's id, with no key yet. SetHotkeyKey sets its key (0 for
+    // none); keys can also be changed in System Settings → Shortcuts.
+    QString AddHotkey(const QString &hotkey);
+    void RemoveHotkey(const QString &id);
+    void SetHotkeyKey(const QString &id, int key);
+    // A MIDI/hotkey target ({action, key, ...}) for people: "Mic: mute".
+    QString DescribeTarget(const QString &target) const;
 
 Q_SIGNALS:
     void StateChanged(const QString &state);
@@ -228,6 +244,7 @@ private:
     pp::MackieControl *m_mackie = nullptr;
     pp::AlsaMidi *m_controllerMidi = nullptr;
     pp::MidiMapper *m_mapper = nullptr;
+    pp::Hotkeys *m_hotkeys = nullptr;
     int m_recordingsRevision = 0;
     pp::SceneStore *m_scenes;
     QTimer m_stateTimer;

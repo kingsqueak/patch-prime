@@ -3,7 +3,7 @@
 
 find_package(Qt6 6.10 REQUIRED COMPONENTS DBus)
 
-add_executable(patchprimed main.cpp notifier.cpp notifier.h service.cpp service.h)
+add_executable(patchprimed main.cpp globalshortcuts.cpp globalshortcuts.h notifier.cpp notifier.h service.cpp service.h)
 target_link_libraries(patchprimed PRIVATE PatchPrime::Engine Qt6::Core Qt6::DBus)
 target_compile_definitions(patchprimed PRIVATE
     QT_NO_CAST_FROM_ASCII

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "endpoint.h"
+#include "hotkeys.h"
 #include "midimapping.h"
 
 #include <QDateTime>
@@ -213,6 +214,10 @@ public:
     void setMidiController(std::string id) { m_midiController = std::move(id); }
     [[nodiscard]] const std::vector<MidiMapping> &midiMappings() const { return m_midiMappings; }
     void setMidiMappings(std::vector<MidiMapping> mappings) { m_midiMappings = std::move(mappings); }
+    // Global hotkeys (their keys are kept by the desktop); like the
+    // mappings, they follow their strips.
+    [[nodiscard]] const std::vector<Hotkey> &hotkeys() const { return m_hotkeys; }
+    void setHotkeys(std::vector<Hotkey> hotkeys) { m_hotkeys = std::move(hotkeys); }
 
     [[nodiscard]] const std::map<std::string, DeviceSettings> &entries() const { return m_entries; }
     [[nodiscard]] const DeviceSettings *find(const std::string &key) const;
@@ -243,6 +248,7 @@ private:
     std::string m_controlSurface;
     std::string m_midiController;
     std::vector<MidiMapping> m_midiMappings;
+    std::vector<Hotkey> m_hotkeys;
     std::map<std::string, DeviceSettings> m_entries;
 };
 

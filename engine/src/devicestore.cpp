@@ -245,6 +245,7 @@ bool DeviceStore::load()
     m_controlSurface.clear();
     m_midiController.clear();
     m_midiMappings.clear();
+    m_hotkeys.clear();
     m_lastError.clear();
     QFile file(m_path);
     if (!file.exists()) {
@@ -275,6 +276,11 @@ bool DeviceStore::load()
     for (const auto &m : root.value(QLatin1String("midiMappings")).toArray()) {
         if (auto mapping = midiMappingFromJson(m.toObject())) {
             m_midiMappings.push_back(std::move(*mapping));
+        }
+    }
+    for (const auto &h : root.value(QLatin1String("hotkeys")).toArray()) {
+        if (auto hotkey = hotkeyFromJson(h.toObject())) {
+            m_hotkeys.push_back(std::move(*hotkey));
         }
     }
     const auto devices = document.object().value(QLatin1String("devices")).toObject();
@@ -317,6 +323,13 @@ bool DeviceStore::save()
                  mappings.append(midiMappingToJson(m));
              }
              return mappings;
+         }()},
+        {QStringLiteral("hotkeys"), [this] {
+             QJsonArray hotkeys;
+             for (const auto &h : m_hotkeys) {
+                 hotkeys.append(hotkeyToJson(h));
+             }
+             return hotkeys;
          }()},
         {QStringLiteral("devices"), devices},
     };
@@ -368,6 +381,9 @@ bool DeviceStore::remove(const std::string &key)
     std::erase_if(m_midiMappings, [&key](const MidiMapping &m) {
         return m.target.key == key || m.target.destination == key;
     });
+    std::erase_if(m_hotkeys, [&key](const Hotkey &h) {
+        return h.target.key == key || h.target.destination == key;
+    });
     return true;
 }
 
@@ -391,13 +407,19 @@ bool DeviceStore::rekey(const std::string &from, const std::string &to)
     if (m_cueOutput == from) {
         m_cueOutput = to;
     }
+    const auto rekeyTarget = [&from, &to](MidiTarget &target) {
+        if (target.key == from) {
+            target.key = to;
+        }
+        if (target.destination == from) {
+            target.destination = to;
+        }
+    };
     for (auto &m : m_midiMappings) {
-        if (m.target.key == from) {
-            m.target.key = to;
-        }
-        if (m.target.destination == from) {
-            m.target.destination = to;
-        }
+        rekeyTarget(m.target);
+    }
+    for (auto &h : m_hotkeys) {
+        rekeyTarget(h.target);
     }
     for (auto &[key, settings] : m_entries) {
         std::ranges::replace(settings.sends, from, to);

@@ -6,8 +6,8 @@ import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
 import org.kingsqueak.patchprime.engine
 
-// The right-click menu of a control a MIDI controller can drive: learn a
-// control for it, or forget the one it has. `target` is what it is
+// The right-click menu of a control that hardware can drive: learn a MIDI
+// control for it, forget the one it has, or give it a global hotkey. `target` is what it is
 // ({action, key, destination, effect, param, scene}; see StartMidiLearn).
 // Put it in the control and call popup() from a right-click.
 QQC2.Menu {
@@ -32,5 +32,22 @@ QQC2.Menu {
         text: qsTr("Forget MIDI Control (%1)").arg(menu.mapping.control || "")
         icon.name: "edit-delete-remove"
         onTriggered: Devices.removeMidiMapping(menu.mapping.id)
+    }
+
+    QQC2.MenuSeparator {}
+
+    QQC2.MenuItem {
+        // Hotkeys can't set a parameter (only switch one).
+        visible: menu.target.action !== "effectParam"
+        height: visible ? implicitHeight : 0
+        text: Devices.hotkeysAvailable ? qsTr("Add Hotkey…") : qsTr("Add Hotkey (no global shortcuts on this desktop)")
+        icon.name: "input-keyboard"
+        enabled: Devices.daemonRunning && Devices.hotkeysAvailable
+        onTriggered: hotkeyDialog.createObject(menu.parent, { fixedTarget: menu.target, destroyOnClose: true }).open()
+    }
+
+    Component {
+        id: hotkeyDialog
+        HotkeyDialog {}
     }
 }

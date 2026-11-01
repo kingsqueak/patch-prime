@@ -471,18 +471,33 @@ void DeviceModel::setMidiMappings(std::vector<MidiMapping> mappings)
     Q_EMIT midiMappingsChanged();
 }
 
+void DeviceModel::setHotkeys(std::vector<Hotkey> hotkeys)
+{
+    if (hotkeys == m_store->hotkeys()) {
+        return;
+    }
+    m_store->setHotkeys(std::move(hotkeys));
+    saveStore();
+    Q_EMIT hotkeysChanged();
+}
+
 void DeviceModel::remapEffects(int row, const std::function<int(int)> &map)
 {
     const auto &key = m_rows.at(static_cast<std::size_t>(row)).endpoint.key;
-    auto mappings = m_store->midiMappings();
-    std::erase_if(mappings, [&](MidiMapping &m) {
-        if (m.target.key != key || m.target.effect < 0) {
+    // True when the target goes (its effect was removed).
+    const auto remap = [&](MidiTarget &target) {
+        if (target.key != key || target.effect < 0) {
             return false;
         }
-        m.target.effect = map(m.target.effect);
-        return m.target.effect < 0;
-    });
+        target.effect = map(target.effect);
+        return target.effect < 0;
+    };
+    auto mappings = m_store->midiMappings();
+    std::erase_if(mappings, [&](MidiMapping &m) { return remap(m.target); });
     setMidiMappings(std::move(mappings));
+    auto hotkeys = m_store->hotkeys();
+    std::erase_if(hotkeys, [&](Hotkey &h) { return remap(h.target); });
+    setHotkeys(std::move(hotkeys));
 }
 
 void DeviceModel::setCurrentScene(const std::string &name)

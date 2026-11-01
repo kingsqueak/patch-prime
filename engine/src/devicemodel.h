@@ -134,6 +134,9 @@ public:
     // an effect moves its mappings with it.
     void setMidiController(const std::string &id);
     void setMidiMappings(std::vector<MidiMapping> mappings);
+    // Global hotkeys (see DeviceStore); emits hotkeysChanged. Effects'
+    // hotkeys follow them like the mappings.
+    void setHotkeys(std::vector<Hotkey> hotkeys);
     Q_INVOKABLE void setCue(int row, bool cued);
     [[nodiscard]] const std::set<std::string> &cued() const { return m_cued; }
     // Sets a strip's mix from a scene (see mixFromJson), keeping only what
@@ -191,6 +194,7 @@ Q_SIGNALS:
     void controlSurfaceChanged();
     void midiControllerChanged();
     void midiMappingsChanged();
+    void hotkeysChanged();
 
 private:
     const PluginCatalog *m_pluginCatalog = nullptr;

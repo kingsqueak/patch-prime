@@ -11,6 +11,8 @@
 #include "busmanager.h"
 #include "devicemodel.h"
 #include "devicestore.h"
+#include "globalshortcuts.h"
+#include "hotkeys.h"
 #include "hotplugrecovery.h"
 #include "mackiecontrol.h"
 #include "midimapper.h"
@@ -169,6 +171,11 @@ int run(int &argc, char **argv)
     QObject::connect(&devices, &pp::DeviceModel::midiControllerChanged, &controllerMidi,
                      [&controllerMidi, &devices] { controllerMidi.setTarget(devices.store().midiController()); });
     service.setMidiMapper(&controllerMidi, &mapper);
+    // Global hotkeys, through the desktop's shortcuts.
+    KGlobalAccelShortcuts shortcuts;
+    pp::Hotkeys hotkeys(&devices, &shortcuts);
+    hotkeys.setRecordings(&recordings);
+    service.setHotkeys(&hotkeys);
     bus.registerObject(QString::fromLatin1(PatchPrimeService::objectPath), &service,
                        QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals);
 

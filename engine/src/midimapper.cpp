@@ -4,9 +4,7 @@
 #include "midimapper.h"
 
 #include "devicemodel.h"
-#include "effects.h"
 #include "mackiecontrol.h"
-#include "plugins.h"
 #include "recordingmanager.h"
 
 #include <QUuid>
@@ -23,43 +21,15 @@ constexpr int pitchBendTop = 16383;
 constexpr double dbPerClick = 0.5;    // a relative encoder on a level
 constexpr double stepPerClick = 0.01; // ... on a parameter (1 % of its range)
 
-QVariant roleAt(const DeviceModel &devices, int row, DeviceModel::Role role)
-{
-    return devices.data(devices.index(row), role);
-}
-
-double paramPosition(const ParamInfo &p, double value)
-{
-    if (p.maximum <= p.minimum) {
-        return 0.0;
-    }
-    if (p.kind == ParamKind::Log && p.minimum > 0.0) {
-        return std::log(value / p.minimum) / std::log(p.maximum / p.minimum);
-    }
-    return (value - p.minimum) / (p.maximum - p.minimum);
-}
-
-double paramValue(const ParamInfo &p, double position)
-{
-    position = std::clamp(position, 0.0, 1.0);
-    if (p.kind == ParamKind::Log && p.minimum > 0.0) {
-        return validParam(p, p.minimum * std::pow(p.maximum / p.minimum, position));
-    }
-    return validParam(p, p.minimum + (position * (p.maximum - p.minimum)));
-}
-
-double roundedDb(double db)
-{
-    return std::round(db * 10.0) / 10.0;
-}
-
 } // namespace
 
 MidiMapper::MidiMapper(DeviceModel *devices, MidiPort *port, QObject *parent)
     : QObject(parent)
     , m_devices(devices)
     , m_port(port)
+    , m_targets(devices)
 {
+    m_targets.setSceneHandler([this](const QString &name) { Q_EMIT sceneRequested(name); });
     m_feedbackTimer.setSingleShot(true);
     m_feedbackTimer.setInterval(20);
     connect(&m_feedbackTimer, &QTimer::timeout, this, &MidiMapper::sendFeedback);
@@ -82,8 +52,8 @@ MidiMapper::MidiMapper(DeviceModel *devices, MidiPort *port, QObject *parent)
 
 void MidiMapper::setRecordings(RecordingManager *recordings)
 {
-    m_recordings = recordings;
-    connect(m_recordings, &RecordingManager::changed, this, &MidiMapper::scheduleFeedback);
+    m_targets.setRecordings(recordings);
+    connect(recordings, &RecordingManager::changed, this, &MidiMapper::scheduleFeedback);
 }
 
 void MidiMapper::startLearn(const MidiTarget &target)
@@ -118,154 +88,6 @@ void MidiMapper::setRelative(const std::string &id, bool relative)
         }
     }
     m_devices->setMidiMappings(std::move(mappings));
-}
-
-std::string MidiMapper::describe(const MidiTarget &target) const
-{
-    const auto label = [this](const std::string &key) {
-        const int row = m_devices->rowForKey(key);
-        return row < 0 ? key : roleAt(*m_devices, row, DeviceModel::LabelRole).toString().toStdString();
-    };
-    // The effect's name, and the parameter's label.
-    const auto effect = [&]() -> std::pair<std::string, std::string> {
-        const int row = m_devices->rowForKey(target.key);
-        const auto effects = row < 0 ? QVariantList{} : roleAt(*m_devices, row, DeviceModel::EffectsRole).toList();
-        if (target.effect < 0 || target.effect >= effects.size()) {
-            return {"effect " + std::to_string(target.effect + 1), target.param};
-        }
-        const auto type = effects.at(target.effect).toMap().value(QStringLiteral("type")).toString().toStdString();
-        std::string name = effectLabel(type);
-        if (const auto *catalog = m_devices->pluginCatalog(); catalog != nullptr && isPluginType(type)) {
-            if (const auto *info = catalog->find(type)) {
-                name = info->name;
-            }
-        }
-        const auto params = paramsFor(type, m_devices->pluginCatalog());
-        const auto at = std::ranges::find(params, target.param, &ParamInfo::name);
-        return {name, at == params.end() ? target.param : at->label};
-    };
-    switch (target.action) {
-    case MidiAction::Volume:
-        return label(target.key) + ": level";
-    case MidiAction::Mute:
-        return label(target.key) + ": mute";
-    case MidiAction::Cue:
-        return label(target.key) + ": cue";
-    case MidiAction::Record:
-        return label(target.key) + ": record";
-    case MidiAction::SendLevel:
-        return label(target.key) + " → " + label(target.destination) + ": send level";
-    case MidiAction::Send:
-        return label(target.key) + " → " + label(target.destination) + ": send on/off";
-    case MidiAction::EffectParam: {
-        const auto [name, param] = effect();
-        return label(target.key) + ": " + name + " " + param;
-    }
-    case MidiAction::EffectEnabled:
-        return label(target.key) + ": " + effect().first + " on/off";
-    case MidiAction::Scene:
-        return "Scene " + target.scene;
-    }
-    return {};
-}
-
-std::optional<double> MidiMapper::position(const MidiTarget &target) const
-{
-    const int row = m_devices->rowForKey(target.key);
-    if (row < 0) {
-        return std::nullopt;
-    }
-    switch (target.action) {
-    case MidiAction::Volume:
-        return faderLawPosition(roleAt(*m_devices, row, DeviceModel::VolumeRole).toDouble());
-    case MidiAction::SendLevel: {
-        const auto destination = QString::fromStdString(target.destination);
-        if (!roleAt(*m_devices, row, DeviceModel::SendsRole).toStringList().contains(destination)) {
-            return std::nullopt;
-        }
-        return faderLawPosition(
-            roleAt(*m_devices, row, DeviceModel::SendLevelsRole).toMap().value(destination, 0.0).toDouble());
-    }
-    case MidiAction::EffectParam: {
-        const auto effects = roleAt(*m_devices, row, DeviceModel::EffectsRole).toList();
-        if (target.effect >= effects.size()) {
-            return std::nullopt;
-        }
-        const auto effect = effects.at(target.effect).toMap();
-        const auto type = effect.value(QStringLiteral("type")).toString().toStdString();
-        for (const auto &p : paramsFor(type, m_devices->pluginCatalog())) {
-            if (p.name == target.param && p.kind != ParamKind::Toggle) {
-                const auto value = effect.value(QStringLiteral("params")).toMap().value(
-                    QString::fromStdString(p.name), p.initial);
-                return std::clamp(paramPosition(p, value.toDouble()), 0.0, 1.0);
-            }
-        }
-        return std::nullopt;
-    }
-    default:
-        return std::nullopt;
-    }
-}
-
-std::optional<bool> MidiMapper::isOn(const MidiTarget &target) const
-{
-    if (target.action == MidiAction::Scene) {
-        return m_devices->store().currentScene() == target.scene;
-    }
-    const int row = m_devices->rowForKey(target.key);
-    if (row < 0) {
-        return std::nullopt;
-    }
-    switch (target.action) {
-    case MidiAction::Mute:
-        return roleAt(*m_devices, row, DeviceModel::MutedRole).toBool();
-    case MidiAction::Cue:
-        return roleAt(*m_devices, row, DeviceModel::CuedRole).toBool();
-    case MidiAction::Send:
-        return roleAt(*m_devices, row, DeviceModel::SendsRole)
-            .toStringList()
-            .contains(QString::fromStdString(target.destination));
-    case MidiAction::Record:
-        return m_recordings != nullptr && m_recordings->recording().contains(target.key);
-    case MidiAction::EffectEnabled:
-    case MidiAction::EffectParam: {
-        const auto effects = roleAt(*m_devices, row, DeviceModel::EffectsRole).toList();
-        if (target.effect >= effects.size()) {
-            return std::nullopt;
-        }
-        const auto effect = effects.at(target.effect).toMap();
-        if (target.action == MidiAction::EffectEnabled) {
-            return effect.value(QStringLiteral("enabled")).toBool();
-        }
-        return effect.value(QStringLiteral("params")).toMap().value(QString::fromStdString(target.param)).toDouble() >
-               0.5;
-    }
-    default:
-        return std::nullopt;
-    }
-}
-
-bool MidiMapper::isContinuous(const MidiTarget &target) const
-{
-    switch (target.action) {
-    case MidiAction::Volume:
-    case MidiAction::SendLevel:
-        return true;
-    case MidiAction::EffectParam: {
-        // A switch is a toggle; any other parameter is continuous.
-        const int row = m_devices->rowForKey(target.key);
-        const auto effects = row < 0 ? QVariantList{} : roleAt(*m_devices, row, DeviceModel::EffectsRole).toList();
-        if (target.effect < 0 || target.effect >= effects.size()) {
-            return true;
-        }
-        const auto type = effects.at(target.effect).toMap().value(QStringLiteral("type")).toString().toStdString();
-        const auto params = paramsFor(type, m_devices->pluginCatalog());
-        const auto at = std::ranges::find(params, target.param, &ParamInfo::name);
-        return at == params.end() || at->kind != ParamKind::Toggle;
-    }
-    default:
-        return false;
-    }
 }
 
 void MidiMapper::handle(const std::vector<std::uint8_t> &message)
@@ -331,21 +153,21 @@ void MidiMapper::apply(const MidiMapping &mapping, int value, bool pressed)
 {
     auto &live = m_live[mapping.id];
     const auto &target = mapping.target;
-    if (!isContinuous(target)) {
+    if (!m_targets.isContinuous(target)) {
         // A button: a note pressed, or a CC going over half way.
         const bool trigger = mapping.kind == MidiKind::Note
                                  ? pressed
                                  : mapping.kind == MidiKind::Cc && value >= 64 && live.lastIn < 64;
         live.lastIn = value;
         if (trigger) {
-            toggle(target);
+            m_targets.toggle(target);
         }
         return;
     }
     if (mapping.kind == MidiKind::Note) {
         return; // a button can't set a level
     }
-    const auto current = position(target);
+    const auto current = m_targets.position(target);
     if (!current) {
         live.lastIn = value;
         return;
@@ -353,9 +175,9 @@ void MidiMapper::apply(const MidiMapping &mapping, int value, bool pressed)
     if (mapping.relative) {
         const int clicks = (value & 0x40) != 0 ? -(value & 0x3F) : (value & 0x3F);
         if (target.action == MidiAction::Volume || target.action == MidiAction::SendLevel) {
-            setPosition(target, faderLawPosition(faderLawDb(*current) + (clicks * dbPerClick)));
+            m_targets.setPosition(target, faderLawPosition(faderLawDb(*current) + (clicks * dbPerClick)));
         } else {
-            setPosition(target, *current + (clicks * stepPerClick));
+            m_targets.setPosition(target, *current + (clicks * stepPerClick));
         }
         return;
     }
@@ -375,81 +197,8 @@ void MidiMapper::apply(const MidiMapping &mapping, int value, bool pressed)
     }
     live.lastIn = value;
     if (live.pickedUp) {
-        setPosition(target, wanted);
-        live.lastSet = position(target).value_or(wanted);
-    }
-}
-
-void MidiMapper::setPosition(const MidiTarget &target, double position)
-{
-    const int row = m_devices->rowForKey(target.key);
-    if (row < 0) {
-        return;
-    }
-    position = std::clamp(position, 0.0, 1.0);
-    switch (target.action) {
-    case MidiAction::Volume:
-        m_devices->setVolume(row, roundedDb(faderLawDb(position)));
-        break;
-    case MidiAction::SendLevel:
-        m_devices->setSendLevel(row, QString::fromStdString(target.destination), roundedDb(faderLawDb(position)));
-        break;
-    case MidiAction::EffectParam: {
-        const auto effects = roleAt(*m_devices, row, DeviceModel::EffectsRole).toList();
-        if (target.effect >= effects.size()) {
-            return;
-        }
-        const auto type = effects.at(target.effect).toMap().value(QStringLiteral("type")).toString().toStdString();
-        for (const auto &p : paramsFor(type, m_devices->pluginCatalog())) {
-            if (p.name == target.param) {
-                m_devices->setEffectParam(row, target.effect, QString::fromStdString(p.name), paramValue(p, position));
-            }
-        }
-        break;
-    }
-    default:
-        break;
-    }
-}
-
-void MidiMapper::toggle(const MidiTarget &target)
-{
-    if (target.action == MidiAction::Scene) {
-        Q_EMIT sceneRequested(QString::fromStdString(target.scene));
-        return;
-    }
-    const int row = m_devices->rowForKey(target.key);
-    const auto on = isOn(target);
-    if (row < 0 || !on) {
-        return;
-    }
-    switch (target.action) {
-    case MidiAction::Mute:
-        m_devices->setMuted(row, !*on);
-        break;
-    case MidiAction::Cue:
-        m_devices->setCue(row, !*on);
-        break;
-    case MidiAction::Send:
-        m_devices->setSend(row, QString::fromStdString(target.destination), !*on);
-        break;
-    case MidiAction::EffectEnabled:
-        m_devices->setEffectEnabled(row, target.effect, !*on);
-        break;
-    case MidiAction::EffectParam:
-        m_devices->setEffectParam(row, target.effect, QString::fromStdString(target.param), *on ? 0.0 : 1.0);
-        break;
-    case MidiAction::Record:
-        if (m_recordings != nullptr) {
-            if (*on) {
-                m_recordings->stop(target.key);
-            } else {
-                m_recordings->start(target.key);
-            }
-        }
-        break;
-    default:
-        break;
+        m_targets.setPosition(target, wanted);
+        live.lastSet = m_targets.position(target).value_or(wanted);
     }
 }
 
@@ -469,14 +218,14 @@ void MidiMapper::sendFeedback()
         if (m.relative) {
             continue; // an endless encoder has no position to show
         }
-        const bool continuous = isContinuous(m.target);
+        const bool continuous = m_targets.isContinuous(m.target);
         int value = -1;
         if (continuous && m.kind != MidiKind::Note) {
-            if (const auto p = position(m.target)) {
+            if (const auto p = m_targets.position(m.target)) {
                 value = static_cast<int>(std::lround(*p * (m.kind == MidiKind::PitchBend ? pitchBendTop : ccTop)));
             }
         } else if (!continuous && m.kind != MidiKind::PitchBend) {
-            if (const auto on = isOn(m.target)) {
+            if (const auto on = m_targets.isOn(m.target)) {
                 value = *on ? ccTop : 0; // the button's light
             }
         }

@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.kde.kquickcontrols as KQuickControls
 import org.kingsqueak.patchprime.engine
 
 Kirigami.ScrollablePage {
@@ -335,6 +336,76 @@ Kirigami.ScrollablePage {
                             QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
                         }
                     }
+                }
+            }
+
+            Kirigami.ListSectionHeader {
+                Layout.fillWidth: true
+                text: qsTr("Hotkeys")
+            }
+
+            // Global hotkeys: their keys are recorded here (or in System
+            // Settings → Shortcuts).
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.margins: Kirigami.Units.largeSpacing
+                spacing: Kirigami.Units.smallSpacing
+
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.Wrap
+                    font: Kirigami.Theme.smallFont
+                    color: Kirigami.Theme.disabledTextColor
+                    text: Devices.hotkeysAvailable
+                        ? qsTr("Keys that work in every app: mute or push to talk on your mic, duck the music, load a scene. Also from a control's right-click menu.")
+                        : qsTr("Global hotkeys need KDE's shortcut service (kglobalaccel), which isn't running.")
+                }
+
+                Repeater {
+                    model: Devices.hotkeys
+
+                    delegate: RowLayout {
+                        id: hotkeyRow
+
+                        required property var modelData
+
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.largeSpacing
+
+                        QQC2.Label {
+                            Layout.fillWidth: true
+                            text: hotkeyRow.modelData.description
+                            elide: Text.ElideRight
+                        }
+
+                        KQuickControls.KeySequenceItem {
+                            keySequence: Devices.keySequence(hotkeyRow.modelData.keys.length > 0 ? hotkeyRow.modelData.keys[0] : 0)
+                            modifierlessAllowed: true
+                            checkForConflictsAgainst: KQuickControls.ShortcutType.GlobalShortcuts | KQuickControls.ShortcutType.StandardShortcuts
+                            onKeySequenceModified: Devices.setHotkeyKey(hotkeyRow.modelData.id, keySequence)
+                        }
+
+                        QQC2.ToolButton {
+                            icon.name: "edit-delete-remove"
+                            text: qsTr("Remove")
+                            display: QQC2.AbstractButton.IconOnly
+                            onClicked: Devices.removeHotkey(hotkeyRow.modelData.id)
+                            QQC2.ToolTip.text: qsTr("Remove this hotkey")
+                            QQC2.ToolTip.visible: hovered
+                            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        }
+                    }
+                }
+
+                QQC2.Button {
+                    text: qsTr("Add Hotkey…")
+                    icon.name: "list-add"
+                    enabled: Devices.daemonRunning && Devices.hotkeysAvailable
+                    onClicked: addHotkeyDialog.open()
+                }
+
+                HotkeyDialog {
+                    id: addHotkeyDialog
                 }
             }
         }
