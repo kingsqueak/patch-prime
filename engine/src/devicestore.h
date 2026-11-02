@@ -98,7 +98,8 @@ struct EffectSettings
     bool enabled = true;
     std::map<std::string, double> params;
     // Effects that listen to another strip (see effectTakesKey): that
-    // strip's endpoint key; empty for none.
+    // strip's endpoint key, or an app's ("playback|<binary>", see
+    // isPlaybackAppKey); empty for none.
     std::string key;
     // A plugin's own state apart from its parameters (what its window may
     // have changed: a loaded file, say), as the plugin host saved it.

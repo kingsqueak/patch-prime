@@ -28,6 +28,11 @@ bool isNumber(const std::string &value)
 
 } // namespace
 
+bool isPlaybackAppKey(const std::string &key)
+{
+    return key.starts_with("playback|") && key.size() > 9;
+}
+
 std::optional<AppStream> classifyAppStream(const GraphObject &node)
 {
     if (node.type != nodeType) {

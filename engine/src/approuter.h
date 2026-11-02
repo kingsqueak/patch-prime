@@ -38,6 +38,9 @@ struct AppStream
 // application.process.binary, else application.name, else node.name, so every
 // stream of one program shares a route.
 std::optional<AppStream> classifyAppStream(const GraphObject &node);
+// Whether key names an app's playback ("playback|<binary>"), e.g. a ducker's
+// key, rather than a strip.
+bool isPlaybackAppKey(const std::string &key);
 
 // --- AppRouter ---------------------------------------------------------------
 

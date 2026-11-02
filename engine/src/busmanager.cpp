@@ -3,6 +3,7 @@
 
 #include "busmanager.h"
 
+#include "approuter.h"
 #include "devicemodel.h"
 #include "pipewiregraph.h"
 #include "plugins.h"
@@ -1307,6 +1308,24 @@ void BusManager::linkKeys(const std::map<std::string, FxPorts> &fx,
         std::set<std::uint32_t> desired;
         for (const auto &e : w.settings->effects) {
             if (!effectTakesKey(e.type) || e.key.empty() || e.key == w.key) {
+                continue;
+            }
+            if (isPlaybackAppKey(e.key)) {
+                // An app: what its playback streams play (after the app's
+                // own level and mute), wherever they go.
+                for (const auto &[id, node] : m_graph->nodes()) {
+                    const auto app = classifyAppStream(node);
+                    if (!app || app->key != e.key) {
+                        continue;
+                    }
+                    const auto outs = portsOf(id, "out", false);
+                    for (const auto &port : outs) {
+                        desired.insert(port.portId);
+                    }
+                    for (const auto &keyPort : ports.key) {
+                        link(outs, {keyPort}, existingLinks);
+                    }
+                }
                 continue;
             }
             if (reaches(sendsOf, w.key, e.key)) {

@@ -1661,6 +1661,31 @@ private Q_SLOTS:
         devices.setEffectKey(mixRow(), 1, QString());
         QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, inBus, mixFx) == 0; }, 5000));
 
+        // Keyed by an app: its playback stream feeds the key input, and still
+        // plays where it was going.
+        {
+            const auto app = "ppkeyapp" + std::to_string(QCoreApplication::applicationPid());
+            devices.setEffectKey(mixRow(), 1, QString::fromStdString("playback|" + app));
+            QCOMPARE(QString::fromStdString(store.find(mixKey.toStdString())->effects.at(1).key),
+                     QString::fromStdString("playback|" + app));
+            QTemporaryDir appDir;
+            const auto appTone = appDir.filePath(QStringLiteral("tone.wav"));
+            QVERIFY(writeTone(appTone));
+            QProcess player;
+            player.start(QStringLiteral("pw-play"),
+                         {QStringLiteral("-P"),
+                          QStringLiteral(R"({ patchprime.scope = "test-untouched" application.process.binary = "%1" node.name = "%1" })")
+                              .arg(QString::fromStdString(app)),
+                          QStringLiteral("--target"), QString::fromStdString(m_sinkName), appTone});
+            QVERIFY(QTest::qWaitFor(
+                [&] { return linkCount(m_graph, app, mixFx) == 2 && linkCount(m_graph, app, m_sinkName) == 2; },
+                5000));
+            player.kill();
+            player.waitForFinished();
+            QVERIFY(QTest::qWaitFor([&] { return !nodeNamed(m_graph, app); }, 5000));
+            devices.setEffectKey(mixRow(), 1, QString());
+        }
+
         // An output strip: bus -> effects -> hardware.
         const auto outFx = effectsNodeName(outBus);
         devices.addEffect(devices.rowForKey(sinkKey), QStringLiteral("gain"));

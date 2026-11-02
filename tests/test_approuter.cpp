@@ -60,6 +60,14 @@ private Q_SLOTS:
         QVERIFY(!classifyAppStream(device));
     }
 
+    void playbackAppKeys()
+    {
+        QVERIFY(pp::isPlaybackAppKey("playback|discord"));
+        QVERIFY(!pp::isPlaybackAppKey("playback|"));
+        QVERIFY(!pp::isPlaybackAppKey("record|discord"));
+        QVERIFY(!pp::isPlaybackAppKey("patchprime-virtual|ab12cd34"));
+    }
+
     void storeRoundTrip()
     {
         QTemporaryDir dir;

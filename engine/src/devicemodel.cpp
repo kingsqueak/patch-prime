@@ -3,6 +3,7 @@
 
 #include "devicemodel.h"
 
+#include "approuter.h"
 #include "busmanager.h"
 #include "effects.h"
 #include "pipewiregraph.h"
@@ -890,9 +891,9 @@ void DeviceModel::setEffectKey(int row, int index, const QString &key)
 {
     const auto source = key.toStdString();
     if (row < 0 || row >= rowCount() ||
-        (!source.empty() && (m_store->find(source) == nullptr ||
-                             source == m_rows[static_cast<std::size_t>(row)].endpoint.key))) {
-        return; // unknown, or the strip itself
+        (!source.empty() && !isPlaybackAppKey(source) &&
+         (m_store->find(source) == nullptr || source == m_rows[static_cast<std::size_t>(row)].endpoint.key))) {
+        return; // unknown, or the strip itself (an app needn't be running)
     }
     editEffects(row, [index, &source](std::vector<EffectSettings> &effects) {
         if (index < 0 || std::cmp_greater_equal(index, effects.size())) {

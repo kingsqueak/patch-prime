@@ -313,7 +313,7 @@ QQC2.ApplicationWindow {
                                 onClicked: slot.allParams = !slot.allParams
                             }
 
-                            // A ducker's key: the strip whose sound turns this one down.
+                            // A ducker's key: the strip or app whose sound turns this one down.
                             RowLayout {
                                 Layout.fillWidth: true
                                 visible: slot.info.takesKey === true
@@ -325,20 +325,42 @@ QQC2.ApplicationWindow {
                                 QQC2.ComboBox {
                                     id: keyChoice
 
-                                    Layout.fillWidth: true
-                                    model: StripFilter {
-                                        sourceModel: Devices
-                                        stages: ["input", "bus", "output"]
+                                    // Strips, then apps that play sound (running or remembered).
+                                    readonly property var choices: {
+                                        const list = [];
+                                        for (let row = 0; row < keyStrips.count; ++row) {
+                                            const s = keyStrips.get(row);
+                                            if (s.key !== panel.key)
+                                                list.push({ key: s.key, label: s.label });
+                                        }
+                                        for (const app of Devices.apps) {
+                                            if (app.direction === "playback")
+                                                list.push({ key: app.key, label: qsTr("App: %1").arg(app.name) });
+                                        }
+                                        return list;
                                     }
+                                    function labelOf(key) {
+                                        const found = choices.find(c => c.key === key);
+                                        return found ? found.label : (key.startsWith("playback|") ? qsTr("App: %1").arg(key.slice(9)) : Devices.labelFor(key));
+                                    }
+
+                                    Layout.fillWidth: true
+                                    model: choices
                                     textRole: "label"
                                     valueRole: "key"
                                     displayText: (slot.modelData.key || "").length > 0
-                                                 ? Devices.labelFor(slot.modelData.key)
-                                                 : qsTr("None: choose the strip to listen to")
-                                    currentIndex: indexOfValue(slot.modelData.key || "")
+                                                 ? labelOf(slot.modelData.key)
+                                                 : qsTr("None: choose the strip or app to listen to")
+                                    currentIndex: choices.findIndex(c => c.key === (slot.modelData.key || ""))
                                     onActivated: Devices.setEffectKey(panel.key, slot.index, currentValue)
-                                    Accessible.name: qsTr("Key strip")
-                                    QQC2.ToolTip.text: qsTr("Turn this strip down while the chosen strip is above the threshold (e.g. music under the mic). A strip that this one feeds can't be chosen: that would be a loop.")
+                                    Accessible.name: qsTr("Key strip or app")
+                                    QQC2.ToolTip.text: qsTr("Turn this strip down while the chosen strip or app is above the threshold (e.g. music under the mic, or under Discord's voices). An app is heard after its own level and mute, wherever it plays. A strip that this one feeds can't be chosen: that would be a loop.")
+
+                                    StripFilter {
+                                        id: keyStrips
+                                        sourceModel: Devices
+                                        stages: ["input", "bus", "output"]
+                                    }
                                     QQC2.ToolTip.visible: hovered
                                     QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
                                 }

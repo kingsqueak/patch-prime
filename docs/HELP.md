@@ -238,7 +238,9 @@ Takes fans, hum and room noise out of a voice with RNNoise, a small neural netwo
 
 ### Ducker
 
-Turns this strip down by **Depth** while another strip, its **Key**, is above **Threshold**. Use it to dip music or game sound while you talk. Choose the key strip in the effect's panel. **Attack**, **Hold** and **Release** shape the dip.
+Turns this strip down by **Depth** while its **Key** is above **Threshold**. Use it to dip music or game sound while you talk. **Attack**, **Hold** and **Release** shape the dip.
+
+The key is chosen in the effect's panel. It can be another strip (your mic), or an app ("App: Discord"), to dip the music while the people in a call are talking. An app is heard as it plays, after its own level and mute, wherever it plays to; the apps listed are those that have played sound. If the app isn't running, nothing dips until it plays again.
 
 The GR meter shows how far it's dipping. A strip can't be keyed from a strip it feeds, or from a strip keyed by it: that would be a loop, and Patch Prime refuses it.
 
