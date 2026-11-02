@@ -12,8 +12,8 @@ import "effectmeters.js" as EffectMeters
 // going in (per channel), its gain reduction (dynamics only; the leveler's
 // gain both ways) and the level coming out, each with a readout below, on a
 // dB scale down to -80 (a mic's noise floor). Where a level is compared with
-// a setting, the setting is a line across the meter: the gate's threshold on
-// IN, the limiter's ceiling on IN and OUT, and the ducker's threshold on its
+// a setting, the setting is a line across the meter: the gate's, expander's
+// and compressor's threshold on IN, the limiter's ceiling on IN and OUT, and the ducker's threshold on its
 // KEY (the strip that turns this one down). The levels are measured only
 // while the effects window is open.
 RowLayout {
@@ -34,8 +34,10 @@ RowLayout {
     readonly property real floorDb: Devices.effectMeterFloorDb
     readonly property bool keyed: (levels.key || []).length > 0
     // The line on IN (and OUT), in dB, or NaN for none.
-    readonly property real inMark: type === "gate" ? param("threshold")
-                                 : type === "limiter" ? param("ceiling") : NaN
+    // (The compressor's threshold in use comes with its meters: the knob sets it.)
+    readonly property real inMark: type === "gate" || type === "expander" ? param("threshold")
+                                 : type === "limiter" ? param("ceiling")
+                                 : type === "compressor" && own.length > 1 ? own[1] : NaN
     readonly property string inMarkName: type === "limiter" ? qsTr("Ceiling") : qsTr("Threshold")
 
     // A peak (meter fraction) as dBFS text.

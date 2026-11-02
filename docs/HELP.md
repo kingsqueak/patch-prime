@@ -206,7 +206,7 @@ Click a strip's insert slots to open its effects window. The window is separate 
 - The **power button** on each effect turns it on or bypasses it, crossfading so it doesn't click.
 - Every value can be dragged or typed: click a value box, type (for example `2.5k`, `-6`, `40 ms`), and press Enter. Double-click a slider to reset it.
 - A strip without effects has no processing at all. Effects are saved with the strip and in scenes.
-- Each effect has a **meter bridge** on its right: **IN** and **OUT** levels (one bar per channel, left and right on stereo), with the peak in dBFS underneath, and between them **GR**, the gain reduction, for the effects that turn the sound down (gate, ducker, multiband compressor, limiter). The leveler shows **GAIN** instead, centred on 0 dB: up when it boosts, down when it cuts. Comparing IN and OUT shows what an effect does to the level, an EQ or reverb included. The scale reaches down to −80 dB, low enough to see a microphone's noise floor. Where an effect compares the level with a setting, the setting is a white line across the meter (hover it for the value): the gate's **Threshold** on IN, the limiter's **Ceiling** on IN and OUT, and the ducker's **Threshold** on its **KEY** meter, the level of the strip it listens to. See [Meters](#meters).
+- Each effect has a **meter bridge** on its right: **IN** and **OUT** levels (one bar per channel, left and right on stereo), with the peak in dBFS underneath, and between them **GR**, the gain reduction, for the effects that turn the sound down (compressor, de-esser, gate, expander, ducker, multiband compressor, limiter). The leveler shows **GAIN** instead, centred on 0 dB: up when it boosts, down when it cuts. Comparing IN and OUT shows what an effect does to the level, an EQ or reverb included. The scale reaches down to −80 dB, low enough to see a microphone's noise floor. Where an effect compares the level with a setting, the setting is a white line across the meter (hover it for the value): the compressor's, gate's and expander's **Threshold** on IN, the limiter's **Ceiling** on IN and OUT, and the ducker's **Threshold** on its **KEY** meter, the level of the strip it listens to. See [Meters](#meters).
 
 ### Parametric EQ
 
@@ -216,6 +216,22 @@ Six bands. Each band can be a bell, a low or high shelf, or a low or high cut (1
 - **In the table:** each band's on/off, type, frequency, gain and Q.
 
 A new EQ is flat: a low shelf at 80 Hz, bells at 250 Hz, 1 kHz, 3 kHz and 6 kHz, and a high shelf at 12 kHz.
+
+### Compressor
+
+Evens out a voice: loud words are turned down, so the quiet ones can come up. It's one knob, **Amount**: 0 % does nothing, 40 % is a light touch for speech, 100 % is heavy, radio-style. The knob sets the threshold, ratio, attack, release and makeup gain together, with the makeup chosen so your voice comes out about as loud as it went in, only steadier. The line on IN shows the threshold the knob is using, and GR how much it's turning down.
+
+Turn on **Advanced** for the controls themselves: **Threshold**, **Ratio**, **Attack**, **Release** and **Makeup**, in place of the knob. They start where the knob was, so nothing jumps. Turning Advanced off goes back to the knob, where you left it.
+
+### De-esser
+
+Softens harsh "s", "sh" and "t" sounds without dulling the voice. It watches the sound above **Frequency** (6 kHz to start), and while that's over **Threshold** it turns down only that part, by up to **Range** dB; the rest of the voice doesn't move. The GR meter shows how much it's cutting.
+
+To set it up, turn on **Listen**: you hear only the part it watches. Move **Frequency** until the "s" sounds stand out most (usually 5–8 kHz; lower for deeper voices), turn Listen off, then lower **Threshold** until GR moves on the "s" sounds and stays still on the rest.
+
+### Expander
+
+A gentler noise gate: below **Threshold** it turns the sound down gradually instead of shutting it. With **Ratio** 1:2, a sound 10 dB under the threshold comes out 20 dB under; **Range** is the most it will cut. Breaths and room sound between words drop away while the ends of words still trail off naturally. **Attack** is how fast it opens when you speak, **Release** how fast it closes. Put the threshold line between your quiet and your speaking level on IN, as with the gate.
 
 ### Multiband compressor
 
@@ -285,7 +301,8 @@ A plain level trim, ±24 dB.
 
 Effects settings can be saved and reused:
 
-- **Chain presets:** **Chain Presets** at the top of a strip's effects window saves all its effects, in order, under a name ("Podcast mic"). Loading one onto any strip replaces that strip's effects with it. MIDI controls and hotkeys on the strip's effects stay where the same kind of effect stays in the same place.
+- **Chain presets:** **Chain Presets** at the top of a strip's effects window saves all its effects, in order, under a name ("Podcast mic"). Loading one onto any strip replaces that strip's effects with it.
+- **Voice starting points:** the Chain Presets menu also has ready-made chains for a microphone, to load and then adjust: **Podcast voice** (cleaned up, compressed and levelled to −16 LUFS), **Streaming voice** (noise suppression, presence and compression, to sit over game or music), **Noisy room** (noise suppression and a gate first), **Radio voice** (fuller, brighter and more compressed) and **Natural voice** (a low cut, light compression and a de-esser). They're built in and can't be deleted; save your adjusted version as your own preset. MIDI controls and hotkeys on the strip's effects stay where the same kind of effect stays in the same place.
 - **Effect presets:** the bookmark button on each effect saves just that effect's settings ("Warm voice" for an EQ). Its menu loads them onto any effect of the same kind, keeping whether it's on or bypassed.
 - Both menus save under an existing name to replace it, and have **Delete**. Presets are kept in `~/.config/patchprime/presets.json`.
 - Plugins' presets keep the plugin's own state too (what its window changed). Saving a preset or a scene while a plugin's window is open first collects its latest state.
@@ -471,13 +488,17 @@ Both can be turned off on the **Devices** page, under **Desktop**.
 
 **Clean up a microphone**
 
-On the mic's strip, add these effects in this order:
+The quickest way: open the mic's effects, choose **Chain Presets → Voice Starting Points**, and pick the one closest to what you want. Then adjust the de-esser and the compressor's Amount to your voice.
 
-1. Noise suppression
-2. Noise gate
+To build it yourself, add these effects in this order:
+
+1. Noise suppression, or an expander in a quiet room
+2. Noise gate (if the room is noisy)
 3. EQ, with a low cut around 80 Hz
-4. Multiband compressor, or a broadcast leveler
-5. Safety limiter
+4. Compressor
+5. De-esser
+6. Broadcast leveler (for a steady loudness)
+7. Safety limiter
 
 **Music that dips while you talk**
 

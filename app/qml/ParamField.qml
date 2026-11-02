@@ -14,7 +14,7 @@ QQC2.TextField {
     id: field
 
     property real value: 0
-    property string unit // "Hz", "dB", "ms", "s", ":1", "%", "LUFS" or ""
+    property string unit // "Hz", "dB", "ms", "s", ":1", "1:", "%", "LUFS" or ""
     property string accessibleName
 
     signal requested(real value)
@@ -28,6 +28,8 @@ QQC2.TextField {
             return (v < 10 ? v.toFixed(1) : Math.round(v)) + " ms";
         if (unit === ":1")
             return v.toFixed(1) + ":1";
+        if (unit === "1:") // an expander's: 1:2 turns down twice as fast
+            return "1:" + v.toFixed(1);
         if (unit === "%")
             return Math.round(v) + " %";
         if (unit === "s")
@@ -55,6 +57,8 @@ QQC2.TextField {
             t = t.replace(/ms$/, "");
         } else if (unit === ":1") {
             t = t.replace(/:1$/, "");
+        } else if (unit === "1:") {
+            t = t.replace(/^1:/, "");
         } else if (unit === "%") {
             t = t.replace(/%$/, "");
         } else if (unit === "s") {

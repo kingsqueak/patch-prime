@@ -12,6 +12,7 @@
 #include "loudness.h"
 #include "multiband.h"
 #include "reverb.h"
+#include "voice.h"
 
 #include <algorithm>
 #include <array>
@@ -81,8 +82,17 @@ std::unique_ptr<Effect> makeEffect(const std::string &type)
     if (type == "multiband") {
         return std::make_unique<MultibandEffect>();
     }
+    if (type == "compressor") {
+        return std::make_unique<CompressorEffect>();
+    }
+    if (type == "deesser") {
+        return std::make_unique<DeEsserEffect>();
+    }
     if (type == "gate") {
         return std::make_unique<GateEffect>();
+    }
+    if (type == "expander") {
+        return std::make_unique<ExpanderEffect>();
     }
     if (type == "leveler") {
         return std::make_unique<LevelerEffect>();
@@ -136,7 +146,7 @@ double validParam(const ParamInfo &info, double value)
 
 std::vector<std::string> effectTypes()
 {
-    std::vector<std::string> types{"eq", "multiband", "gate", "ducker"};
+    std::vector<std::string> types{"eq", "compressor", "deesser", "multiband", "gate", "expander", "ducker"};
 #ifdef PATCHPRIME_HAVE_RNNOISE
     types.emplace_back("denoise");
 #endif
@@ -159,8 +169,17 @@ std::string effectLabel(const std::string &type)
     if (type == "multiband") {
         return "Multiband compressor";
     }
+    if (type == "compressor") {
+        return "Compressor";
+    }
+    if (type == "deesser") {
+        return "De-esser";
+    }
     if (type == "gate") {
         return "Noise gate";
+    }
+    if (type == "expander") {
+        return "Expander";
     }
     if (type == "ducker") {
         return "Ducker";
@@ -231,6 +250,29 @@ std::vector<ParamInfo> effectParams(const std::string &type)
                 param("attack", "Attack", "ms", 0.1, 50.0, 1.0, ParamKind::Log),
                 param("hold", "Hold", "ms", 0.0, 1000.0, 100.0),
                 param("release", "Release", "ms", 5.0, 2000.0, 150.0, ParamKind::Log)};
+    }
+    if (type == "compressor") {
+        const auto knob = CompressorEffect::fromAmount(40.0);
+        return {param("amount", "Amount", "%", 0.0, 100.0, 40.0),
+                param("advanced", "Advanced", "", 0.0, 1.0, 0.0, ParamKind::Toggle),
+                param("threshold", "Threshold", "dB", -60.0, 0.0, knob.threshold),
+                param("ratio", "Ratio", ":1", 1.0, 20.0, knob.ratio, ParamKind::Log),
+                param("attack", "Attack", "ms", 0.1, 200.0, knob.attack, ParamKind::Log),
+                param("release", "Release", "ms", 10.0, 3000.0, knob.release, ParamKind::Log),
+                param("makeup", "Makeup", "dB", -12.0, 24.0, knob.makeup)};
+    }
+    if (type == "deesser") {
+        return {param("frequency", "Frequency", "Hz", 2000.0, 12000.0, 6000.0, ParamKind::Log),
+                param("threshold", "Threshold", "dB", -60.0, 0.0, -30.0),
+                param("range", "Range", "dB", 0.0, 24.0, 10.0),
+                param("listen", "Listen", "", 0.0, 1.0, 0.0, ParamKind::Toggle)};
+    }
+    if (type == "expander") {
+        return {param("threshold", "Threshold", "dB", -80.0, 0.0, -45.0),
+                param("ratio", "Ratio", "1:", 1.0, 8.0, 2.0, ParamKind::Log),
+                param("range", "Range", "dB", 0.0, 60.0, 20.0),
+                param("attack", "Attack", "ms", 0.1, 50.0, 2.0, ParamKind::Log),
+                param("release", "Release", "ms", 10.0, 2000.0, 150.0, ParamKind::Log)};
     }
     if (type == "leveler") {
         return {param("target", "Target", "LUFS", -36.0, -6.0, -18.0),

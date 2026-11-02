@@ -512,6 +512,11 @@ void DaemonClient::loadChainPreset(const QString &key, const QString &name)
     call(QStringLiteral("LoadChainPreset"), {key, name});
 }
 
+void DaemonClient::loadVoiceChain(const QString &key, const QString &name)
+{
+    call(QStringLiteral("LoadVoiceChain"), {key, name});
+}
+
 void DaemonClient::deleteChainPreset(const QString &name)
 {
     call(QStringLiteral("DeleteChainPreset"), {name});
@@ -950,9 +955,11 @@ void DaemonClient::onStateChanged(const QString &state)
     }
 
     const auto chains = root.value(QLatin1String("chainPresets")).toVariant().toStringList();
+    const auto voices = root.value(QLatin1String("voiceChains")).toVariant().toStringList();
     if (const auto effects = root.value(QLatin1String("effectPresets")).toObject().toVariantMap();
-        chains != m_chainPresets || effects != m_effectPresets) {
+        chains != m_chainPresets || voices != m_voiceChains || effects != m_effectPresets) {
         m_chainPresets = chains;
+        m_voiceChains = voices;
         m_effectPresets = effects;
         Q_EMIT presetsChanged();
     }

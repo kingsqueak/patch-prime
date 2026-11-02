@@ -8,6 +8,7 @@
 #include "effects.h"
 #include "pipewiregraph.h"
 #include "plugins.h"
+#include "voice.h"
 
 #include <QLoggingCategory>
 
@@ -847,6 +848,17 @@ void DeviceModel::setEffectParam(int row, int index, const QString &name, double
                     return false;
                 }
                 e.params[key] = clamped;
+                if (e.type == "compressor" && key == "advanced" && clamped == 1.0) {
+                    // The advanced controls start where the knob was.
+                    const auto it = e.params.find("amount");
+                    const auto knob = CompressorEffect::fromAmount(
+                        it != e.params.end() ? it->second : effectParams("compressor").front().initial);
+                    e.params["threshold"] = knob.threshold;
+                    e.params["ratio"] = knob.ratio;
+                    e.params["attack"] = knob.attack;
+                    e.params["release"] = knob.release;
+                    e.params["makeup"] = knob.makeup;
+                }
                 return true;
             }
         }

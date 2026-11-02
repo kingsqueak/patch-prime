@@ -83,6 +83,29 @@ private Q_SLOTS:
         QCOMPARE(again.effectNames().at("gain"), QStringList{QStringLiteral("Quiet")});
     }
 
+    void voiceChainsAreValid()
+    {
+        const auto names = PresetStore::voiceChainNames();
+        QVERIFY(names.contains(QStringLiteral("Podcast voice")));
+        const auto types = effectTypes();
+        for (const auto &name : names) {
+            const auto chain = PresetStore::voiceChain(name);
+            QVERIFY(chain);
+            QVERIFY(!chain->empty());
+            QVERIFY(chain->size() <= maxEffectsPerStrip);
+            for (const auto &e : *chain) {
+                QVERIFY2(std::ranges::find(types, e.type) != types.end(), e.type.c_str());
+                const auto params = effectParams(e.type);
+                for (const auto &[param, value] : e.params) {
+                    const auto info = std::ranges::find(params, param, &ParamInfo::name);
+                    QVERIFY2(info != params.end(), param.c_str());
+                    QCOMPARE(validParam(*info, value), value);
+                }
+            }
+        }
+        QVERIFY(!PresetStore::voiceChain(QStringLiteral("nope")));
+    }
+
     void loadsOntoStrips()
     {
         QTemporaryDir dir;

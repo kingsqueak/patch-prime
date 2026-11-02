@@ -12,11 +12,120 @@
 #include <QSaveFile>
 #include <QStandardPaths>
 
+#include <array>
+
 namespace pp {
 
 PresetStore::PresetStore(QString path)
     : m_path(path.isEmpty() ? defaultPath() : std::move(path))
 {
+}
+
+namespace {
+
+// An EQ band's parameters: b<n>On/Type/Freq/Gain/Q. Types: 0 bell, 1 low
+// shelf, 2 high shelf, 3 low cut, 4 high cut (EqEffect::BandType).
+void band(std::map<std::string, double> &params, int n, int type, double freq, double gainDb,
+          double q)
+{
+    const auto prefix = "b" + std::to_string(n);
+    params[prefix + "On"] = 1.0;
+    params[prefix + "Type"] = type;
+    params[prefix + "Freq"] = freq;
+    params[prefix + "Gain"] = gainDb;
+    params[prefix + "Q"] = q;
+}
+
+EffectSettings fx(std::string type, std::map<std::string, double> params = {})
+{
+    return {.type = std::move(type), .enabled = true, .params = std::move(params), .key = {}, .state = {}};
+}
+
+std::vector<std::pair<QString, std::vector<EffectSettings>>> voiceChains()
+{
+    constexpr int bell = 0;
+    constexpr int lowShelf = 1;
+    constexpr int highShelf = 2;
+    constexpr int lowCut = 3;
+    const auto eq = [](const std::vector<std::array<double, 5>> &bands) {
+        std::map<std::string, double> params;
+        for (const auto &b : bands) {
+            band(params, static_cast<int>(b[0]), static_cast<int>(b[1]), b[2], b[3], b[4]);
+        }
+        return fx("eq", std::move(params));
+    };
+    const auto limiter = fx("limiter", {{"ceiling", -1.0}, {"truePeak", 1.0}});
+    std::vector<std::pair<QString, std::vector<EffectSettings>>> chains;
+    // Spoken word for a podcast: cleaned up, even, and at -16 LUFS.
+    chains.push_back({QStringLiteral("Podcast voice"),
+                      {eq({{1, lowCut, 80, 0, 0.707}, {2, bell, 250, -2, 1.0},
+                           {4, bell, 3000, 2, 0.8}, {6, highShelf, 12000, 1.5, 0.707}}),
+                       fx("expander", {{"threshold", -50.0}, {"ratio", 2.0}, {"range", 15.0}}),
+                       fx("compressor", {{"amount", 50.0}}),
+                       fx("deesser"),
+                       fx("leveler", {{"target", -16.0}}),
+                       limiter}});
+    // A mic over game or music on a stream: present and steady, room noise out.
+    std::vector<EffectSettings> streaming;
+#ifdef PATCHPRIME_HAVE_RNNOISE
+    streaming.push_back(fx("denoise"));
+#else
+    streaming.push_back(fx("expander", {{"threshold", -45.0}, {"ratio", 2.0}, {"range", 20.0}}));
+#endif
+    streaming.push_back(eq({{1, lowCut, 90, 0, 0.707}, {4, bell, 3500, 2.5, 0.8}}));
+    streaming.push_back(fx("compressor", {{"amount", 60.0}}));
+    streaming.push_back(fx("deesser"));
+    streaming.push_back(limiter);
+    chains.emplace_back(QStringLiteral("Streaming voice"), std::move(streaming));
+    // Fans, traffic, a keyboard: noise suppression and a gate first.
+    std::vector<EffectSettings> noisy;
+#ifdef PATCHPRIME_HAVE_RNNOISE
+    noisy.push_back(fx("denoise"));
+#endif
+    noisy.push_back(fx("gate", {{"threshold", -45.0}, {"range", 30.0}}));
+    noisy.push_back(eq({{1, lowCut, 100, 0, 0.707}, {2, bell, 400, -2, 1.0}}));
+    noisy.push_back(fx("compressor", {{"amount", 40.0}}));
+    noisy.push_back(fx("deesser"));
+    noisy.push_back(limiter);
+    chains.emplace_back(QStringLiteral("Noisy room"), std::move(noisy));
+    // Close and big, like a radio presenter: more low end, more presence,
+    // more compression.
+    chains.push_back({QStringLiteral("Radio voice"),
+                      {eq({{1, lowCut, 70, 0, 0.707}, {2, lowShelf, 150, 3, 0.707},
+                           {4, bell, 3000, 3, 0.7}, {6, highShelf, 10000, 2, 0.707}}),
+                       fx("expander", {{"threshold", -48.0}, {"ratio", 2.0}, {"range", 15.0}}),
+                       fx("compressor", {{"amount", 75.0}}),
+                       fx("deesser", {{"threshold", -32.0}}),
+                       fx("leveler", {{"target", -16.0}, {"speed", 3.0}}),
+                       limiter}});
+    // Just the basics, lightly: rumble out, a little compression, a ceiling.
+    chains.push_back({QStringLiteral("Natural voice"),
+                      {eq({{1, lowCut, 80, 0, 0.707}}),
+                       fx("compressor", {{"amount", 25.0}}),
+                       fx("deesser", {{"threshold", -28.0}, {"range", 6.0}}),
+                       limiter}});
+    return chains;
+}
+
+} // namespace
+
+QStringList PresetStore::voiceChainNames()
+{
+    QStringList names;
+    for (const auto &[name, chain] : voiceChains()) {
+        names.append(name);
+    }
+    return names;
+}
+
+std::optional<std::vector<EffectSettings>> PresetStore::voiceChain(const QString &name)
+{
+    for (auto &[n, chain] : voiceChains()) {
+        if (n == name) {
+            return std::move(chain);
+        }
+    }
+    return std::nullopt;
 }
 
 QString PresetStore::defaultPath()

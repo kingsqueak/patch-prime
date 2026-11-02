@@ -66,6 +66,7 @@ class DaemonClient : public QAbstractListModel
     Q_PROPERTY(QVariantList pads READ pads NOTIFY padsChanged)
     // Presets: chain preset names, and effect preset names by effect type.
     Q_PROPERTY(QStringList chainPresets READ chainPresets NOTIFY presetsChanged)
+    Q_PROPERTY(QStringList voiceChains READ voiceChains NOTIFY presetsChanged)
     Q_PROPERTY(QVariantMap effectPresets READ effectPresets NOTIFY presetsChanged)
     Q_PROPERTY(QString soundboardTarget READ soundboardTarget NOTIFY padsChanged)
     Q_PROPERTY(QVariantMap padProgress READ padProgress NOTIFY padProgressChanged)
@@ -196,10 +197,12 @@ public:
     Q_INVOKABLE void setTrayIcon(bool on);
     [[nodiscard]] QVariantList pads() const { return m_pads; }
     [[nodiscard]] QStringList chainPresets() const { return m_chainPresets; }
+    [[nodiscard]] QStringList voiceChains() const { return m_voiceChains; }
     [[nodiscard]] QVariantMap effectPresets() const { return m_effectPresets; }
     Q_INVOKABLE void saveChainPreset(const QString &key, const QString &name);
     Q_INVOKABLE void loadChainPreset(const QString &key, const QString &name);
     Q_INVOKABLE void deleteChainPreset(const QString &name);
+    Q_INVOKABLE void loadVoiceChain(const QString &key, const QString &name);
     Q_INVOKABLE void saveEffectPreset(const QString &key, int index, const QString &name);
     Q_INVOKABLE void loadEffectPreset(const QString &key, int index, const QString &name);
     Q_INVOKABLE void deleteEffectPreset(const QString &type, const QString &name);
@@ -427,6 +430,7 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     bool m_trayIcon = true;
     QVariantList m_pads;
     QStringList m_chainPresets;
+    QStringList m_voiceChains;
     QVariantMap m_effectPresets;
     QString m_soundboardTarget;
     QVariantMap m_padProgress;

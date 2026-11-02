@@ -44,6 +44,12 @@ public:
 
     static QString defaultPath();
 
+    // Ready-made voice chains to start from ("Podcast voice", ...), built
+    // in: not in the file, not deletable. Effects the build lacks (noise
+    // suppression without RNNoise) are left out.
+    static QStringList voiceChainNames();
+    static std::optional<std::vector<EffectSettings>> voiceChain(const QString &name);
+
 private:
     bool save();
 

@@ -8,13 +8,17 @@
 
 // The gain reduction in dB (0 or more), or null for a type that has none:
 // the gate's cut, the ducker's dip, the limiting, the multiband
-// compressor's deepest band, the leveler's cut.
+// compressor's deepest band, the leveler's cut, and the compressor's,
+// de-esser's and expander's.
 function gainReduction(type, values) {
     const v = values || [];
     switch (type) {
     case "gate":
     case "ducker":
     case "limiter":
+    case "compressor":
+    case "deesser":
+    case "expander":
         return v.length > 0 ? Math.max(0, v[0]) : 0;
     case "multiband":
         return v.length > 0 ? Math.max(0, ...v) : 0;
@@ -26,7 +30,7 @@ function gainReduction(type, values) {
 
 // The dB a full gain-reduction meter stands for.
 function reductionRange(type) {
-    return type === "gate" ? 40 : type === "limiter" ? 12 : 24;
+    return type === "gate" || type === "expander" ? 40 : type === "limiter" || type === "deesser" ? 12 : 24;
 }
 
 // The leveler both boosts and cuts: its meter is centred on 0 dB.

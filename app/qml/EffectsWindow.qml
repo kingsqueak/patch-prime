@@ -71,7 +71,10 @@ QQC2.ApplicationWindow {
                 onSave: name => Devices.saveChainPreset(panel.key, name)
                 onLoad: name => Devices.loadChainPreset(panel.key, name)
                 onRemove: name => Devices.deleteChainPreset(name)
-                QQC2.ToolTip.text: qsTr("Save these effects as a preset, or load a saved chain onto this strip")
+                starters: Devices.voiceChains
+                startersTitle: qsTr("Voice Starting Points")
+                onLoadStarter: name => Devices.loadVoiceChain(panel.key, name)
+                QQC2.ToolTip.text: qsTr("Save these effects as a preset, load a saved chain onto this strip, or start from a ready-made voice chain")
                 QQC2.ToolTip.visible: hovered
                 QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
             }
@@ -291,7 +294,13 @@ QQC2.ApplicationWindow {
                                 model: {
                                     if (slot.modelData.type === "eq" || slot.modelData.type === "multiband")
                                         return [];
-                                    const all = slot.info.params || [];
+                                    let all = slot.info.params || [];
+                                    // The compressor is one knob until Advanced is on, then
+                                    // its own controls without the knob.
+                                    if (slot.modelData.type === "compressor") {
+                                        const advanced = slot.modelData.params.advanced >= 0.5;
+                                        all = all.filter(p => p.name === "advanced" || (p.name === "amount") !== advanced);
+                                    }
                                     return slot.plugin && !slot.allParams ? all.slice(0, slot.paramLimit) : all;
                                 }
 

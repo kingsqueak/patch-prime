@@ -14,6 +14,7 @@
 #include "loudness.h"
 #include "multiband.h"
 #include "reverb.h"
+#include "voice.h"
 
 #include <QJsonArray>
 #include <QTemporaryDir>
@@ -523,6 +524,121 @@ private Q_SLOTS:
         ducker.process(after.planes.data(), 2, 48000 * 4);
         QVERIFY(std::abs(20.0 * std::log10(after.left.back() / 0.5)) < 0.1);
         QVERIFY(after.left[2400] < 0.2F); // still down 50 ms in (held)
+    }
+
+    void compressorKnob()
+    {
+        CompressorEffect off;
+        off.setParam("amount", 0.0);
+        off.prepare(rate, 2);
+        QVERIFY(std::abs(gainDb(sinePeak(off, 1000.0))) < 0.05); // 0 %: no change
+
+        // Full: 20 dB apart going in comes out much closer together.
+        const auto through = [](double amplitude) {
+            CompressorEffect full;
+            full.setParam("amount", 100.0);
+            full.prepare(rate, 2);
+            return 20.0 * std::log10(sinePeak(full, 1000.0, rate, amplitude));
+        };
+        const double loud = through(0.25);  // -12 dBFS
+        const double quiet = through(0.025); // -32 dBFS
+        QVERIFY2(loud - quiet < 10.0, qPrintable(QStringLiteral("%1 %2").arg(loud).arg(quiet)));
+        QVERIFY2(loud < -12.0 + 1.0, qPrintable(QString::number(loud))); // not louder than it came
+        // A sine 6 dB over a 3:1 threshold loses most of its static 4 dB:
+        // the level holds the peaks, it isn't fooled by each cycle's dips.
+        CompressorEffect steady;
+        steady.setParam("advanced", 1.0);
+        steady.setParam("threshold", -18.0);
+        steady.setParam("ratio", 3.0);
+        steady.prepare(rate, 2);
+        const double steadyDb = gainDb(sinePeak(steady, 200.0));
+        QVERIFY2(steadyDb < -3.0 && steadyDb > -4.5, qPrintable(QString::number(steadyDb)));
+        CompressorEffect meters;
+        meters.setParam("amount", 100.0);
+        meters.prepare(rate, 2);
+        sinePeak(meters, 1000.0);
+        std::array<float, 2> meter{};
+        QCOMPARE(meters.takeMeters(meter), 2U);
+        QVERIFY(meter[0] > 10.0F);
+        QCOMPARE(meter[1], -35.0F); // the knob's threshold
+
+        // Advanced: its own controls, the knob ignored.
+        CompressorEffect advanced;
+        advanced.setParam("amount", 100.0);
+        advanced.setParam("advanced", 1.0);
+        advanced.setParam("threshold", 0.0);
+        advanced.setParam("ratio", 1.0);
+        advanced.setParam("makeup", 6.0);
+        advanced.prepare(rate, 2);
+        QVERIFY(std::abs(gainDb(sinePeak(advanced, 1000.0)) - 6.0) < 0.05);
+    }
+
+    void compressorAdvancedStartsAtTheKnob()
+    {
+        QTemporaryDir dir;
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel model(&store);
+        model.upsertNode({.id = 10,
+                          .type = "PipeWire:Interface:Node",
+                          .version = 3,
+                          .props = {{"media.class", "Audio/Source"},
+                                    {"node.name", "mic"},
+                                    {"node.description", "Mic"},
+                                    {"audio.channels", "1"}}},
+                         nullptr);
+        const int row = model.rowForKey("Audio/Source|mic");
+        model.addEffect(row, QStringLiteral("compressor"));
+        model.setEffectParam(row, 0, QStringLiteral("amount"), 80.0);
+        model.setEffectParam(row, 0, QStringLiteral("advanced"), 1.0);
+        const auto &params = store.find("Audio/Source|mic")->effects[0].params;
+        const auto knob = CompressorEffect::fromAmount(80.0);
+        QCOMPARE(params.at("threshold"), knob.threshold);
+        QCOMPARE(params.at("ratio"), knob.ratio);
+        QCOMPARE(params.at("makeup"), knob.makeup);
+    }
+
+    void deEsserCutsOnlyTheHighs()
+    {
+        // A voice's body (500 Hz) at -12 dBFS: untouched.
+        DeEsserEffect low;
+        low.prepare(rate, 2);
+        QVERIFY2(std::abs(gainDb(sinePeak(low, 500.0))) < 0.2,
+                 qPrintable(QString::number(gainDb(sinePeak(low, 500.0)))));
+        // A hot "s" (8 kHz) at -12 dBFS: turned down.
+        DeEsserEffect high;
+        high.prepare(rate, 2);
+        const double cut = gainDb(sinePeak(high, 8000.0));
+        QVERIFY2(cut < -5.0 && cut > -11.0, qPrintable(QString::number(cut)));
+        std::array<float, 1> meter{};
+        QCOMPARE(high.takeMeters(meter), 1U);
+        QVERIFY(meter[0] > 9.0F); // at the 10 dB range
+        // The same "s" quietly: under the threshold, untouched.
+        DeEsserEffect quiet;
+        quiet.prepare(rate, 2);
+        QVERIFY(std::abs(20.0 * std::log10(sinePeak(quiet, 8000.0, rate, 0.01) / 0.01)) < 0.2);
+        // Listen: only what it watches, so the 500 Hz all but goes.
+        DeEsserEffect listen;
+        listen.setParam("listen", 1.0);
+        listen.prepare(rate, 2);
+        QVERIFY(gainDb(sinePeak(listen, 500.0)) < -30.0);
+    }
+
+    void expanderTurnsDownBelowThreshold()
+    {
+        ExpanderEffect speech; // threshold -45 dB, 1:2, range 20 dB
+        speech.prepare(rate, 2);
+        QVERIFY(std::abs(gainDb(sinePeak(speech, 1000.0))) < 0.05);
+        // 15 dB under the threshold: down another 15 dB.
+        ExpanderEffect room;
+        room.prepare(rate, 2);
+        const double amplitude = std::pow(10.0, -60.0 / 20.0);
+        const double cut = 20.0 * std::log10(sinePeak(room, 1000.0, rate, amplitude) / amplitude);
+        QVERIFY2(std::abs(cut + 15.0) < 1.5, qPrintable(QString::number(cut)));
+        // Far under: no more than the range.
+        ExpanderEffect silence;
+        silence.prepare(rate, 2);
+        const double tiny = 1e-5;
+        QVERIFY(20.0 * std::log10(sinePeak(silence, 1000.0, rate, tiny) / tiny) > -20.5);
     }
 
 #ifdef PATCHPRIME_HAVE_RNNOISE

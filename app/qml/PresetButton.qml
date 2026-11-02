@@ -8,17 +8,31 @@ import org.kingsqueak.patchprime.engine
 
 // A Presets button: its menu saves what's there under a name, loads one of
 // `names`, or deletes one. Used for whole effects chains and for single
-// effects; the owner does the saving and loading.
+// effects; the owner does the saving and loading. `starters` are built-in
+// presets to start from, in a submenu of their own (they can't be deleted).
 QQC2.ToolButton {
     id: button
 
     property var names: []
     property string saveTitle: qsTr("Save Preset")
     property string loadHint // the menu's note on what loading does
+    property var starters: []
+    property string startersTitle: qsTr("Starting Points")
 
     signal save(string name)
     signal load(string name)
+    signal loadStarter(string name)
     signal remove(string name)
+
+    // The starters' submenu goes in once there are any (they come with the
+    // daemon's first state).
+    property bool startersShown: false
+    onStartersChanged: {
+        if (!startersShown && starters.length > 0) {
+            menu.insertMenu(1, starterMenu);
+            startersShown = true;
+        }
+    }
 
     icon.name: "bookmarks"
     display: QQC2.AbstractButton.TextBesideIcon
@@ -78,6 +92,25 @@ QQC2.ToolButton {
                 onObjectAdded: (index, object) => deleteMenu.insertItem(index, object)
                 onObjectRemoved: (index, object) => deleteMenu.removeItem(object)
             }
+        }
+    }
+
+    QQC2.Menu {
+        id: starterMenu
+        title: button.startersTitle
+        icon.name: "games-config-options"
+
+        Instantiator {
+            model: button.starters
+
+            delegate: QQC2.MenuItem {
+                required property string modelData
+                text: modelData
+                onTriggered: button.loadStarter(modelData)
+            }
+
+            onObjectAdded: (index, object) => starterMenu.insertItem(index, object)
+            onObjectRemoved: (index, object) => starterMenu.removeItem(object)
         }
     }
 
