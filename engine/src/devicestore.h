@@ -210,6 +210,17 @@ public:
     void setArmed(std::vector<std::string> keys) { m_armed = std::move(keys); }
     [[nodiscard]] bool recordInputsRaw() const { return m_recordInputsRaw; }
     void setRecordInputsRaw(bool raw) { m_recordInputsRaw = raw; }
+    // Loudness for publishing: the strip measured (a key, or empty for
+    // none), and the targets: integrated loudness (LUFS) and true peak (dBTP).
+    [[nodiscard]] const std::string &loudnessStrip() const { return m_loudnessStrip; }
+    void setLoudnessStrip(std::string key) { m_loudnessStrip = std::move(key); }
+    [[nodiscard]] double loudnessTarget() const { return m_loudnessTarget; }
+    [[nodiscard]] double loudnessPeakTarget() const { return m_loudnessPeakTarget; }
+    void setLoudnessTargets(double lufs, double dbtp)
+    {
+        m_loudnessTarget = lufs;
+        m_loudnessPeakTarget = dbtp;
+    }
     // The scene last saved or loaded (empty for none), so it's still known
     // after a restart.
     [[nodiscard]] const std::string &currentScene() const { return m_currentScene; }
@@ -270,6 +281,9 @@ private:
     bool m_multitrack = false;
     std::vector<std::string> m_armed;
     bool m_recordInputsRaw = true;
+    std::string m_loudnessStrip;
+    double m_loudnessTarget = -16.0;
+    double m_loudnessPeakTarget = -1.0;
     std::string m_currentScene;
     std::string m_controlSurface;
     std::string m_midiController;

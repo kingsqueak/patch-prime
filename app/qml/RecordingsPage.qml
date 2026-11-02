@@ -99,6 +99,13 @@ Kirigami.ScrollablePage {
             contentItem: TakeControls {}
         }
 
+        // --- loudness for publishing
+        Kirigami.AbstractCard {
+            Layout.fillWidth: true
+
+            contentItem: LoudnessPanel {}
+        }
+
         // --- the files
         Kirigami.PlaceholderMessage {
             Layout.fillWidth: true

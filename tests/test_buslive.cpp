@@ -12,6 +12,7 @@
 #include "devicemodel.h"
 #include "pipewiregraph.h"
 #include "plugins.h"
+#include "loudnessmanager.h"
 #include "recordingmanager.h"
 #include "soundboard.h"
 
@@ -466,6 +467,57 @@ private Q_SLOTS:
         QVERIFY(QTest::qWaitFor(
             [&] { return !nodeNamed(m_graph, desktopNode) && !nodeNamed(m_graph, mixNode); },
             5000));
+    }
+
+    // Loudness for publishing on a mix bus: a tone (-6 dBFS peak) reads
+    // about -6.5 LUFS with a -6 dBTP true peak; recording the bus starts the
+    // measurement over.
+    void measuresLoudness()
+    {
+        QTemporaryDir dir;
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel devices(&store);
+        devices.attach(&m_graph);
+        BusManager buses(&m_graph, &devices);
+        m_owners.insert(busOwnerFor(store.path()));
+        RecordingManager recordings(&m_graph, &devices, &buses, dir.filePath(QStringLiteral("rec")));
+        LoudnessManager loudness(&m_graph, &devices, &buses, &recordings);
+
+        const auto mixKey = devices.createVirtual(QStringLiteral("Loud Mix"), EndpointKind::VirtualSink).toStdString();
+        const auto mixNode = store.find(mixKey)->busName;
+        QVERIFY(QTest::qWaitFor([&] { return nodeNamed(m_graph, mixNode) && devices.rowForKey(mixKey) >= 0; }, 5000));
+        QVERIFY(!loudness.measuring());
+        loudness.setStrip(mixKey);
+        QCOMPARE(store.loudnessStrip(), mixKey);
+        const auto meterNode = std::string(LoudnessManager::nodeName);
+        QVERIFY(QTest::qWaitFor([&] { return loudness.measuring() && linkCount(m_graph, mixNode, meterNode) == 2; }, 5000));
+
+        QTemporaryDir toneDir;
+        const auto tone = toneDir.filePath(QStringLiteral("tone.wav"));
+        QVERIFY(writeTone(tone, 5));
+        QProcess player;
+        player.start(QStringLiteral("pw-play"),
+                     {QStringLiteral("-P"), QStringLiteral(R"({ patchprime.scope = "test-untouched" })"),
+                      QStringLiteral("--target"), QString::fromStdString(mixNode), tone});
+        QVERIFY(QTest::qWaitFor([&] { return std::isfinite(loudness.analysis().integrated()) && loudness.analysis().seconds() > 2.0; }, 8000));
+        const double integrated = loudness.analysis().integrated();
+        const double peak = loudness.analysis().truePeakDb();
+        QVERIFY2(integrated > -9.0 && integrated < -4.0, qPrintable(QString::number(integrated)));
+        QVERIFY2(peak > -6.6 && peak < -5.4, qPrintable(QString::number(peak)));
+
+        // Recording the bus: from here.
+        const double before = loudness.analysis().seconds();
+        QString error;
+        QVERIFY2(recordings.start(mixKey, &error), qPrintable(error));
+        QVERIFY(loudness.analysis().seconds() < before);
+        recordings.stop(mixKey);
+        player.kill();
+        player.waitForFinished();
+
+        loudness.setStrip({});
+        QVERIFY(QTest::qWaitFor([&] { return !loudness.measuring() && !nodeNamed(m_graph, meterNode); }, 5000));
+        devices.forget(devices.rowForKey(mixKey));
+        QVERIFY(QTest::qWaitFor([&] { return !nodeNamed(m_graph, mixNode); }, 5000));
     }
 
     // A multitrack take: two armed mix buses, one stream, a file each, the

@@ -300,6 +300,21 @@ void DaemonClient::stopTake()
     call(QStringLiteral("StopTake"), {});
 }
 
+void DaemonClient::setLoudnessStrip(const QString &key)
+{
+    call(QStringLiteral("SetLoudnessStrip"), {key});
+}
+
+void DaemonClient::setLoudnessTarget(double lufs, double dbtp)
+{
+    call(QStringLiteral("SetLoudnessTarget"), {lufs, dbtp});
+}
+
+void DaemonClient::resetLoudness()
+{
+    call(QStringLiteral("ResetLoudness"), {});
+}
+
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static): QML calls it on the instance
 QVariantList DaemonClient::recordings() const
 {
@@ -881,6 +896,25 @@ void DaemonClient::onStateChanged(const QString &state)
         }
     }
 
+    {
+        const auto strip = root.value(QLatin1String("loudnessStrip")).toString();
+        const bool measuring = root.value(QLatin1String("loudnessMeasuring")).toBool();
+        const double target = root.value(QLatin1String("loudnessTarget")).toDouble(-16.0);
+        const double peak = root.value(QLatin1String("loudnessPeakTarget")).toDouble(-1.0);
+        if (strip != m_loudnessStrip || measuring != m_loudnessMeasuring || target != m_loudnessTarget ||
+            peak != m_loudnessPeakTarget) {
+            m_loudnessStrip = strip;
+            m_loudnessMeasuring = measuring;
+            m_loudnessTarget = target;
+            m_loudnessPeakTarget = peak;
+            if (!measuring && !m_loudness.isEmpty()) {
+                m_loudness.clear();
+                Q_EMIT loudnessLevelsChanged();
+            }
+            Q_EMIT loudnessChanged();
+        }
+    }
+
     if (const auto cue = root.value(QLatin1String("cueOutput")).toString(); cue != m_cueOutput) {
         m_cueOutput = cue;
         Q_EMIT cueOutputChanged();
@@ -1132,6 +1166,17 @@ void DaemonClient::onLevels(const QVariantMap &levels)
             if (!peaks.isEmpty()) {
                 m_recordingSeconds.insert(it.key().mid(4), peaks.front());
                 timesChanged = true;
+            }
+            continue;
+        }
+        if (it.key() == QLatin1String("loudness")) {
+            QVariantList values;
+            for (const double v : peaks) {
+                values.append(v);
+            }
+            if (values != m_loudness) {
+                m_loudness = values;
+                Q_EMIT loudnessLevelsChanged();
             }
             continue;
         }

@@ -27,6 +27,7 @@ class DeviceModel;
 class PipeWireGraph;
 class PluginCatalog;
 class PresetStore;
+class LoudnessManager;
 class RecordingManager;
 } // namespace pp
 
@@ -51,7 +52,9 @@ class RecordingManager;
 // on a strip with a key input (a ducker's) [key peak, key RMS].
 // While recording or playing: "rec|<device key>" -> [seconds recorded],
 // "take" -> [seconds] while a multitrack take records, and "player" ->
-// [position in seconds].
+// [position in seconds]. While a strip's loudness is measured: "loudness" ->
+// [momentary, short-term, integrated (LUFS), range (LU), true peak (dBTP),
+// seconds], with -1000 for readings that don't exist yet.
 class PatchPrimeService : public QObject, protected QDBusContext
 {
     Q_OBJECT
@@ -78,6 +81,7 @@ public:
     void setAppMixer(pp::AppMixer *mixer);
     // The soundboard (optional).
     void setSoundboard(pp::Soundboard *soundboard);
+    void setLoudness(pp::LoudnessManager *loudness);
     // Effect presets (optional).
     void setPresets(pp::PresetStore *presets);
 
@@ -205,6 +209,14 @@ public Q_SLOTS:
     void SetRecordInputsRaw(bool raw);
     QString StartTake();
     void StopTake();
+    // Loudness for publishing on one strip (state: "loudnessStrip" = its key
+    // or "", "loudnessMeasuring", "loudnessTarget" (LUFS), "loudnessPeakTarget"
+    // (dBTP), "loudnessNow" = {momentary, shortTerm, integrated, range,
+    // truePeak, seconds}, null for readings that don't exist yet). It starts
+    // over on ResetLoudness and when the strip starts recording.
+    void SetLoudnessStrip(const QString &key);
+    void SetLoudnessTarget(double lufs, double dbtp);
+    void ResetLoudness();
     // "flac", "wav" or "mp3" (those this build can write are in the state as
     // "recordingFormats"); applies to the next recording.
     void SetRecordingFormat(const QString &format);
@@ -318,6 +330,7 @@ private:
     pp::Hotkeys *m_hotkeys = nullptr;
     pp::AppMixer *m_appMixer = nullptr;
     pp::Soundboard *m_soundboard = nullptr;
+    pp::LoudnessManager *m_loudness = nullptr;
     pp::PresetStore *m_presets = nullptr;
     int m_recordingsRevision = 0;
     pp::SceneStore *m_scenes;

@@ -69,6 +69,45 @@ double lufsFromMeanSquare(double meanSquare)
     return -0.691 + (10.0 * std::log10(std::max(meanSquare, 1e-12)));
 }
 
+// --- TruePeakDetector ---------------------------------------------------------
+
+namespace {
+
+// BS.1770-4 Annex 2: the four phases of the 48-tap interpolator.
+constexpr std::array<std::array<float, TruePeakDetector::taps>, 4> truePeakPhases{{
+    {0.0017089843750F, 0.0109863281250F, -0.0196533203125F, 0.0332031250000F, -0.0594482421875F,
+     0.1373291015625F, 0.9721679687500F, -0.1022949218750F, 0.0476074218750F, -0.0266113281250F,
+     0.0148925781250F, -0.0083007812500F},
+    {-0.0291748046875F, 0.0292968750000F, -0.0517578125000F, 0.0891113281250F, -0.1665039062500F,
+     0.4650878906250F, 0.7797851562500F, -0.2003173828125F, 0.1015625000000F, -0.0582275390625F,
+     0.0330810546875F, -0.0189208984375F},
+    {-0.0189208984375F, 0.0330810546875F, -0.0582275390625F, 0.1015625000000F, -0.2003173828125F,
+     0.7797851562500F, 0.4650878906250F, -0.1665039062500F, 0.0891113281250F, -0.0517578125000F,
+     0.0292968750000F, -0.0291748046875F},
+    {-0.0083007812500F, 0.0148925781250F, -0.0266113281250F, 0.0476074218750F, -0.1022949218750F,
+     0.9721679687500F, 0.1373291015625F, -0.0594482421875F, 0.0332031250000F, -0.0196533203125F,
+     0.0109863281250F, 0.0017089843750F},
+}};
+
+} // namespace
+
+float TruePeakDetector::process(float sample) noexcept
+{
+    for (std::size_t i = m_history.size() - 1; i > 0; --i) {
+        m_history.at(i) = m_history.at(i - 1);
+    }
+    m_history.front() = sample;
+    float peak = 0.0F;
+    for (const auto &phase : truePeakPhases) {
+        float y = 0.0F;
+        for (std::size_t j = 0; j < phase.size(); ++j) {
+            y += phase.at(j) * m_history.at(j);
+        }
+        peak = std::max(peak, std::abs(y));
+    }
+    return peak;
+}
+
 // --- LevelerEffect -----------------------------------------------------------------
 
 void LevelerEffect::prepare(double sampleRate, int /*channels*/)
@@ -167,8 +206,11 @@ void LevelerEffect::process(float *const *channels, int channelCount, int frames
 void LimiterEffect::prepare(double sampleRate, int /*channels*/)
 {
     m_rate = sampleRate;
-    m_length = std::clamp(static_cast<int>(std::lround(lookaheadSeconds * sampleRate)) + 1, 1,
-                          maxLookahead);
+    // The true-peak detector's delay is looked ahead too, so its readings
+    // (a few samples late) still come before their samples leave.
+    m_length = std::clamp(static_cast<int>(std::lround(lookaheadSeconds * sampleRate)) + 1 +
+                              TruePeakDetector::delay,
+                          1, maxLookahead);
     resume();
 }
 
@@ -184,6 +226,9 @@ void LimiterEffect::resume() noexcept
     m_minAge = 0;
     m_released = 1.0;
     m_sum = m_length;
+    for (auto &d : m_detectors) {
+        d.reset();
+    }
 }
 
 void LimiterEffect::setParam(const std::string &name, double value)
@@ -192,6 +237,8 @@ void LimiterEffect::setParam(const std::string &name, double value)
         m_ceiling = static_cast<float>(std::clamp(value, -24.0, 0.0));
     } else if (name == "release") {
         m_release = static_cast<float>(std::clamp(value, 5.0, 2000.0));
+    } else if (name == "truePeak") {
+        m_truePeak = value >= 0.5;
     }
 }
 
@@ -213,6 +260,7 @@ void LimiterEffect::process(float *const *channels, int channelCount, int frames
     const double release =
         std::exp(-1.0 / (m_release.load(std::memory_order_relaxed) * 0.001 * m_rate));
     const auto length = static_cast<std::size_t>(m_length);
+    const bool truePeak = m_truePeak.load(std::memory_order_relaxed);
     double deepest = 1.0;
 
     // Each sample's needed gain is held as the minimum over the lookahead
@@ -224,7 +272,10 @@ void LimiterEffect::process(float *const *channels, int channelCount, int frames
         double peak = 0.0;
         for (std::size_t c = 0; c < count; ++c) {
             // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-            peak = std::max(peak, static_cast<double>(std::abs(planes[c][i])));
+            const float x = planes[c][i];
+            // The detector runs either way, so switching it on finds it settled.
+            const float between = m_detectors.at(c).process(x);
+            peak = std::max(peak, static_cast<double>(truePeak ? std::max(between, std::abs(x)) : std::abs(x)));
         }
         const double need = peak > ceiling ? ceiling / peak : 1.0;
         m_needed.at(at) = need;

@@ -11,6 +11,7 @@
 #include "devicemodel.h"
 #include "endpoint.h"
 #include "hotkeys.h"
+#include "loudnessmanager.h"
 #include "mackiecontrol.h"
 #include "osd.h"
 #include "midimapper.h"
@@ -30,6 +31,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <set>
 
 PatchPrimeService::PatchPrimeService(pp::PipeWireGraph *graph, pp::DeviceModel *devices,
@@ -145,6 +147,12 @@ void PatchPrimeService::setSoundboard(pp::Soundboard *soundboard)
 {
     m_soundboard = soundboard;
     connect(soundboard, &pp::Soundboard::changed, this, &PatchPrimeService::scheduleState);
+}
+
+void PatchPrimeService::setLoudness(pp::LoudnessManager *loudness)
+{
+    m_loudness = loudness;
+    connect(loudness, &pp::LoudnessManager::changed, this, &PatchPrimeService::scheduleState);
 }
 
 void PatchPrimeService::setHotkeys(pp::Hotkeys *hotkeys)
@@ -299,6 +307,25 @@ QString PatchPrimeService::GetState() const
          }()},
         {QStringLiteral("recordInputsRaw"), m_recordings->recordInputsRaw()},
         {QStringLiteral("takeFolder"), m_recordings->takeFolder()},
+        {QStringLiteral("loudnessStrip"), m_loudness != nullptr ? QString::fromStdString(m_loudness->strip()) : QString()},
+        {QStringLiteral("loudnessMeasuring"), m_loudness != nullptr && m_loudness->measuring()},
+        {QStringLiteral("loudnessTarget"), m_loudness != nullptr ? m_loudness->target() : -16.0},
+        {QStringLiteral("loudnessPeakTarget"), m_loudness != nullptr ? m_loudness->peakTarget() : -1.0},
+        {QStringLiteral("loudnessNow"), [this] {
+             if (m_loudness == nullptr || !m_loudness->measuring()) {
+                 return QJsonValue();
+             }
+             const auto &a = m_loudness->analysis();
+             const auto value = [](double v) { return std::isfinite(v) ? QJsonValue(v) : QJsonValue(); };
+             return QJsonValue(QJsonObject{
+                 {QStringLiteral("momentary"), value(a.momentary())},
+                 {QStringLiteral("shortTerm"), value(a.shortTerm())},
+                 {QStringLiteral("integrated"), value(a.integrated())},
+                 {QStringLiteral("range"), value(a.range())},
+                 {QStringLiteral("truePeak"), value(a.truePeakDb())},
+                 {QStringLiteral("seconds"), a.seconds()},
+             });
+         }()},
         {QStringLiteral("recordingsRevision"), m_recordingsRevision},
         {QStringLiteral("controlSurface"), QString::fromStdString(m_devices->store().controlSurface())},
         {QStringLiteral("controlSurfaceAvailable"), m_midi != nullptr && m_midi->isAvailable()},
@@ -685,6 +712,27 @@ void PatchPrimeService::StopRecording(const QString &key)
     m_recordings->stop(key.toStdString());
 }
 
+void PatchPrimeService::SetLoudnessStrip(const QString &key)
+{
+    if (m_loudness != nullptr) {
+        m_loudness->setStrip(key.toStdString());
+    }
+}
+
+void PatchPrimeService::SetLoudnessTarget(double lufs, double dbtp)
+{
+    if (m_loudness != nullptr) {
+        m_loudness->setTargets(lufs, dbtp);
+    }
+}
+
+void PatchPrimeService::ResetLoudness()
+{
+    if (m_loudness != nullptr) {
+        m_loudness->reset();
+    }
+}
+
 void PatchPrimeService::SetMultitrack(bool on)
 {
     m_recordings->setMultitrack(on);
@@ -1011,6 +1059,14 @@ void PatchPrimeService::emitLevels()
     for (const auto &[key, seconds] : m_recordings->recordedSeconds()) {
         levels.insert(QStringLiteral("rec|") + QString::fromStdString(key),
                       QVariant::fromValue(QList<double>{seconds}));
+    }
+    if (m_loudness != nullptr && m_loudness->measuring()) {
+        const auto &a = m_loudness->analysis();
+        const auto value = [](double v) { return std::isfinite(v) ? v : -1000.0; };
+        levels.insert(QStringLiteral("loudness"),
+                      QVariant::fromValue(QList<double>{value(a.momentary()), value(a.shortTerm()),
+                                                        value(a.integrated()), value(a.range()),
+                                                        value(a.truePeakDb()), a.seconds()}));
     }
     if (m_recordings->takeRunning()) {
         levels.insert(QStringLiteral("take"), QVariant::fromValue(QList<double>{m_recordings->takeSeconds()}));

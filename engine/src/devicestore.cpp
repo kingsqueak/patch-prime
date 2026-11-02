@@ -244,6 +244,9 @@ bool DeviceStore::load()
     m_multitrack = false;
     m_armed.clear();
     m_recordInputsRaw = true;
+    m_loudnessStrip.clear();
+    m_loudnessTarget = -16.0;
+    m_loudnessPeakTarget = -1.0;
     m_currentScene.clear();
     m_controlSurface.clear();
     m_midiController.clear();
@@ -284,6 +287,9 @@ bool DeviceStore::load()
         }
     }
     m_recordInputsRaw = root.value(QLatin1String("recordInputsRaw")).toBool(true);
+    m_loudnessStrip = root.value(QLatin1String("loudnessStrip")).toString().toStdString();
+    m_loudnessTarget = std::clamp(root.value(QLatin1String("loudnessTarget")).toDouble(-16.0), -40.0, 0.0);
+    m_loudnessPeakTarget = std::clamp(root.value(QLatin1String("loudnessPeakTarget")).toDouble(-1.0), -12.0, 0.0);
     m_currentScene = root.value(QLatin1String("currentScene")).toString().toStdString();
     m_controlSurface = root.value(QLatin1String("controlSurface")).toString().toStdString();
     m_midiController = root.value(QLatin1String("midiController")).toString().toStdString();
@@ -345,6 +351,9 @@ bool DeviceStore::save()
              return armed;
          }()},
         {QStringLiteral("recordInputsRaw"), m_recordInputsRaw},
+        {QStringLiteral("loudnessStrip"), qs(m_loudnessStrip)},
+        {QStringLiteral("loudnessTarget"), m_loudnessTarget},
+        {QStringLiteral("loudnessPeakTarget"), m_loudnessPeakTarget},
         {QStringLiteral("currentScene"), qs(m_currentScene)},
         {QStringLiteral("controlSurface"), qs(m_controlSurface)},
         {QStringLiteral("midiController"), qs(m_midiController)},
@@ -429,6 +438,9 @@ bool DeviceStore::remove(const std::string &key)
         m_soundboardTarget.clear();
     }
     std::erase(m_armed, key);
+    if (m_loudnessStrip == key) {
+        m_loudnessStrip.clear();
+    }
     return true;
 }
 
@@ -450,6 +462,9 @@ bool DeviceStore::rekey(const std::string &from, const std::string &to)
         m_playerTarget = to;
     }
     std::ranges::replace(m_armed, from, to);
+    if (m_loudnessStrip == from) {
+        m_loudnessStrip = to;
+    }
     if (m_cueOutput == from) {
         m_cueOutput = to;
     }

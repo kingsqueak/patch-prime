@@ -478,6 +478,28 @@ void DeviceModel::setRecordInputsRaw(bool raw)
     Q_EMIT recordingSettingsChanged();
 }
 
+void DeviceModel::setLoudnessStrip(const std::string &key)
+{
+    if (key == m_store->loudnessStrip() || (!key.empty() && rowForKey(key) < 0)) {
+        return;
+    }
+    m_store->setLoudnessStrip(key);
+    saveStore();
+    Q_EMIT loudnessSettingsChanged();
+}
+
+void DeviceModel::setLoudnessTargets(double lufs, double dbtp)
+{
+    lufs = std::clamp(lufs, -40.0, 0.0);
+    dbtp = std::clamp(dbtp, -12.0, 0.0);
+    if (lufs == m_store->loudnessTarget() && dbtp == m_store->loudnessPeakTarget()) {
+        return;
+    }
+    m_store->setLoudnessTargets(lufs, dbtp);
+    saveStore();
+    Q_EMIT loudnessSettingsChanged();
+}
+
 void DeviceModel::setControlSurface(const std::string &id)
 {
     if (id == m_store->controlSurface()) {

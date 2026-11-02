@@ -26,6 +26,23 @@ struct KWeighting
 // LUFS from the summed mean square of the K-weighted channels.
 double lufsFromMeanSquare(double meanSquare);
 
+// True peak (ITU-R BS.1770-4 Annex 2) of one channel: each sample
+// interpolated four times over with the standard 48-tap filter; process()
+// gives the largest of the four (absolute, linear). The interpolated values
+// come about `delay` samples late.
+class TruePeakDetector
+{
+public:
+    static constexpr int taps = 12; // per phase
+    static constexpr int delay = 6;
+
+    void reset() noexcept { m_history.fill(0.0F); }
+    float process(float sample) noexcept;
+
+private:
+    std::array<float, taps> m_history{}; // newest first
+};
+
 // A broadcast leveler: rides the strip's gain slowly towards a target
 // loudness, like a radio station's AGC, so quiet and loud sources come out
 // alike. Loudness is K-weighted (LUFS) over about a second.
@@ -68,8 +85,11 @@ private:
 };
 
 // A safety limiter: no sample leaves above the "ceiling" (dBFS). It looks
-// 1.5 ms ahead (that much latency), so the gain is already down when a peak
-// arrives, then recovers over "release" (ms). Channels linked.
+// 1.5 ms ahead (that much latency, plus the true-peak detector's few
+// samples), so the gain is already down when a peak arrives, then recovers
+// over "release" (ms). Channels linked. With "truePeak" on, the ceiling is in
+// dBTP: peaks between samples (as a DAC or a lossy encoder makes them) are
+// held under it too.
 class LimiterEffect : public Effect
 {
 public:
@@ -88,7 +108,9 @@ public:
 private:
     std::atomic<float> m_ceiling{-1.0F};
     std::atomic<float> m_release{100.0F};
+    std::atomic<bool> m_truePeak{false};
     std::atomic<float> m_meter{0.0F};
+    std::array<TruePeakDetector, maxEffectChannels> m_detectors{}; // realtime only
     // Realtime only.
     int m_length = 1;                                  // lookahead in samples
     int m_at = 0;                                      // ring position

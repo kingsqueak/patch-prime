@@ -116,6 +116,14 @@ class DaemonClient : public QAbstractListModel
     Q_PROPERTY(bool recordInputsRaw READ recordInputsRaw NOTIFY recordingChanged)
     Q_PROPERTY(QString takeFolder READ takeFolder NOTIFY recordingChanged)
     Q_PROPERTY(double takeSeconds READ takeSeconds NOTIFY recordingTimesChanged)
+    // Loudness for publishing: the strip measured ("" for none), whether it's
+    // running, the targets (LUFS, dBTP), and the readings [momentary,
+    // short-term, integrated, range, true peak, seconds] (-1000 = none yet).
+    Q_PROPERTY(QString loudnessStrip READ loudnessStrip NOTIFY loudnessChanged)
+    Q_PROPERTY(bool loudnessMeasuring READ loudnessMeasuring NOTIFY loudnessChanged)
+    Q_PROPERTY(double loudnessTarget READ loudnessTarget NOTIFY loudnessChanged)
+    Q_PROPERTY(double loudnessPeakTarget READ loudnessPeakTarget NOTIFY loudnessChanged)
+    Q_PROPERTY(QVariantList loudness READ loudness NOTIFY loudnessLevelsChanged)
     // Goes up when the folder's files change (call recordings() again).
     Q_PROPERTY(int recordingsRevision READ recordingsRevision NOTIFY recordingChanged)
     // The player: {path (empty when stopped), paused, duration, loop}, where it
@@ -232,6 +240,11 @@ public:
     [[nodiscard]] bool recordInputsRaw() const { return m_recordInputsRaw; }
     [[nodiscard]] QString takeFolder() const { return m_takeFolder; }
     [[nodiscard]] double takeSeconds() const { return m_takeSeconds; }
+    [[nodiscard]] QString loudnessStrip() const { return m_loudnessStrip; }
+    [[nodiscard]] bool loudnessMeasuring() const { return m_loudnessMeasuring; }
+    [[nodiscard]] double loudnessTarget() const { return m_loudnessTarget; }
+    [[nodiscard]] double loudnessPeakTarget() const { return m_loudnessPeakTarget; }
+    [[nodiscard]] QVariantList loudness() const { return m_loudness; }
     [[nodiscard]] int recordingsRevision() const { return m_recordingsRevision; }
     [[nodiscard]] QVariantMap player() const { return m_player; }
     [[nodiscard]] double playerPosition() const { return m_playerPosition; }
@@ -296,6 +309,9 @@ public:
     Q_INVOKABLE void setRecordInputsRaw(bool raw);
     Q_INVOKABLE void startTake();
     Q_INVOKABLE void stopTake();
+    Q_INVOKABLE void setLoudnessStrip(const QString &key);
+    Q_INVOKABLE void setLoudnessTarget(double lufs, double dbtp);
+    Q_INVOKABLE void resetLoudness();
     // The recordings folder's files, newest first: [{path, name, seconds,
     // bytes, modified}]. Asks the daemon and waits for the answer.
     [[nodiscard]] Q_INVOKABLE QVariantList recordings() const;
@@ -342,6 +358,8 @@ Q_SIGNALS:
     void effectMetersChanged();
     void recordingChanged();
     void recordingTimesChanged();
+    void loudnessChanged();
+    void loudnessLevelsChanged();
 
 private Q_SLOTS:
     void onStateChanged(const QString &state);
@@ -430,6 +448,11 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     bool m_recordInputsRaw = true;
     QString m_takeFolder;
     double m_takeSeconds = 0.0;
+    QString m_loudnessStrip;
+    bool m_loudnessMeasuring = false;
+    double m_loudnessTarget = -16.0;
+    double m_loudnessPeakTarget = -1.0;
+    QVariantList m_loudness;
     int m_recordingsRevision = 0;
     QVariantMap m_player;
     double m_playerPosition = 0.0;

@@ -104,6 +104,10 @@ private Q_SLOTS:
             store.setMultitrack(true);
             store.setArmed({"mic", "mix"});
             store.setRecordInputsRaw(false);
+            QCOMPARE(store.loudnessTarget(), -16.0); // the defaults
+            QCOMPARE(store.loudnessPeakTarget(), -1.0);
+            store.setLoudnessStrip("mix");
+            store.setLoudnessTargets(-14.0, -2.0);
             QVERIFY(store.save());
         }
         DeviceStore store(path);
@@ -129,6 +133,9 @@ private Q_SLOTS:
         QVERIFY(store.multitrack());
         QCOMPARE(store.armed(), (std::vector<std::string>{"mic", "mix"}));
         QVERIFY(!store.recordInputsRaw());
+        QCOMPARE(store.loudnessStrip(), "mix");
+        QCOMPARE(store.loudnessTarget(), -14.0);
+        QCOMPARE(store.loudnessPeakTarget(), -2.0);
 
         // A re-attached destination keeps its sends; a removed one drops them.
         QVERIFY(store.rekey("phones", "phones2"));
@@ -136,7 +143,9 @@ private Q_SLOTS:
         QVERIFY(store.rekey("mix", "mix2")); // the send level follows its destination
         QCOMPARE(store.find("mic")->sendLevels.at("mix2"), -6.0);
         QCOMPARE(store.armed(), (std::vector<std::string>{"mic", "mix2"})); // armed strips follow too
+        QCOMPARE(store.loudnessStrip(), "mix2");
         QVERIFY(store.remove("mix2"));
+        QVERIFY(store.loudnessStrip().empty());
         QCOMPARE(store.armed(), std::vector<std::string>{"mic"});
         QCOMPARE(store.find("mic")->sends, std::vector<std::string>{"phones2"});
         QVERIFY(store.find("mic")->sendLevels.empty());

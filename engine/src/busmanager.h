@@ -281,6 +281,9 @@ public:
     };
     void setTaps(std::map<std::string, std::vector<TapTrack>> recorders, std::string playerNode,
                  std::string playerTarget);
+    // The loudness meter's node (see LoudnessManager), linked like a
+    // recorder of one track; an empty node for none.
+    void setLoudnessTap(std::string node, TapTrack track);
     // The soundboard's pad streams playing now (node name -> the key of the
     // strip they play into: a mix bus, Desktop or an output), linked into
     // it like the player.
@@ -440,6 +443,8 @@ private:
     // when cue moves elsewhere or is turned off.
     std::optional<std::uint32_t> m_cueHardware;
     std::map<std::string, std::vector<TapTrack>> m_recorders; // by node name
+    std::string m_loudnessNode;
+    TapTrack m_loudnessTrack;
     std::string m_playerNode;
     std::string m_playerTarget; // endpoint key
     std::map<std::string, std::string> m_pads; // pad stream node -> endpoint key

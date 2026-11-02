@@ -259,6 +259,8 @@ The GAIN meter shows the gain it's applying, and **Loudness** what it measures.
 
 Nothing leaves the strip above the **Ceiling** (−1 dB to start). It looks 1.5 ms ahead, so peaks are caught before they arrive instead of being clipped. **Release** sets how fast it recovers. The GR meter shows how much it's limiting. Put it last on a stream mix or an output.
 
+**True peak:** with it on, the ceiling is in dBTP: the limiter also catches the peaks that form *between* samples when the sound is played back or encoded to MP3 or AAC, which can poke over a sample-peak ceiling by a dB or more. Loudness targets ("−1 dBTP") mean true peak, so turn it on for anything you publish.
+
 ### Reverb
 
 An algorithmic reverb.
@@ -314,7 +316,19 @@ Each channel's meter shows three things:
 
 The colors turn yellow near full scale and red at the top.
 
-Mix buses and outputs show their **loudness** under the meters: short-term LUFS over the last 3 seconds. Streams usually aim for about −14 to −16, podcasts −16, and broadcast −23.
+Mix buses and outputs show their **loudness** under the meters: short-term LUFS over the last 3 seconds. Streams usually aim for about −14 to −16, podcasts −16, and broadcast −23. For a measurement to publish by, use the Loudness meter (next).
+
+### Loudness for publishing
+
+Podcast apps, streaming sites and broadcasters ask for a set loudness, measured the standard way (ITU-R BS.1770, EBU R128). The **Loudness** meter, in the Recordings panel and on the Recordings page, measures one strip like that, for example your Stream Mix or podcast bus.
+
+- **Loudness of …** picks the strip; **Loudness: off** stops it. It measures what the strip sends on, after its effects and fader, all the time, with the window open or closed.
+- **Target:** Podcast (−16 LUFS, −1 dBTP, the default), Streaming (−14 LUFS, −1 dBTP, as YouTube and Spotify use), EBU R128 broadcast (−23 LUFS, −1 dBTP), ATSC A/85 (−24 LUFS, −2 dBTP), or Custom.
+- The big number is the **integrated** loudness: the whole programme since the measurement started, with silence and quiet pauses left out as the standard says. It's green within 1 LU of the target, amber within 2, red beyond, and says how far over or under you are.
+- **Short-term** (the last 3 s) and **Momentary** (the last 0.4 s) show the loudness now; **Range** (LRA) is how much it varies (speech is usually 3–8 LU); **True peak** is the highest peak since the start, including peaks between samples, red when it's over the target's limit.
+- **Reset** starts over. It also starts over by itself when the measured strip starts recording, alone or in a take, so the reading matches the file.
+
+To hit a target: get the integrated reading close with the strip's fader or a **Broadcast leveler** (set its Target to the same LUFS), and put a **Safety limiter** last with **True peak** on and its Ceiling at the target's limit (−1 dB).
 
 The light by each strip's name glows whenever sound passes, even sound far too quiet for the meters. It's handy for checking that a route works.
 
@@ -415,6 +429,8 @@ patchprime-ctl effect Mic 2 off          # the strip's second effect
 patchprime-ctl record "Stream Mix"
 patchprime-ctl arm Mic on               # multitrack: arm a strip for the next take
 patchprime-ctl take                     # start (or stop) the take
+patchprime-ctl loudness "Stream Mix"    # measure a strip's loudness
+patchprime-ctl loudness                 # print the readings
 patchprime-ctl scene Podcast
 patchprime-ctl pad Applause              # play a soundboard pad (again to stop)
 patchprime-ctl get Mic muted             # yes or no: for a button's state

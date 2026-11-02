@@ -15,6 +15,7 @@
 #include "globalshortcuts.h"
 #include "hotkeys.h"
 #include "hotplugrecovery.h"
+#include "loudnessmanager.h"
 #include "mackiecontrol.h"
 #include "midimapper.h"
 #include "notifier.h"
@@ -185,6 +186,9 @@ int run(int &argc, char **argv)
     // The soundboard, also played from MIDI and hotkeys.
     pp::Soundboard soundboard(&graph, &devices, &buses);
     service.setSoundboard(&soundboard);
+    // Loudness for publishing, on the strip the user picks.
+    pp::LoudnessManager loudness(&graph, &devices, &buses, &recordings);
+    service.setLoudness(&loudness);
     pp::PresetStore presets;
     if (!presets.load()) {
         std::println(stderr, "patchprimed: can't read {}: {}", presets.path().toStdString(),

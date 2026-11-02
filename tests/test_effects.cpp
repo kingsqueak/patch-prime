@@ -673,7 +673,7 @@ private Q_SLOTS:
         Buffers spike(4800, 0.1F);
         spike.left[2000] = spike.right[2000] = 1.0F;
         spiky.process(spike.planes.data(), 2, 4800);
-        const int delay = static_cast<int>(std::lround(LimiterEffect::lookaheadSeconds * rate));
+        const int delay = static_cast<int>(std::lround(LimiterEffect::lookaheadSeconds * rate)) + TruePeakDetector::delay;
         QVERIFY(spike.left[static_cast<std::size_t>(2000 + delay)] <= ceiling);
         QVERIFY(spike.left[static_cast<std::size_t>(2000 + delay)] > ceiling * 0.99F);
         // Quieter audio passes unchanged, lookahead later.

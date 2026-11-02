@@ -21,6 +21,8 @@ QJsonObject state()
         "pads": [{"id": "p1", "label": "Applause", "playing": false}, {"id": "p2", "label": "Air Horn", "playing": true}],
         "recording": {"virtual|stream": "/tmp/x.flac"},
         "multitrack": true, "armed": ["in|mic"], "takeFolder": "",
+        "loudnessStrip": "virtual|stream", "loudnessTarget": -16, "loudnessPeakTarget": -1,
+        "loudnessNow": {"integrated": -15.84, "shortTerm": -14.2, "momentary": null, "range": 6.1, "truePeak": -1.4, "seconds": 42},
         "devices": [
             {"key": "in|mic", "nodeName": "mic", "label": "Mic", "stage": "input", "isEnabled": true,
              "volumeDb": -3, "muted": false, "cued": false,
@@ -128,6 +130,19 @@ private Q_SLOTS:
 
         QVERIFY(ok({QStringLiteral("multitrack"), QStringLiteral("on")}).calls.empty());
         QCOMPARE(only({QStringLiteral("multitrack")}).args, QVariantList{false});
+    }
+
+    void loudness()
+    {
+        const auto text = ok({QStringLiteral("loudness")}).output;
+        QVERIFY2(text.startsWith(QStringLiteral("Stream Mix\nintegrated  -15.8 LUFS (target -16 LUFS)")), qPrintable(text));
+        QVERIFY(text.contains(QStringLiteral("momentary   -\n")));
+        QVERIFY(text.contains(QStringLiteral("true peak   -1.4 dBTP (limit -1 dBTP)")));
+        auto c = only({QStringLiteral("loudness"), QStringLiteral("Mic")});
+        QCOMPARE(c.method, QStringLiteral("SetLoudnessStrip"));
+        QCOMPARE(c.args, QVariantList{QStringLiteral("in|mic")});
+        QCOMPARE(only({QStringLiteral("loudness"), QStringLiteral("off")}).args, QVariantList{QString()});
+        QCOMPARE(only({QStringLiteral("loudness"), QStringLiteral("reset")}).method, QStringLiteral("ResetLoudness"));
     }
 
     void levels()

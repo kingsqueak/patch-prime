@@ -228,6 +228,8 @@ share a label. Switches take on, off or toggle (the default).
   multitrack [on|off|toggle]        Record buttons arm strips for takes
   arm <strip> [on|off|toggle]       arm it for the next take
   take [on|off|toggle]              record the armed strips, a file each
+  loudness                          the measured strip's loudness (LUFS)
+  loudness <strip>|off|reset        measure a strip, stop, or start over
   scene <name>                      load a scene
   scenes                            list the scenes
   pad <name>                        play a soundboard pad (stop it if playing)
@@ -237,6 +239,54 @@ share a label. Switches take on, off or toggle (the default).
 Options: --help, --version
 )");
 }
+
+namespace {
+
+// "loudness": the readings; "loudness <strip>|off|reset": what's measured.
+Result loudness(const QStringList &args, const QJsonObject &state)
+{
+    if (args.size() > 1) {
+        const auto what = args.mid(1).join(QLatin1Char(' '));
+        if (what.compare(QLatin1String("reset"), Qt::CaseInsensitive) == 0) {
+            return Plan{.calls = {{.method = QStringLiteral("ResetLoudness"), .args = {}}}, .output = {}};
+        }
+        if (what.compare(QLatin1String("off"), Qt::CaseInsensitive) == 0) {
+            return Plan{.calls = {{.method = QStringLiteral("SetLoudnessStrip"), .args = {QString()}}}, .output = {}};
+        }
+        const auto strip = findStrip(state, what);
+        if (!strip) {
+            return fail(strip.error());
+        }
+        return Plan{.calls = {{.method = QStringLiteral("SetLoudnessStrip"), .args = {key(*strip)}}}, .output = {}};
+    }
+    const auto measured = state.value(QLatin1String("loudnessStrip")).toString();
+    if (measured.isEmpty()) {
+        return Plan{.calls = {}, .output = QStringLiteral("not measuring (see: patchprime-ctl loudness <strip>)\n")};
+    }
+    const auto now = state.value(QLatin1String("loudnessNow")).toObject();
+    const auto number = [&now](const char *name, const char *unit) {
+        const auto v = now.value(QLatin1String(name));
+        return v.isDouble() ? QStringLiteral("%1 %2").arg(v.toDouble(), 0, 'f', 1).arg(QLatin1String(unit))
+                            : QStringLiteral("-");
+    };
+    QString label = measured;
+    for (const auto &d : state.value(QLatin1String("devices")).toArray()) {
+        if (d.toObject().value(QLatin1String("key")).toString() == measured) {
+            label = d.toObject().value(QLatin1String("label")).toString();
+        }
+    }
+    const auto text = QStringLiteral("%1\nintegrated  %2 (target %3 LUFS)\nshort-term  %4\nmomentary   %5\nrange       %6\n"
+                                     "true peak   %7 (limit %8 dBTP)\nmeasured    %9 s\n")
+                          .arg(label, number("integrated", "LUFS"),
+                               QString::number(state.value(QLatin1String("loudnessTarget")).toDouble()),
+                               number("shortTerm", "LUFS"), number("momentary", "LUFS"), number("range", "LU"),
+                               number("truePeak", "dBTP"),
+                               QString::number(state.value(QLatin1String("loudnessPeakTarget")).toDouble()),
+                               QString::number(now.value(QLatin1String("seconds")).toDouble(), 'f', 0));
+    return Plan{.calls = {}, .output = text};
+}
+
+} // namespace
 
 std::expected<Plan, QString> plan(const QStringList &args, const QJsonObject &state)
 {
@@ -301,6 +351,9 @@ std::expected<Plan, QString> plan(const QStringList &args, const QJsonObject &st
             return Plan{};
         }
         return Plan{.calls = {{.method = QStringLiteral("SetMultitrack"), .args = {*on}}}, .output = {}};
+    }
+    if (command == QLatin1String("loudness")) {
+        return loudness(args, state);
     }
     if (command == QLatin1String("take")) {
         const bool running = !state.value(QLatin1String("takeFolder")).toString().isEmpty();

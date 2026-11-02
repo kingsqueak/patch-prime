@@ -70,6 +70,10 @@ add_library(patchprime-engine STATIC
     src/plugins.h
     src/presets.cpp
     src/presets.h
+    src/loudnessmanager.cpp
+    src/loudnessmanager.h
+    src/loudnessmeter.cpp
+    src/loudnessmeter.h
     src/recording.cpp
     src/recording.h
     src/recordingmanager.cpp

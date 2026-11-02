@@ -117,6 +117,15 @@ ColumnLayout {
                 compact: true
             }
 
+            Kirigami.Separator {
+                Layout.fillWidth: true
+            }
+
+            LoudnessPanel {
+                Layout.fillWidth: true
+                compact: true
+            }
+
             QQC2.Label {
                 Layout.fillWidth: true
                 visible: Devices.recordingError.length > 0

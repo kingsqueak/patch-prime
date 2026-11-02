@@ -133,6 +133,9 @@ public:
     void setMultitrack(bool on);
     void setArmed(const std::string &key, bool armed);
     void setRecordInputsRaw(bool raw);
+    // Loudness settings (see DeviceStore); emit loudnessSettingsChanged.
+    void setLoudnessStrip(const std::string &key);
+    void setLoudnessTargets(double lufs, double dbtp);
     // The scene last saved or loaded (see DeviceStore); saved, no signal.
     void setCurrentScene(const std::string &name);
     // The control surface's MIDI port (see DeviceStore); emits
@@ -207,6 +210,7 @@ Q_SIGNALS:
     void audioSettingsChanged();
     // The recording format or the player's target.
     void recordingSettingsChanged();
+    void loudnessSettingsChanged();
     void controlSurfaceChanged();
     void midiControllerChanged();
     void midiMappingsChanged();

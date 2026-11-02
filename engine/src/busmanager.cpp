@@ -1370,6 +1370,13 @@ void BusManager::setTaps(std::map<std::string, std::vector<TapTrack>> recorders,
     scheduleReconcile();
 }
 
+void BusManager::setLoudnessTap(std::string node, TapTrack track)
+{
+    m_loudnessNode = std::move(node);
+    m_loudnessTrack = std::move(track);
+    scheduleReconcile();
+}
+
 void BusManager::setPadStreams(std::map<std::string, std::string> pads)
 {
     m_pads = std::move(pads);
@@ -1414,14 +1421,18 @@ void BusManager::linkTaps(const std::map<std::string, std::uint32_t> &ready,
                           const std::map<std::string, std::vector<PortRef>> &stripOuts,
                           const LinkMap &existingLinks)
 {
-    if (m_recorders.empty() && m_playerNode.empty() && m_pads.empty()) {
+    if (m_recorders.empty() && m_playerNode.empty() && m_pads.empty() && m_loudnessNode.empty()) {
         return;
     }
     std::map<std::string, std::string> nameOf; // endpoint key -> bus name
     for (const auto &[name, w] : wanted) {
         nameOf[w.key] = name;
     }
-    for (const auto &[nodeName, tracks] : m_recorders) {
+    auto taps = m_recorders;
+    if (!m_loudnessNode.empty()) {
+        taps[m_loudnessNode] = {m_loudnessTrack};
+    }
+    for (const auto &[nodeName, tracks] : taps) {
         const auto node = tapNode(nodeName);
         if (!node) {
             continue;

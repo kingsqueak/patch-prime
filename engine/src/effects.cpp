@@ -252,7 +252,8 @@ std::vector<ParamInfo> effectParams(const std::string &type)
     }
     if (type == "limiter") {
         return {param("ceiling", "Ceiling", "dB", -24.0, 0.0, -1.0),
-                param("release", "Release", "ms", 5.0, 2000.0, 100.0, ParamKind::Log)};
+                param("release", "Release", "ms", 5.0, 2000.0, 100.0, ParamKind::Log),
+                param("truePeak", "True peak", "", 0.0, 1.0, 0.0, ParamKind::Toggle)};
     }
     if (type == "ducker") {
         return {param("threshold", "Threshold", "dB", -60.0, 0.0, -35.0),
