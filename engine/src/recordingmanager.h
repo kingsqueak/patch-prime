@@ -77,8 +77,10 @@ public:
     void setMultitrack(bool on);
     [[nodiscard]] std::vector<std::string> armed() const;
     void setArmed(const std::string &key, bool armed);
-    [[nodiscard]] bool takeInputsRaw() const;
-    void setTakeInputsRaw(bool raw);
+    // Hardware inputs recorded raw (before their effects and fader) or as
+    // processed (after them), alone or in a take; applies at once.
+    [[nodiscard]] bool recordInputsRaw() const;
+    void setRecordInputsRaw(bool raw);
     bool startTake(QString *error = nullptr);
     void stopTake();
     [[nodiscard]] bool takeRunning() const { return m_take.has_value(); }

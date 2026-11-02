@@ -113,7 +113,7 @@ class DaemonClient : public QAbstractListModel
     // and the running take's folder ("" when none) and length.
     Q_PROPERTY(bool multitrack READ multitrack NOTIFY recordingChanged)
     Q_PROPERTY(QStringList armed READ armed NOTIFY recordingChanged)
-    Q_PROPERTY(bool takeInputsRaw READ takeInputsRaw NOTIFY recordingChanged)
+    Q_PROPERTY(bool recordInputsRaw READ recordInputsRaw NOTIFY recordingChanged)
     Q_PROPERTY(QString takeFolder READ takeFolder NOTIFY recordingChanged)
     Q_PROPERTY(double takeSeconds READ takeSeconds NOTIFY recordingTimesChanged)
     // Goes up when the folder's files change (call recordings() again).
@@ -229,7 +229,7 @@ public:
     [[nodiscard]] QString recordingError() const { return m_recordingError; }
     [[nodiscard]] bool multitrack() const { return m_multitrack; }
     [[nodiscard]] QStringList armed() const { return m_armed; }
-    [[nodiscard]] bool takeInputsRaw() const { return m_takeInputsRaw; }
+    [[nodiscard]] bool recordInputsRaw() const { return m_recordInputsRaw; }
     [[nodiscard]] QString takeFolder() const { return m_takeFolder; }
     [[nodiscard]] double takeSeconds() const { return m_takeSeconds; }
     [[nodiscard]] int recordingsRevision() const { return m_recordingsRevision; }
@@ -293,7 +293,7 @@ public:
     Q_INVOKABLE void setRecordingFormat(const QString &format);
     Q_INVOKABLE void setMultitrack(bool on);
     Q_INVOKABLE void setArmed(const QString &key, bool armed);
-    Q_INVOKABLE void setTakeInputsRaw(bool raw);
+    Q_INVOKABLE void setRecordInputsRaw(bool raw);
     Q_INVOKABLE void startTake();
     Q_INVOKABLE void stopTake();
     // The recordings folder's files, newest first: [{path, name, seconds,
@@ -427,7 +427,7 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QString m_recordingError;
     bool m_multitrack = false;
     QStringList m_armed;
-    bool m_takeInputsRaw = true;
+    bool m_recordInputsRaw = true;
     QString m_takeFolder;
     double m_takeSeconds = 0.0;
     int m_recordingsRevision = 0;

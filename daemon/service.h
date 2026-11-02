@@ -193,15 +193,16 @@ public Q_SLOTS:
     // "recordingError"). Start returns an error message, or "" on success.
     QString StartRecording(const QString &key);
     void StopRecording(const QString &key);
-    // Multitrack takes (state: "multitrack", "armed" = [keys], "takeInputsRaw",
-    // "takeFolder" = the running take's folder or ""): with multitrack on,
-    // strip REC buttons arm strips, and StartTake records every armed strip
-    // at once, a file each in a "Take <date time>" folder, sample-aligned.
-    // Inputs are recorded raw (before effects) or processed. StartTake
-    // returns an error message, or "" on success.
+    // Multitrack takes (state: "multitrack", "armed" = [keys], "takeFolder" =
+    // the running take's folder or ""): with multitrack on, strip REC buttons
+    // arm strips, and StartTake records every armed strip at once, a file
+    // each in a "Take <date time>" folder, sample-aligned. StartTake returns
+    // an error message, or "" on success. Hardware inputs are recorded raw
+    // (before effects) or processed, alone or in a take (state
+    // "recordInputsRaw").
     void SetMultitrack(bool on);
     void SetArmed(const QString &key, bool armed);
-    void SetTakeInputsRaw(bool raw);
+    void SetRecordInputsRaw(bool raw);
     QString StartTake();
     void StopTake();
     // "flac", "wav" or "mp3" (those this build can write are in the state as

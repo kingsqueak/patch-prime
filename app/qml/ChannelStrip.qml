@@ -461,8 +461,11 @@ QQC2.Control {
                               : qsTr("Multitrack: click to arm this strip, so the next take records it (Record Take under Recordings)."))
                      : strip.recording
                      ? qsTr("Recording to %1. Click to stop.").arg(Devices.recording[strip.key])
+                     : strip.kind === "hardware" && Devices.recordInputsRaw
+                     ? qsTr("Record this input raw, as the device sends it (before its effects and fader), to a %1 file in %2. Play it back into this input on the Recordings page to set up its effects. (Inputs raw or processed: under Recordings.)")
+                       .arg(Devices.recordingFormat.toUpperCase()).arg(Devices.recordingFolder)
                      : strip.kind === "hardware"
-                     ? qsTr("Record this input raw, as the device sends it (before its effects and fader), to a %1 file in %2. Play it back into this input on the Recordings page to set up its effects.")
+                     ? qsTr("Record this input processed, after its effects and fader, to a %1 file in %2. (Inputs raw or processed: under Recordings.)")
                        .arg(Devices.recordingFormat.toUpperCase()).arg(Devices.recordingFolder)
                      : qsTr("Record what this strip sends on (after its effects and fader) to a %1 file in %2.")
                        .arg(Devices.recordingFormat.toUpperCase()).arg(Devices.recordingFolder)

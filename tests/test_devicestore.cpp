@@ -100,10 +100,10 @@ private Q_SLOTS:
             store.setCurrentScene("Show");
             store.setRecordingFormat("mp3");
             store.setPlayerTarget("mic");
-            QVERIFY(!store.multitrack() && store.takeInputsRaw()); // the defaults
+            QVERIFY(!store.multitrack() && store.recordInputsRaw()); // the defaults
             store.setMultitrack(true);
             store.setArmed({"mic", "mix"});
-            store.setTakeInputsRaw(false);
+            store.setRecordInputsRaw(false);
             QVERIFY(store.save());
         }
         DeviceStore store(path);
@@ -128,7 +128,7 @@ private Q_SLOTS:
         QCOMPARE(store.playerTarget(), "mic");
         QVERIFY(store.multitrack());
         QCOMPARE(store.armed(), (std::vector<std::string>{"mic", "mix"}));
-        QVERIFY(!store.takeInputsRaw());
+        QVERIFY(!store.recordInputsRaw());
 
         // A re-attached destination keeps its sends; a removed one drops them.
         QVERIFY(store.rekey("phones", "phones2"));

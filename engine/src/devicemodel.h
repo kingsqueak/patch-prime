@@ -132,7 +132,7 @@ public:
     void setPlayerTarget(const std::string &key);
     void setMultitrack(bool on);
     void setArmed(const std::string &key, bool armed);
-    void setTakeInputsRaw(bool raw);
+    void setRecordInputsRaw(bool raw);
     // The scene last saved or loaded (see DeviceStore); saved, no signal.
     void setCurrentScene(const std::string &name);
     // The control surface's MIDI port (see DeviceStore); emits

@@ -143,7 +143,7 @@ Devices, labels and engine settings are not part of scenes.
 
 Inputs, mix buses (Stream Mix, for example) and routed inputs (Desktop) can be recorded to a file. Press **Record** at the bottom of the strip, and press it again to stop. Several strips can record at once.
 
-- **What's recorded** on a mix bus or Desktop is what the strip sends on, after its effects and its fader: what the rest of the mix hears from it, and what OBS would capture. On a hardware **input** (a microphone) it's the raw sound, as the device sends it, before the strip's effects and fader. A mono input records in mono (the same sound in both channels).
+- **What's recorded** on a mix bus or Desktop is what the strip sends on, after its effects and its fader: what the rest of the mix hears from it, and what OBS would capture. On a hardware **input** (a microphone) you choose, with **Inputs raw** or **Inputs processed** in the Recordings panel or on the Recordings page: raw is the sound as the device sends it, before the strip's effects and fader (the default; for processing later, or for setting up the effects on it, below); processed is after its effects and fader, as the mix hears it. The choice applies at once, also to a recording already running. A mono input records in mono (the same sound in both channels).
 - **Where:** files go to `~/Music/Patch Prime`, named after the strip and the time, for example `Stream Mix 2026-10-31 11-42-07.flac`.
 - **Format:** choose it in the Recordings panel or on the Recordings page. **FLAC** is lossless at about half the size of WAV. **WAV** is uncompressed. **MP3** is small and plays everywhere, but only up to 48 kHz: at a higher mixer rate an MP3 recording stops at once with a message. FLAC and WAV are 24-bit. The format applies to the next recording.
 - Recording runs in the engine, so it carries on with the window closed. It stops if you change the mixer's sample rate or the audio server restarts; what was recorded until then is kept.
@@ -163,7 +163,7 @@ A take records several strips at once, each to its own file, all starting on the
 
 - **Where:** each take gets a folder, `Take 2026-11-02 14-30-00`, in the recordings folder, with one file per strip named after it: `Mic.flac`, `Stream Mix.flac`. The recordings list shows them as, for example, "Mic.flac (take 2026-11-02 14-30-00)". Moving a take's last file to the trash removes its folder.
 - **Mono inputs** are recorded as mono files; stereo strips as stereo.
-- **Inputs raw** or **Inputs processed**: raw records hardware inputs as the device sends them, before their effects, so you can process them later; processed records them after their effects and fader, as the mix hears them. Mix buses and Desktop are always recorded as mixed. You can switch while a take records; it applies at once.
+- **Inputs raw** or **Inputs processed** applies to takes too: raw records hardware inputs before their effects, processed after their effects and fader. Mix buses and Desktop are always recorded as mixed.
 - With Multitrack off, the Record buttons record their strip on its own again, as before.
 - **Record Take** can also be started from the tray menu, a hotkey or a MIDI button (right-click **Record Take**), or `patchprime-ctl take`.
 
@@ -171,7 +171,7 @@ A take records several strips at once, each to its own file, all starting on the
 
 You can't really hear your own voice while you talk, so tuning a gate or a compressor live is guesswork. Instead:
 
-1. Press **Record** on the mic's strip and talk for half a minute the way you normally do, then stop. This records the mic raw, before its effects.
+1. With **Inputs raw** chosen (the default), press **Record** on the mic's strip and talk for half a minute the way you normally do, then stop. This records the mic before its effects.
 2. On the Recordings page, choose the mic in **Play into** (it reads "MAMic1 (instead of the device)", for example), turn on **loop**, and play the recording.
 3. While it plays, the mic's strip hears the recording *instead of* the microphone: the device is cut off, and the strip's status line reads **▶ Playback**. The recording goes through the strip's whole effects chain, its fader and its sends, exactly as your voice would.
 4. Open the strip's effects and adjust them while you listen (cue the strip, or listen on the output it's sent to). Stop the player when you're done: the microphone is connected again at once.

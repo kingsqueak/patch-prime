@@ -467,12 +467,12 @@ void DeviceModel::setArmed(const std::string &key, bool armed)
     Q_EMIT recordingSettingsChanged();
 }
 
-void DeviceModel::setTakeInputsRaw(bool raw)
+void DeviceModel::setRecordInputsRaw(bool raw)
 {
-    if (raw == m_store->takeInputsRaw()) {
+    if (raw == m_store->recordInputsRaw()) {
         return;
     }
-    m_store->setTakeInputsRaw(raw);
+    m_store->setRecordInputsRaw(raw);
     saveStore();
     Q_EMIT recordingSettingsChanged();
 }

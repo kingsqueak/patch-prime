@@ -297,7 +297,7 @@ QString PatchPrimeService::GetState() const
              }
              return armed;
          }()},
-        {QStringLiteral("takeInputsRaw"), m_recordings->takeInputsRaw()},
+        {QStringLiteral("recordInputsRaw"), m_recordings->recordInputsRaw()},
         {QStringLiteral("takeFolder"), m_recordings->takeFolder()},
         {QStringLiteral("recordingsRevision"), m_recordingsRevision},
         {QStringLiteral("controlSurface"), QString::fromStdString(m_devices->store().controlSurface())},
@@ -695,9 +695,9 @@ void PatchPrimeService::SetArmed(const QString &key, bool armed)
     m_recordings->setArmed(key.toStdString(), armed);
 }
 
-void PatchPrimeService::SetTakeInputsRaw(bool raw)
+void PatchPrimeService::SetRecordInputsRaw(bool raw)
 {
-    m_recordings->setTakeInputsRaw(raw);
+    m_recordings->setRecordInputsRaw(raw);
 }
 
 QString PatchPrimeService::StartTake()

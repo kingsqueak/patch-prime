@@ -222,15 +222,15 @@ void RecordingManager::setArmed(const std::string &key, bool armed)
     m_devices->setArmed(key, armed);
 }
 
-bool RecordingManager::takeInputsRaw() const
+bool RecordingManager::recordInputsRaw() const
 {
-    return m_devices->store().takeInputsRaw();
+    return m_devices->store().recordInputsRaw();
 }
 
-void RecordingManager::setTakeInputsRaw(bool raw)
+void RecordingManager::setRecordInputsRaw(bool raw)
 {
-    m_devices->setTakeInputsRaw(raw);
-    if (m_take) {
+    m_devices->setRecordInputsRaw(raw);
+    if (m_take || !m_recordings.empty()) {
         updateTaps(); // relinks the inputs at once
     }
 }
@@ -494,14 +494,14 @@ void RecordingManager::updateTaps()
     for (const auto &[key, r] : m_recordings) {
         recorders[r.node] = {{.key = key,
                               .channels = static_cast<std::size_t>(r.recorder->tracks().front().inputChannels),
-                              .raw = true}};
+                              .raw = recordInputsRaw()}};
     }
     if (m_take) {
         auto &tracks = recorders[m_take->node];
         for (std::size_t i = 0; i < m_take->keys.size(); ++i) {
             tracks.push_back({.key = m_take->keys[i],
                               .channels = static_cast<std::size_t>(m_take->recorder->tracks().at(i).inputChannels),
-                              .raw = takeInputsRaw()});
+                              .raw = recordInputsRaw()});
         }
     }
     m_buses->setTaps(std::move(recorders), m_player ? std::string(playerName) : std::string(),

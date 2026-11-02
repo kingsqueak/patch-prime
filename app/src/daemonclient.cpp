@@ -285,9 +285,9 @@ void DaemonClient::setArmed(const QString &key, bool armed)
     call(QStringLiteral("SetArmed"), {key, armed});
 }
 
-void DaemonClient::setTakeInputsRaw(bool raw)
+void DaemonClient::setRecordInputsRaw(bool raw)
 {
-    call(QStringLiteral("SetTakeInputsRaw"), {raw});
+    call(QStringLiteral("SetRecordInputsRaw"), {raw});
 }
 
 void DaemonClient::startTake()
@@ -846,17 +846,17 @@ void DaemonClient::onStateChanged(const QString &state)
         const auto target = root.value(QLatin1String("playerTarget")).toString();
         const bool multitrack = root.value(QLatin1String("multitrack")).toBool();
         const auto armed = root.value(QLatin1String("armed")).toVariant().toStringList();
-        const bool inputsRaw = root.value(QLatin1String("takeInputsRaw")).toBool(true);
+        const bool inputsRaw = root.value(QLatin1String("recordInputsRaw")).toBool(true);
         const auto takeFolder = root.value(QLatin1String("takeFolder")).toString();
         if (folder != m_recordingFolder || format != m_recordingFormat ||
             formats != m_recordingFormats ||
             recording != m_recording || error != m_recordingError ||
             revision != m_recordingsRevision || player != m_player || target != m_playerTarget ||
-            multitrack != m_multitrack || armed != m_armed || inputsRaw != m_takeInputsRaw ||
+            multitrack != m_multitrack || armed != m_armed || inputsRaw != m_recordInputsRaw ||
             takeFolder != m_takeFolder) {
             m_multitrack = multitrack;
             m_armed = armed;
-            m_takeInputsRaw = inputsRaw;
+            m_recordInputsRaw = inputsRaw;
             if (takeFolder.isEmpty()) {
                 m_takeSeconds = 0.0;
             }

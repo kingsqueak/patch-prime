@@ -243,7 +243,7 @@ bool DeviceStore::load()
     m_playerTarget.clear();
     m_multitrack = false;
     m_armed.clear();
-    m_takeInputsRaw = true;
+    m_recordInputsRaw = true;
     m_currentScene.clear();
     m_controlSurface.clear();
     m_midiController.clear();
@@ -283,7 +283,7 @@ bool DeviceStore::load()
             m_armed.push_back(key);
         }
     }
-    m_takeInputsRaw = root.value(QLatin1String("takeInputsRaw")).toBool(true);
+    m_recordInputsRaw = root.value(QLatin1String("recordInputsRaw")).toBool(true);
     m_currentScene = root.value(QLatin1String("currentScene")).toString().toStdString();
     m_controlSurface = root.value(QLatin1String("controlSurface")).toString().toStdString();
     m_midiController = root.value(QLatin1String("midiController")).toString().toStdString();
@@ -344,7 +344,7 @@ bool DeviceStore::save()
              }
              return armed;
          }()},
-        {QStringLiteral("takeInputsRaw"), m_takeInputsRaw},
+        {QStringLiteral("recordInputsRaw"), m_recordInputsRaw},
         {QStringLiteral("currentScene"), qs(m_currentScene)},
         {QStringLiteral("controlSurface"), qs(m_controlSurface)},
         {QStringLiteral("midiController"), qs(m_midiController)},
