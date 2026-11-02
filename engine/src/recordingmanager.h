@@ -13,6 +13,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,7 @@ struct RecordingFile
 {
     QString path;
     QString name;
+    QString take; // the take's folder name, for a track of a multitrack take
     double seconds = 0.0; // 0 when unknown
     qint64 bytes = 0;
     QDateTime modified;
@@ -67,7 +69,24 @@ public:
     // can't (not a mix bus, not enabled, PipeWire refused).
     bool start(const std::string &key, QString *error = nullptr);
     void stop(const std::string &key);
-    // Strip key -> the file it's recording to.
+    // Multitrack takes: the armed strips (in mixer order) recorded at once,
+    // one file each in a folder of their own ("Take <date time>"), all from
+    // one stream so they start on the same sample. startTake() returns false
+    // with error set when nothing armed can be recorded.
+    [[nodiscard]] bool multitrack() const;
+    void setMultitrack(bool on);
+    [[nodiscard]] std::vector<std::string> armed() const;
+    void setArmed(const std::string &key, bool armed);
+    [[nodiscard]] bool takeInputsRaw() const;
+    void setTakeInputsRaw(bool raw);
+    bool startTake(QString *error = nullptr);
+    void stopTake();
+    [[nodiscard]] bool takeRunning() const { return m_take.has_value(); }
+    // The running take's folder (empty when none).
+    [[nodiscard]] QString takeFolder() const;
+    [[nodiscard]] double takeSeconds() const;
+
+    // Strip key -> the file it's recording to (a take's strips too).
     [[nodiscard]] std::map<std::string, QString> recording() const;
     // Strip key -> seconds recorded so far.
     [[nodiscard]] std::map<std::string, double> recordedSeconds() const;
@@ -98,6 +117,7 @@ public:
 
     static constexpr std::string_view recorderPrefix = "patchprime.record.";
     static constexpr std::string_view playerName = "patchprime.player";
+    static constexpr std::string_view takeName = "patchprime.record.take";
 
 Q_SIGNALS:
     // A recording started or stopped, the player started, paused or stopped,
@@ -111,8 +131,19 @@ private:
     {
         std::string node;
         std::shared_ptr<Recorder> recorder;
+        std::vector<std::string> keys; // its tracks' strips, in order
+        QString folder;                // a take's
     };
+    // A strip that can be recorded now: its label and channel positions.
+    struct Source
+    {
+        QString label;
+        std::vector<std::string> positions;
+    };
+    std::optional<Source> source(const std::string &key, QString *error) const;
+    void close(Recording &recording);
     void finish(std::map<std::string, Recording>::iterator it);
+    void finishTake();
     void updateTaps();
     void poll();
 
@@ -121,7 +152,8 @@ private:
     BusManager *m_buses;
     QString m_folder;
     QString m_lastError;
-    std::map<std::string, Recording> m_recordings; // by strip key
+    std::map<std::string, Recording> m_recordings; // single strips, by key
+    std::optional<Recording> m_take;
     std::shared_ptr<Player> m_player;
     bool m_loop = false;
     QTimer m_poll;

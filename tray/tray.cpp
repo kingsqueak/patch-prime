@@ -49,6 +49,12 @@ Tray::Tray(QObject *parent)
     m_scenes = m_menu->addMenu(QIcon::fromTheme(QStringLiteral("view-media-playlist")), tr("Scenes"));
     m_sceneGroup = new QActionGroup(m_scenes); // NOLINT(cppcoreguidelines-prefer-member-initializer): needs m_scenes
     m_pads = m_menu->addMenu(QIcon::fromTheme(QStringLiteral("media-playlist-play")), tr("Soundboard"));
+    m_take = m_menu->addAction(QIcon::fromTheme(QStringLiteral("media-record")), tr("Record Take"));
+    m_take->setVisible(false);
+    connect(m_take, &QAction::triggered, this, [this] {
+        call(m_take->isChecked() ? QStringLiteral("StartTake") : QStringLiteral("StopTake"), {});
+    });
+    m_take->setCheckable(true);
     m_menu->addSeparator();
     connect(m_menu->addAction(QIcon::fromTheme(QStringLiteral("view-media-equalizer")), tr("Open Patch Prime")),
             &QAction::triggered, this, &Tray::openWindow);
@@ -154,6 +160,14 @@ void Tray::apply(const QJsonObject &state)
         connect(action, &QAction::triggered, this, [name] { call(QStringLiteral("LoadScene"), {name}); });
     }
 
+    // Multitrack: a take of the armed strips.
+    const bool taking = !state.value(QLatin1String("takeFolder")).toString().isEmpty();
+    const auto armed = state.value(QLatin1String("armed")).toArray();
+    m_take->setVisible(state.value(QLatin1String("multitrack")).toBool());
+    m_take->setEnabled(taking || !armed.isEmpty());
+    m_take->setChecked(taking);
+    m_take->setText(taking ? tr("Stop Take") : tr("Record Take (%n armed)", nullptr, static_cast<int>(armed.size())));
+
     // The soundboard: a pad plays (or stops) when picked.
     m_pads->clear();
     const auto pads = state.value(QLatin1String("pads")).toArray();
@@ -187,6 +201,7 @@ void Tray::setEngineRunning(bool running)
         m_mute->setEnabled(false);
         m_scenes->setEnabled(false);
         m_pads->setEnabled(false);
+        m_take->setEnabled(false);
     }
 }
 

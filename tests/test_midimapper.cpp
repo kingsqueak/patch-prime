@@ -87,6 +87,9 @@ private Q_SLOTS:
         const MidiTarget pad{.action = MidiAction::Pad, .pad = "p1"};
         QCOMPARE(midiTargetFromJson(midiTargetToJson(pad)), std::optional{pad});
         QVERIFY(!midiTargetFromJson({{QStringLiteral("action"), QStringLiteral("pad")}}));
+        // A take needs nothing more.
+        const MidiTarget take{.action = MidiAction::Take};
+        QCOMPARE(midiTargetFromJson(midiTargetToJson(take)), std::optional{take});
         QCOMPARE(describeMidiControl(m), std::string("CC 7, channel 3"));
         QCOMPARE(describeMidiControl({.kind = MidiKind::Note, .number = 60}), std::string("Note C3, channel 1"));
     }

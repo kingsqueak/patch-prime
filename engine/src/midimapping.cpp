@@ -11,7 +11,7 @@ namespace pp {
 
 namespace {
 
-constexpr std::array<std::pair<MidiAction, const char *>, 10> actionNames{{
+constexpr std::array<std::pair<MidiAction, const char *>, 11> actionNames{{
     {MidiAction::Volume, "volume"},
     {MidiAction::Mute, "mute"},
     {MidiAction::Cue, "cue"},
@@ -22,6 +22,7 @@ constexpr std::array<std::pair<MidiAction, const char *>, 10> actionNames{{
     {MidiAction::Record, "record"},
     {MidiAction::Scene, "scene"},
     {MidiAction::Pad, "pad"},
+    {MidiAction::Take, "take"},
 }};
 
 QString qs(const std::string &s)
@@ -125,6 +126,8 @@ std::optional<MidiTarget> midiTargetFromJson(const QJsonObject &json)
         return target.scene.empty() ? std::nullopt : std::optional{target};
     case MidiAction::Pad:
         return target.pad.empty() ? std::nullopt : std::optional{target};
+    case MidiAction::Take:
+        return target;
     }
     return std::nullopt;
 }

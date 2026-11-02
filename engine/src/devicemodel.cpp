@@ -441,6 +441,42 @@ void DeviceModel::setPlayerTarget(const std::string &key)
     Q_EMIT recordingSettingsChanged();
 }
 
+void DeviceModel::setMultitrack(bool on)
+{
+    if (on == m_store->multitrack()) {
+        return;
+    }
+    m_store->setMultitrack(on);
+    saveStore();
+    Q_EMIT recordingSettingsChanged();
+}
+
+void DeviceModel::setArmed(const std::string &key, bool armed)
+{
+    auto keys = m_store->armed();
+    if (std::ranges::contains(keys, key) == armed || (armed && rowForKey(key) < 0)) {
+        return;
+    }
+    if (armed) {
+        keys.push_back(key);
+    } else {
+        std::erase(keys, key);
+    }
+    m_store->setArmed(std::move(keys));
+    saveStore();
+    Q_EMIT recordingSettingsChanged();
+}
+
+void DeviceModel::setTakeInputsRaw(bool raw)
+{
+    if (raw == m_store->takeInputsRaw()) {
+        return;
+    }
+    m_store->setTakeInputsRaw(raw);
+    saveStore();
+    Q_EMIT recordingSettingsChanged();
+}
+
 void DeviceModel::setControlSurface(const std::string &id)
 {
     if (id == m_store->controlSurface()) {

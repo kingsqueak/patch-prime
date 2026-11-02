@@ -100,6 +100,10 @@ private Q_SLOTS:
             store.setCurrentScene("Show");
             store.setRecordingFormat("mp3");
             store.setPlayerTarget("mic");
+            QVERIFY(!store.multitrack() && store.takeInputsRaw()); // the defaults
+            store.setMultitrack(true);
+            store.setArmed({"mic", "mix"});
+            store.setTakeInputsRaw(false);
             QVERIFY(store.save());
         }
         DeviceStore store(path);
@@ -122,13 +126,18 @@ private Q_SLOTS:
         QCOMPARE(store.currentScene(), "Show");
         QCOMPARE(store.recordingFormat(), "mp3");
         QCOMPARE(store.playerTarget(), "mic");
+        QVERIFY(store.multitrack());
+        QCOMPARE(store.armed(), (std::vector<std::string>{"mic", "mix"}));
+        QVERIFY(!store.takeInputsRaw());
 
         // A re-attached destination keeps its sends; a removed one drops them.
         QVERIFY(store.rekey("phones", "phones2"));
         QCOMPARE(store.find("mic")->sends, (std::vector<std::string>{"phones2", "mix"}));
         QVERIFY(store.rekey("mix", "mix2")); // the send level follows its destination
         QCOMPARE(store.find("mic")->sendLevels.at("mix2"), -6.0);
+        QCOMPARE(store.armed(), (std::vector<std::string>{"mic", "mix2"})); // armed strips follow too
         QVERIFY(store.remove("mix2"));
+        QCOMPARE(store.armed(), std::vector<std::string>{"mic"});
         QCOMPARE(store.find("mic")->sends, std::vector<std::string>{"phones2"});
         QVERIFY(store.find("mic")->sendLevels.empty());
         QCOMPARE(DeviceStore::virtualKey("ab12cd34"), "patchprime-virtual|ab12cd34");

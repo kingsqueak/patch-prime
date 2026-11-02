@@ -200,6 +200,15 @@ public:
     void setRecordingFormat(std::string format) { m_recordingFormat = std::move(format); }
     [[nodiscard]] const std::string &playerTarget() const { return m_playerTarget; }
     void setPlayerTarget(std::string key) { m_playerTarget = std::move(key); }
+    // Multitrack: strip REC buttons arm strips (keys, in no order) for a
+    // take, which records them all at once; inputs in a take are recorded
+    // raw (before their effects) or as processed.
+    [[nodiscard]] bool multitrack() const { return m_multitrack; }
+    void setMultitrack(bool on) { m_multitrack = on; }
+    [[nodiscard]] const std::vector<std::string> &armed() const { return m_armed; }
+    void setArmed(std::vector<std::string> keys) { m_armed = std::move(keys); }
+    [[nodiscard]] bool takeInputsRaw() const { return m_takeInputsRaw; }
+    void setTakeInputsRaw(bool raw) { m_takeInputsRaw = raw; }
     // The scene last saved or loaded (empty for none), so it's still known
     // after a restart.
     [[nodiscard]] const std::string &currentScene() const { return m_currentScene; }
@@ -257,6 +266,9 @@ private:
     int m_blockSize = 0;
     std::string m_recordingFormat = "flac";
     std::string m_playerTarget;
+    bool m_multitrack = false;
+    std::vector<std::string> m_armed;
+    bool m_takeInputsRaw = true;
     std::string m_currentScene;
     std::string m_controlSurface;
     std::string m_midiController;

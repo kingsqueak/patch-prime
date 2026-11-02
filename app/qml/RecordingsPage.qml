@@ -92,6 +92,13 @@ Kirigami.ScrollablePage {
             }
         }
 
+        // --- multitrack takes
+        Kirigami.AbstractCard {
+            Layout.fillWidth: true
+
+            contentItem: TakeControls {}
+        }
+
         // --- the files
         Kirigami.PlaceholderMessage {
             Layout.fillWidth: true

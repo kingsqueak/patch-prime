@@ -87,7 +87,7 @@ RecordingFormat recordingFormatFromName(std::string_view name)
     return parseRecordingFormat(name).value_or(RecordingFormat::Flac);
 }
 
-QString recordingFileName(const QString &label, const QDateTime &when, RecordingFormat format)
+QString fileStem(const QString &label)
 {
     QString stem = label.trimmed();
     for (auto &c : stem) {
@@ -99,9 +99,24 @@ QString recordingFileName(const QString &label, const QDateTime &when, Recording
     if (stem.isEmpty() || stem.startsWith(u'.')) {
         stem.prepend(QStringLiteral("Recording"));
     }
+    return stem;
+}
+
+QString recordingFileName(const QString &label, const QDateTime &when, RecordingFormat format)
+{
     return QStringLiteral("%1 %2.%3")
-        .arg(stem, when.toString(QStringLiteral("yyyy-MM-dd HH-mm-ss")),
+        .arg(fileStem(label), when.toString(QStringLiteral("yyyy-MM-dd HH-mm-ss")),
              QString::fromStdString(recordingFormatName(format)));
+}
+
+QString takeFolderName(const QDateTime &when)
+{
+    return QStringLiteral("Take %1").arg(when.toString(QStringLiteral("yyyy-MM-dd HH-mm-ss")));
+}
+
+QString takeTrackFileName(const QString &label, RecordingFormat format)
+{
+    return QStringLiteral("%1.%2").arg(fileStem(label), QString::fromStdString(recordingFormatName(format)));
 }
 
 QString uniquePath(const QString &path)
@@ -170,8 +185,31 @@ void SampleRing::clear() noexcept
 
 // --- Recorder ----------------------------------------------------------------
 
-Recorder::Recorder(QString path, RecordingFormat format)
-    : m_path(std::move(path)), m_format(format), m_ring(recorderQueueSamples),
+namespace {
+
+int totalInputs(const std::vector<RecorderTrack> &tracks)
+{
+    int total = 0;
+    for (const auto &t : tracks) {
+        total += t.inputChannels;
+    }
+    return total;
+}
+
+} // namespace
+
+Recorder::Recorder(QString path, RecordingFormat format, int inputChannels)
+    : Recorder(std::vector<RecorderTrack>{{.path = std::move(path),
+                                           .inputChannels = std::clamp(inputChannels, 1, 2),
+                                           .fileChannels = 2}},
+               format)
+{
+}
+
+Recorder::Recorder(std::vector<RecorderTrack> tracks, RecordingFormat format)
+    : m_tracks(std::move(tracks)), m_inputChannels(totalInputs(m_tracks)), m_format(format),
+      // Ten seconds or so of each channel at 96 kHz (the stereo size per pair).
+      m_ring(recorderQueueSamples / 2 * static_cast<std::size_t>(std::max(m_inputChannels, 1))),
       m_thread([this](const std::stop_token &stop) { run(stop); })
 {
 }
@@ -188,7 +226,8 @@ void Recorder::setRate(int rate) noexcept
 
 void Recorder::process(float *samples, std::uint32_t frames, std::uint32_t channelCount) noexcept
 {
-    if (channelCount != channels || m_failed.load(std::memory_order_relaxed)) {
+    const auto channels = static_cast<std::size_t>(m_inputChannels);
+    if (channelCount != channels || channels == 0 || m_failed.load(std::memory_order_relaxed)) {
         return;
     }
     // Whole frames only, so the channels never slip.
@@ -227,13 +266,17 @@ void Recorder::fail(const QString &message)
         m_error = message;
     }
     m_failed.store(true);
-    qCWarning(lcRecording, "%s: %s", qPrintable(m_path), qPrintable(message));
+    qCWarning(lcRecording, "%s: %s", qPrintable(path()), qPrintable(message));
 }
 
 void Recorder::run(const std::stop_token &stop)
 {
-    // The file is opened once the rate is known; a recording stopped
-    // before then leaves no file.
+    if (m_inputChannels <= 0 || m_inputChannels > maxChannels) {
+        fail(QStringLiteral("too many channels to record"));
+        return;
+    }
+    // The files are opened once the rate is known; a recording stopped
+    // before then leaves none.
     while (m_rate.load() == 0) {
         if (stop.stop_requested()) {
             return;
@@ -241,43 +284,65 @@ void Recorder::run(const std::stop_token &stop)
         std::this_thread::sleep_for(10ms);
     }
     const int rate = m_rate.load();
-    if (!QDir().mkpath(QFileInfo(m_path).absolutePath())) {
-        fail(QStringLiteral("can't create the folder"));
+    if (m_format == RecordingFormat::Mp3 && rate > 48000) {
+        fail(QStringLiteral("MP3 doesn't support %1 Hz; use FLAC or WAV").arg(rate));
         return;
     }
-    SF_INFO info{};
-    info.samplerate = rate;
-    info.channels = channels;
-    info.format = sndfileFormat(m_format);
-    if ((m_format == RecordingFormat::Mp3 && rate > 48000) || sf_format_check(&info) == 0) {
-        fail(m_format == RecordingFormat::Mp3
-                 ? QStringLiteral("MP3 doesn't support %1 Hz; use FLAC or WAV").arg(rate)
-                 : QStringLiteral("this format doesn't support %1 Hz").arg(rate));
-        return;
-    }
-    const SndfilePtr file(sf_open(QFile::encodeName(m_path).constData(), SFM_WRITE, &info));
-    if (!file) {
-        fail(QString::fromUtf8(sf_strerror(nullptr)));
-        return;
-    }
-    // Overs clip instead of wrapping round in integer formats.
-    sf_command(file.get(), SFC_SET_CLIPPING, nullptr, SF_TRUE);
-    if (m_format == RecordingFormat::Mp3) {
-        int mode = SF_BITRATE_MODE_VARIABLE;
-        sf_command(file.get(), SFC_SET_BITRATE_MODE, &mode, sizeof(mode));
-        double quality = 0.1; // 0 = best .. 1 = smallest; about 225 kbit/s
-        sf_command(file.get(), SFC_SET_COMPRESSION_LEVEL, &quality, sizeof(quality));
+    std::vector<SndfilePtr> files;
+    for (const auto &track : m_tracks) {
+        if (!QDir().mkpath(QFileInfo(track.path).absolutePath())) {
+            fail(QStringLiteral("can't create the folder"));
+            return;
+        }
+        SF_INFO info{};
+        info.samplerate = rate;
+        info.channels = track.fileChannels;
+        info.format = sndfileFormat(m_format);
+        if (sf_format_check(&info) == 0) {
+            fail(QStringLiteral("this format doesn't support %1 Hz").arg(rate));
+            return;
+        }
+        SndfilePtr file(sf_open(QFile::encodeName(track.path).constData(), SFM_WRITE, &info));
+        if (!file) {
+            fail(QString::fromUtf8(sf_strerror(nullptr)));
+            return;
+        }
+        // Overs clip instead of wrapping round in integer formats.
+        sf_command(file.get(), SFC_SET_CLIPPING, nullptr, SF_TRUE);
+        if (m_format == RecordingFormat::Mp3) {
+            int mode = SF_BITRATE_MODE_VARIABLE;
+            sf_command(file.get(), SFC_SET_BITRATE_MODE, &mode, sizeof(mode));
+            double quality = 0.1; // 0 = best .. 1 = smallest; about 225 kbit/s
+            sf_command(file.get(), SFC_SET_COMPRESSION_LEVEL, &quality, sizeof(quality));
+        }
+        files.push_back(std::move(file));
     }
 
+    const auto channels = static_cast<std::size_t>(m_inputChannels);
     std::vector<float> chunk(chunkFrames * channels);
+    std::vector<float> trackSamples(chunkFrames * 2);
     for (;;) {
         const bool stopping = stop.stop_requested();
         const auto got = m_ring.pop(chunk.data(), chunk.size());
         if (got > 0) {
-            const auto frames = static_cast<sf_count_t>(got / channels);
-            if (sf_writef_float(file.get(), chunk.data(), frames) != frames) {
-                fail(QString::fromUtf8(sf_strerror(file.get())));
-                return;
+            const std::size_t frames = got / channels;
+            std::size_t first = 0; // the track's first channel in the stream
+            for (std::size_t t = 0; t < m_tracks.size(); ++t) {
+                const auto &track = m_tracks[t];
+                const auto in = static_cast<std::size_t>(track.inputChannels);
+                const auto out = static_cast<std::size_t>(track.fileChannels);
+                trackSamples.resize(frames * out);
+                for (std::size_t i = 0; i < frames; ++i) {
+                    for (std::size_t c = 0; c < out; ++c) {
+                        trackSamples[(i * out) + c] = chunk[(i * channels) + first + std::min(c, in - 1)];
+                    }
+                }
+                const auto count = static_cast<sf_count_t>(frames);
+                if (sf_writef_float(files[t].get(), trackSamples.data(), count) != count) {
+                    fail(QString::fromUtf8(sf_strerror(files[t].get())));
+                    return;
+                }
+                first += in;
             }
             m_written.fetch_add(static_cast<std::uint64_t>(frames));
         }

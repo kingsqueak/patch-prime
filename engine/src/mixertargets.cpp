@@ -96,6 +96,8 @@ std::string MixerTargets::describe(const MidiTarget &target) const
         return label(target.key) + ": " + effect().first + " on/off";
     case MidiAction::Scene:
         return "Scene " + target.scene;
+    case MidiAction::Take:
+        return "Record take";
     case MidiAction::Pad: {
         const auto &pads = m_devices->store().pads();
         const auto at = std::ranges::find(pads, target.pad, &SoundPad::id);
@@ -150,6 +152,9 @@ std::optional<bool> MixerTargets::isOn(const MidiTarget &target) const
     }
     if (target.action == MidiAction::Pad) {
         return m_padPlaying ? std::optional{m_padPlaying(target.pad)} : std::nullopt;
+    }
+    if (target.action == MidiAction::Take) {
+        return m_recordings != nullptr ? std::optional{m_recordings->takeRunning()} : std::nullopt;
     }
     const int row = m_devices->rowForKey(target.key);
     if (row < 0) {
@@ -254,6 +259,21 @@ void MixerTargets::toggle(const MidiTarget &target)
         }
         return;
     }
+    if (target.action == MidiAction::Take) {
+        if (m_recordings != nullptr) {
+            QString error;
+            if (m_recordings->takeRunning()) {
+                m_recordings->stopTake();
+            } else if (!m_recordings->startTake(&error)) {
+                if (m_feedback) {
+                    m_feedback(QStringLiteral("media-record"), QStringLiteral("Can't record a take: ") + error);
+                }
+                return;
+            }
+            announce(target);
+        }
+        return;
+    }
     const int row = m_devices->rowForKey(target.key);
     const auto on = isOn(target);
     if (row < 0 || !on) {
@@ -297,6 +317,14 @@ void MixerTargets::announce(const MidiTarget &target) const
     }
     if (target.action == MidiAction::Scene) {
         m_feedback(QStringLiteral("view-media-playlist"), QStringLiteral("Scene: ") + QString::fromStdString(target.scene));
+        return;
+    }
+    if (target.action == MidiAction::Take) {
+        if (m_recordings != nullptr) {
+            m_feedback(QStringLiteral("media-record"), m_recordings->takeRunning()
+                                                           ? QStringLiteral("Recording a take")
+                                                           : QStringLiteral("Take stopped"));
+        }
         return;
     }
     const int row = m_devices->rowForKey(target.key);

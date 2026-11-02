@@ -368,11 +368,16 @@ QQC2.Control {
             }
 
             // Record: the time while recording. Only the dot next to the
-            // channel pair.
+            // channel pair. In multitrack mode it arms the strip for a take
+            // instead (the Recordings panel's Record Take starts it).
             QQC2.ToolButton {
                 id: recordButton
 
                 readonly property bool compact: strip.hasPairs && !strip.recording
+                readonly property bool arming: Devices.multitrack && !strip.recording
+                readonly property bool armed: Devices.armed.includes(strip.key)
+                readonly property bool inTake: Devices.takeFolder.length > 0
+                                               && (Devices.recording[strip.key] || "").startsWith(Devices.takeFolder + "/")
 
                 Layout.fillWidth: !compact
                 Layout.preferredWidth: compact ? Style.controlHeight : -1
@@ -382,10 +387,18 @@ QQC2.Control {
                 enabled: Devices.daemonRunning && strip.online
                 checkable: true
                 text: strip.recording ? Style.clock(Devices.recordingSeconds[strip.key] || 0)
+                                      : arming ? (armed ? qsTr("Armed") : qsTr("Arm"))
                                       : qsTr("Record")
-                onToggled: checked ? Devices.startRecording(strip.key) : Devices.stopRecording(strip.key)
+                onToggled: {
+                    if (arming)
+                        Devices.setArmed(strip.key, !armed);
+                    else if (checked)
+                        Devices.startRecording(strip.key);
+                    else
+                        Devices.stopRecording(strip.key);
+                }
                 Binding on checked {
-                    value: strip.recording
+                    value: strip.recording || (recordButton.arming && recordButton.armed)
                 }
 
                 // Right-click: MIDI Learn.
@@ -406,11 +419,20 @@ QQC2.Control {
                         spacing: Kirigami.Units.smallSpacing
 
                         Rectangle {
-                            // A dot to record; a square to stop.
+                            // A dot to record; a square to stop. Armed, it
+                            // blinks until the take starts.
                             implicitWidth: Style.signalSize + 2
                             implicitHeight: implicitWidth
                             radius: strip.recording ? 1 : width / 2
                             color: strip.recording ? Style.toggleOnText : Style.recordOn
+
+                            SequentialAnimation on opacity {
+                                running: recordButton.arming && recordButton.armed
+                                loops: Animation.Infinite
+                                alwaysRunToEnd: true
+                                NumberAnimation { to: 0.25; duration: 500 }
+                                NumberAnimation { to: 1; duration: 500 }
+                            }
                         }
                         QQC2.Label {
                             visible: !recordButton.compact
@@ -425,11 +447,19 @@ QQC2.Control {
                     radius: Style.toggleRadius
                     color: strip.recording ? Style.recordOn
                                            : recordButton.hovered ? Style.toggleHover : Style.toggleOff
+                    border.width: recordButton.arming && recordButton.armed ? 2 : 0
+                    border.color: Style.recordOn
                     opacity: recordButton.enabled ? 1 : 0.5
                 }
                 Accessible.name: strip.recording ? qsTr("Stop recording %1").arg(strip.label)
-                                                 : qsTr("Record %1").arg(strip.label)
-                QQC2.ToolTip.text: strip.recording
+                                 : arming ? (armed ? qsTr("Disarm %1").arg(strip.label) : qsTr("Arm %1 for a take").arg(strip.label))
+                                 : qsTr("Record %1").arg(strip.label)
+                QQC2.ToolTip.text: inTake
+                     ? qsTr("Recording in the take %1. Click to stop the take.").arg(Devices.takeFolder)
+                     : arming
+                     ? (armed ? qsTr("Armed: recorded in the next take (Record Take under Recordings). Click to disarm.")
+                              : qsTr("Multitrack: click to arm this strip, so the next take records it (Record Take under Recordings)."))
+                     : strip.recording
                      ? qsTr("Recording to %1. Click to stop.").arg(Devices.recording[strip.key])
                      : strip.kind === "hardware"
                      ? qsTr("Record this input raw, as the device sends it (before its effects and fader), to a %1 file in %2. Play it back into this input on the Recordings page to set up its effects.")

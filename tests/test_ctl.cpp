@@ -20,6 +20,7 @@ QJsonObject state()
         "scenes": ["Live", "Podcast"],
         "pads": [{"id": "p1", "label": "Applause", "playing": false}, {"id": "p2", "label": "Air Horn", "playing": true}],
         "recording": {"virtual|stream": "/tmp/x.flac"},
+        "multitrack": true, "armed": ["in|mic"], "takeFolder": "",
         "devices": [
             {"key": "in|mic", "nodeName": "mic", "label": "Mic", "stage": "input", "isEnabled": true,
              "volumeDb": -3, "muted": false, "cued": false,
@@ -109,6 +110,24 @@ private Q_SLOTS:
         QVERIFY(c.returnsError);
         QCOMPARE(only({QStringLiteral("record"), QStringLiteral("Stream Mix")}).method, QStringLiteral("StopRecording"));
         QVERIFY(ok({QStringLiteral("record"), QStringLiteral("Stream Mix"), QStringLiteral("on")}).calls.empty());
+    }
+
+    void takes()
+    {
+        auto c = only({QStringLiteral("arm"), QStringLiteral("Mic")}); // toggles: armed now
+        QCOMPARE(c.method, QStringLiteral("SetArmed"));
+        QCOMPARE(c.args, (QVariantList{QStringLiteral("in|mic"), false}));
+        QVERIFY(ok({QStringLiteral("arm"), QStringLiteral("Mic"), QStringLiteral("on")}).calls.empty());
+        QCOMPARE(only({QStringLiteral("arm"), QStringLiteral("Stream Mix"), QStringLiteral("on")}).args,
+                 (QVariantList{QStringLiteral("virtual|stream"), true}));
+
+        c = only({QStringLiteral("take")});
+        QCOMPARE(c.method, QStringLiteral("StartTake"));
+        QVERIFY(c.returnsError);
+        QVERIFY(ok({QStringLiteral("take"), QStringLiteral("off")}).calls.empty());
+
+        QVERIFY(ok({QStringLiteral("multitrack"), QStringLiteral("on")}).calls.empty());
+        QCOMPARE(only({QStringLiteral("multitrack")}).args, QVariantList{false});
     }
 
     void levels()

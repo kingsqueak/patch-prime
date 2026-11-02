@@ -40,6 +40,12 @@ bool recordingFormatAvailable(RecordingFormat format);
 // "<label> 2026-10-31 11-42-07.<ext>", with characters that don't belong in
 // a file name (/ \ : and the like) replaced.
 QString recordingFileName(const QString &label, const QDateTime &when, RecordingFormat format);
+// A multitrack take's folder, "Take 2026-11-02 14-30-00", and a track's
+// file in it, "<label>.<ext>" (cleaned like recordingFileName's).
+QString takeFolderName(const QDateTime &when);
+QString takeTrackFileName(const QString &label, RecordingFormat format);
+// label made fit for a file name.
+QString fileStem(const QString &label);
 
 // path, or "<stem> (2).<ext>", "(3)"... when a file of that name exists.
 QString uniquePath(const QString &path);
@@ -71,15 +77,29 @@ private:
 
 // --- Recorder ----------------------------------------------------------------
 
-// Records a stereo stream to a file. The realtime thread only queues
-// samples; a thread of its own encodes and writes them. The file is opened
-// once the stream's rate is known and closed by stop().
+// One file a Recorder writes: its share of the stream's channels (in
+// order), and the file's own channel count (a mono input can be written as
+// stereo, the one channel in both).
+struct RecorderTrack
+{
+    QString path;
+    int inputChannels = 2;
+    int fileChannels = 2;
+};
+
+// Records a stream to one file, or (a multitrack take) splits it into one
+// file per track, all starting on the same sample. The realtime thread only
+// queues samples; a thread of its own encodes and writes them. The files
+// are opened once the stream's rate is known and closed by stop().
 class Recorder : public StreamIo
 {
 public:
-    static constexpr int channels = 2;
+    // The most channels one recorder takes (PipeWireGraph::maxCaptureChannels).
+    static constexpr int maxChannels = 64;
 
-    Recorder(QString path, RecordingFormat format);
+    // One stereo file; inputChannels 1 records a mono stream into both.
+    Recorder(QString path, RecordingFormat format, int inputChannels = 2);
+    explicit Recorder(std::vector<RecorderTrack> tracks, RecordingFormat format);
     ~Recorder() override;
     Recorder(const Recorder &) = delete;
     Recorder &operator=(const Recorder &) = delete;
@@ -89,16 +109,20 @@ public:
     void setRate(int rate) noexcept override;
     void process(float *samples, std::uint32_t frames, std::uint32_t channelCount) noexcept override;
 
-    // Writes what's queued, closes the file and waits for the thread. Call
+    // Writes what's queued, closes the files and waits for the thread. Call
     // once the stream is gone.
     void stop();
 
-    [[nodiscard]] const QString &path() const { return m_path; }
+    // The first track's file.
+    [[nodiscard]] const QString &path() const { return m_tracks.front().path; }
+    [[nodiscard]] const std::vector<RecorderTrack> &tracks() const { return m_tracks; }
+    // The stream's channels: every track's inputs together.
+    [[nodiscard]] int inputChannels() const { return m_inputChannels; }
     // Written so far.
     [[nodiscard]] double seconds() const;
     // Frames lost because the disk couldn't keep up.
     [[nodiscard]] std::uint64_t droppedFrames() const { return m_dropped.load(); }
-    // Set when the file can't be written (the recording is then over).
+    // Set when a file can't be written (the recording is then over).
     [[nodiscard]] bool failed() const { return m_failed.load(); }
     [[nodiscard]] QString error() const;
 
@@ -106,7 +130,8 @@ private:
     void run(const std::stop_token &stop);
     void fail(const QString &message);
 
-    QString m_path;
+    std::vector<RecorderTrack> m_tracks;
+    int m_inputChannels = 0;
     RecordingFormat m_format;
     SampleRing m_ring;
     std::atomic<int> m_rate{0};

@@ -264,14 +264,22 @@ public:
 
     // Recording and playback nodes (see RecordingManager), linked here
     // since only the manager knows each strip's ports. Recorders, by node
-    // name, record the strip with that endpoint key: a hardware input raw
-    // (straight from the device, before effects and fader), any other strip
-    // after its effects and fader. The player node plays into the strip
+    // name, record their tracks: each takes the next ports, in order, from
+    // the strip with that endpoint key. A hardware input is recorded raw
+    // (straight from the device, before effects and fader) unless the track
+    // says otherwise; any other strip after its effects and fader. The
+    // player node plays into the strip
     // playerTarget: where apps play into it, or, on a hardware input, where
     // the device comes in (in front of the effects), standing in for the
     // device, which is unlinked meanwhile. Nodes are found by name and
     // patchprime.tap.owner (= owner()).
-    void setTaps(std::map<std::string, std::string> recorders, std::string playerNode,
+    struct TapTrack
+    {
+        std::string key;
+        std::size_t channels = 2; // its ports on the recorder node
+        bool raw = true;          // a hardware input before its effects
+    };
+    void setTaps(std::map<std::string, std::vector<TapTrack>> recorders, std::string playerNode,
                  std::string playerTarget);
     // The soundboard's pad streams playing now (node name -> the key of the
     // strip they play into: a mix bus, Desktop or an output), linked into
@@ -431,7 +439,7 @@ private:
     // The hardware node cue last played to, so its links can be cleaned up
     // when cue moves elsewhere or is turned off.
     std::optional<std::uint32_t> m_cueHardware;
-    std::map<std::string, std::string> m_recorders; // node name -> endpoint key
+    std::map<std::string, std::vector<TapTrack>> m_recorders; // by node name
     std::string m_playerNode;
     std::string m_playerTarget; // endpoint key
     std::map<std::string, std::string> m_pads; // pad stream node -> endpoint key

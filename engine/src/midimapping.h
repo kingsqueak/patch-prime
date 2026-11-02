@@ -24,6 +24,7 @@ enum class MidiAction : std::uint8_t
     Record,        // start/stop recording a strip
     Scene,         // load a scene (by name)
     Pad,           // play or stop a soundboard pad (by id)
+    Take,          // start/stop a multitrack take (the armed strips)
 };
 std::string midiActionName(MidiAction action); // "volume", "mute", ...
 std::optional<MidiAction> midiActionFromName(const std::string &name);

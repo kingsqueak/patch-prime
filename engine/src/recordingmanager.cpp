@@ -45,6 +45,7 @@ RecordingManager::RecordingManager(PipeWireGraph *graph, DeviceModel *devices, B
             while (!m_recordings.empty()) {
                 finish(m_recordings.begin());
             }
+            finishTake();
             stopPlayback();
         }
     });
@@ -56,6 +57,7 @@ RecordingManager::~RecordingManager()
     while (!m_recordings.empty()) {
         finish(m_recordings.begin());
     }
+    finishTake();
     stopPlayback();
 }
 
@@ -75,17 +77,15 @@ void RecordingManager::setFormat(RecordingFormat format)
     m_devices->setRecordingFormat(recordingFormatName(format));
 }
 
-bool RecordingManager::start(const std::string &key, QString *error)
+std::optional<RecordingManager::Source> RecordingManager::source(const std::string &key,
+                                                                 QString *error) const
 {
-    const auto fail = [error](const QString &message) {
+    const auto fail = [error](const QString &message) -> std::optional<Source> {
         if (error != nullptr) {
             *error = message;
         }
-        return false;
+        return std::nullopt;
     };
-    if (m_recordings.contains(key)) {
-        return true;
-    }
     const int row = m_devices->rowForKey(key);
     if (row < 0) {
         return fail(QStringLiteral("no such strip"));
@@ -104,28 +104,46 @@ bool RecordingManager::start(const std::string &key, QString *error)
     if (busName.empty() || !m_graph->isConnected()) {
         return fail(QStringLiteral("the strip isn't running"));
     }
-    const auto label = m_devices->data(index, DeviceModel::LabelRole).toString();
+    // A mono input records as it's mixed: one channel.
+    return Source{.label = m_devices->data(index, DeviceModel::LabelRole).toString(),
+                  .positions = m_buses->stripPositions(key).size() == 1
+                                   ? std::vector<std::string>{"MONO"}
+                                   : std::vector<std::string>{"FL", "FR"}};
+}
+
+bool RecordingManager::start(const std::string &key, QString *error)
+{
+    if (m_recordings.contains(key) || (m_take && std::ranges::contains(m_take->keys, key))) {
+        return true;
+    }
+    const auto src = source(key, error);
+    if (!src) {
+        return false;
+    }
     const auto path = uniquePath(
-        QDir(m_folder).filePath(recordingFileName(label, QDateTime::currentDateTime(), format())));
-    auto recorder = std::make_shared<Recorder>(path, format());
+        QDir(m_folder).filePath(recordingFileName(src->label, QDateTime::currentDateTime(), format())));
+    // A mono input goes in both of the file's channels.
+    auto recorder = std::make_shared<Recorder>(path, format(), static_cast<int>(src->positions.size()));
+    const int row = m_devices->rowForKey(key);
+    const auto busName =
+        m_devices->data(m_devices->index(row), DeviceModel::BusNameRole).toString().toStdString();
     const auto node = std::string(recorderPrefix) +
                       (busName.starts_with("patchprime.") ? busName.substr(11) : busName);
     const Properties props{
-        {"node.description", "Patch Prime recorder (" + label.toStdString() + ")"},
+        {"node.description", "Patch Prime recorder (" + src->label.toStdString() + ")"},
         {"patchprime.tap.owner", m_buses->owner()},
         // Its own class, so Plasma and WirePlumber leave it alone (like sends).
         {"media.class", "Audio/Patchprime/Recorder"},
     };
-    // A mono input records as it's mixed: one channel, in both of the file's.
-    const auto positions = m_buses->stripPositions(key).size() == 1
-                               ? std::vector<std::string>{"MONO"}
-                               : std::vector<std::string>{"FL", "FR"};
-    if (!m_graph->addStream(node, true, 0, props, recorder, positions)) {
+    if (!m_graph->addStream(node, true, 0, props, recorder, src->positions)) {
         recorder->stop();
-        return fail(QStringLiteral("PipeWire refused the recording stream"));
+        if (error != nullptr) {
+            *error = QStringLiteral("PipeWire refused the recording stream");
+        }
+        return false;
     }
     qCInfo(lcRecorder, "recording %s to %s", key.c_str(), qPrintable(path));
-    m_recordings[key] = Recording{.node = node, .recorder = std::move(recorder)};
+    m_recordings[key] = Recording{.node = node, .recorder = std::move(recorder), .keys = {key}, .folder = {}};
     m_lastError.clear();
     updateTaps();
     m_poll.start();
@@ -139,13 +157,15 @@ void RecordingManager::stop(const std::string &key)
         finish(it);
         updateTaps();
         Q_EMIT changed();
+    } else if (m_take && std::ranges::contains(m_take->keys, key)) {
+        stopTake(); // a take stops as a whole
     }
 }
 
-void RecordingManager::finish(std::map<std::string, Recording>::iterator it)
+void RecordingManager::close(Recording &recording)
 {
-    m_graph->removeStream(it->second.node);
-    auto &recorder = *it->second.recorder;
+    m_graph->removeStream(recording.node);
+    auto &recorder = *recording.recorder;
     recorder.stop();
     if (recorder.failed()) {
         m_lastError = QFileInfo(recorder.path()).fileName() + QStringLiteral(": ") + recorder.error();
@@ -154,9 +174,147 @@ void RecordingManager::finish(std::map<std::string, Recording>::iterator it)
                   qPrintable(recorder.path()),
                   static_cast<unsigned long long>(recorder.droppedFrames()));
     }
-    qCInfo(lcRecorder, "stopped %s after %.1f s", qPrintable(recorder.path()), recorder.seconds());
-    m_recordings.erase(it);
+    qCInfo(lcRecorder, "stopped %s after %.1f s",
+           qPrintable(recording.folder.isEmpty() ? recorder.path() : recording.folder), recorder.seconds());
     Q_EMIT filesChanged();
+}
+
+void RecordingManager::finish(std::map<std::string, Recording>::iterator it)
+{
+    close(it->second);
+    m_recordings.erase(it);
+}
+
+void RecordingManager::finishTake()
+{
+    if (m_take) {
+        close(*m_take);
+        m_take.reset();
+    }
+}
+
+bool RecordingManager::multitrack() const
+{
+    return m_devices->store().multitrack();
+}
+
+void RecordingManager::setMultitrack(bool on)
+{
+    m_devices->setMultitrack(on);
+}
+
+std::vector<std::string> RecordingManager::armed() const
+{
+    // In mixer order, only strips that still exist.
+    std::vector<std::string> out;
+    const auto &keys = m_devices->store().armed();
+    for (int row = 0; row < m_devices->rowCount(); ++row) {
+        const auto key = m_devices->data(m_devices->index(row), DeviceModel::KeyRole).toString().toStdString();
+        if (std::ranges::contains(keys, key)) {
+            out.push_back(key);
+        }
+    }
+    return out;
+}
+
+void RecordingManager::setArmed(const std::string &key, bool armed)
+{
+    m_devices->setArmed(key, armed);
+}
+
+bool RecordingManager::takeInputsRaw() const
+{
+    return m_devices->store().takeInputsRaw();
+}
+
+void RecordingManager::setTakeInputsRaw(bool raw)
+{
+    m_devices->setTakeInputsRaw(raw);
+    if (m_take) {
+        updateTaps(); // relinks the inputs at once
+    }
+}
+
+bool RecordingManager::startTake(QString *error)
+{
+    if (m_take) {
+        return true;
+    }
+    const auto when = QDateTime::currentDateTime();
+    const auto folder = uniquePath(QDir(m_folder).filePath(takeFolderName(when)));
+    std::vector<RecorderTrack> tracks;
+    std::vector<std::string> keys;
+    std::vector<std::string> positions;
+    QStringList skipped;
+    for (const auto &key : armed()) {
+        if (m_recordings.contains(key)) {
+            stop(key); // recorded alone until now: it joins the take
+        }
+        QString why;
+        const auto src = source(key, &why);
+        if (!src) {
+            skipped << why;
+            continue;
+        }
+        if (positions.size() + src->positions.size() > Recorder::maxChannels) {
+            skipped << QStringLiteral("too many strips");
+            break;
+        }
+        const auto channels = static_cast<int>(src->positions.size());
+        tracks.push_back(RecorderTrack{
+            .path = uniquePath(QDir(folder).filePath(takeTrackFileName(src->label, format()))),
+            .inputChannels = channels,
+            .fileChannels = channels});
+        keys.push_back(key);
+        positions.insert(positions.end(), src->positions.begin(), src->positions.end());
+    }
+    if (tracks.empty()) {
+        if (error != nullptr) {
+            *error = skipped.isEmpty() ? QStringLiteral("no strips are armed")
+                                       : QStringLiteral("nothing armed can be recorded: ") + skipped.join(u"; ");
+        }
+        return false;
+    }
+    auto recorder = std::make_shared<Recorder>(std::move(tracks), format());
+    const Properties props{
+        {"node.description", "Patch Prime recorder (take)"},
+        {"patchprime.tap.owner", m_buses->owner()},
+        {"media.class", "Audio/Patchprime/Recorder"},
+    };
+    if (!m_graph->addStream(std::string(takeName), true, 0, props, recorder, positions)) {
+        recorder->stop();
+        if (error != nullptr) {
+            *error = QStringLiteral("PipeWire refused the recording stream");
+        }
+        return false;
+    }
+    qCInfo(lcRecorder, "recording a take of %zu strips to %s", keys.size(), qPrintable(folder));
+    m_take = Recording{.node = std::string(takeName), .recorder = std::move(recorder), .keys = std::move(keys),
+                       .folder = folder};
+    m_lastError.clear();
+    updateTaps();
+    m_poll.start();
+    Q_EMIT changed();
+    return true;
+}
+
+void RecordingManager::stopTake()
+{
+    if (m_take) {
+        finishTake();
+        updateTaps();
+        Q_EMIT changed();
+    }
+}
+
+QString RecordingManager::takeFolder() const
+{
+    return m_take ? m_take->folder : QString();
+}
+
+double RecordingManager::takeSeconds() const
+{
+    return m_take ? m_take->recorder->seconds() : 0.0;
 }
 
 std::map<std::string, QString> RecordingManager::recording() const
@@ -164,6 +322,11 @@ std::map<std::string, QString> RecordingManager::recording() const
     std::map<std::string, QString> out;
     for (const auto &[key, r] : m_recordings) {
         out[key] = r.recorder->path();
+    }
+    if (m_take) {
+        for (std::size_t i = 0; i < m_take->keys.size(); ++i) {
+            out[m_take->keys[i]] = m_take->recorder->tracks().at(i).path;
+        }
     }
     return out;
 }
@@ -173,6 +336,11 @@ std::map<std::string, double> RecordingManager::recordedSeconds() const
     std::map<std::string, double> out;
     for (const auto &[key, r] : m_recordings) {
         out[key] = r.recorder->seconds();
+    }
+    if (m_take) {
+        for (const auto &key : m_take->keys) {
+            out[key] = m_take->recorder->seconds();
+        }
     }
     return out;
 }
@@ -271,14 +439,12 @@ RecordingManager::PlayerState RecordingManager::player() const
 std::vector<RecordingFile> RecordingManager::files() const
 {
     std::vector<RecordingFile> out;
-    const QDir dir(m_folder);
-    const auto entries =
-        dir.entryInfoList({QStringLiteral("*.flac"), QStringLiteral("*.wav"),
-                           QStringLiteral("*.mp3"), QStringLiteral("*.ogg")},
-                          QDir::Files, QDir::Time);
-    for (const auto &info : entries) {
+    const QStringList patterns{QStringLiteral("*.flac"), QStringLiteral("*.wav"),
+                               QStringLiteral("*.mp3"), QStringLiteral("*.ogg")};
+    const auto add = [&out](const QFileInfo &info, const QString &take) {
         RecordingFile file{.path = info.absoluteFilePath(),
                            .name = info.fileName(),
+                           .take = take,
                            .bytes = info.size(),
                            .modified = info.lastModified()};
         SF_INFO sf{};
@@ -290,15 +456,53 @@ std::vector<RecordingFile> RecordingManager::files() const
             sf_close(handle);
         }
         out.push_back(std::move(file));
+    };
+    const QDir dir(m_folder);
+    for (const auto &info : dir.entryInfoList(patterns, QDir::Files)) {
+        add(info, {});
     }
+    // Takes: a folder each.
+    for (const auto &takeDir : dir.entryInfoList({QStringLiteral("Take *")}, QDir::Dirs | QDir::NoDotAndDotDot)) {
+        for (const auto &info : QDir(takeDir.absoluteFilePath()).entryInfoList(patterns, QDir::Files, QDir::Name)) {
+            add(info, takeDir.fileName());
+        }
+    }
+    // Newest first; a take's files together (as new as its newest), by name.
+    std::map<QString, QDateTime> takeTime;
+    for (const auto &f : out) {
+        if (!f.take.isEmpty()) {
+            takeTime[f.take] = std::max(takeTime[f.take], f.modified);
+        }
+    }
+    const auto when = [&takeTime](const RecordingFile &f) {
+        return f.take.isEmpty() ? f.modified : takeTime[f.take];
+    };
+    std::ranges::stable_sort(out, [&when](const RecordingFile &a, const RecordingFile &b) {
+        if (!a.take.isEmpty() && a.take == b.take) {
+            return a.name < b.name;
+        }
+        const auto ta = when(a);
+        const auto tb = when(b);
+        return ta != tb ? ta > tb : a.take < b.take;
+    });
     return out;
 }
 
 void RecordingManager::updateTaps()
 {
-    std::map<std::string, std::string> recorders;
+    std::map<std::string, std::vector<BusManager::TapTrack>> recorders;
     for (const auto &[key, r] : m_recordings) {
-        recorders[r.node] = key;
+        recorders[r.node] = {{.key = key,
+                              .channels = static_cast<std::size_t>(r.recorder->tracks().front().inputChannels),
+                              .raw = true}};
+    }
+    if (m_take) {
+        auto &tracks = recorders[m_take->node];
+        for (std::size_t i = 0; i < m_take->keys.size(); ++i) {
+            tracks.push_back({.key = m_take->keys[i],
+                              .channels = static_cast<std::size_t>(m_take->recorder->tracks().at(i).inputChannels),
+                              .raw = takeInputsRaw()});
+        }
     }
     m_buses->setTaps(std::move(recorders), m_player ? std::string(playerName) : std::string(),
                      playerTarget());
@@ -317,6 +521,10 @@ void RecordingManager::poll()
             ++it;
         }
     }
+    if (m_take && m_take->recorder->failed()) {
+        finishTake();
+        any = true;
+    }
     if (any) {
         updateTaps();
         Q_EMIT changed();
@@ -324,7 +532,7 @@ void RecordingManager::poll()
     if (m_player && m_player->finished()) {
         stopPlayback();
     }
-    if (m_recordings.empty() && !m_player) {
+    if (m_recordings.empty() && !m_take && !m_player) {
         m_poll.stop();
     }
 }

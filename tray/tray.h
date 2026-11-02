@@ -55,6 +55,7 @@ private:
     QMenu *m_scenes = nullptr;
     QActionGroup *m_sceneGroup = nullptr; // one scene checked at a time
     QMenu *m_pads = nullptr;
+    QAction *m_take = nullptr; // multitrack: start or stop a take
     QJsonObject m_mic;
     bool m_running = false;
 };

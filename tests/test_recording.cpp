@@ -9,6 +9,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <sndfile.h>
+
 #include <chrono>
 #include <cmath>
 #include <numbers>
@@ -43,6 +45,14 @@ private Q_SLOTS:
                  QStringLiteral("A-B- C 2026-10-31 11-42-07.mp3"));
         QCOMPARE(pp::recordingFileName(QStringLiteral(".."), when, pp::RecordingFormat::Wav),
                  QStringLiteral("Recording.. 2026-10-31 11-42-07.wav"));
+    }
+
+    void takeNames()
+    {
+        const QDateTime when(QDate(2026, 11, 2), QTime(14, 30, 0));
+        QCOMPARE(pp::takeFolderName(when), QStringLiteral("Take 2026-11-02 14-30-00"));
+        QCOMPARE(pp::takeTrackFileName(QStringLiteral("Mic/Guest"), pp::RecordingFormat::Wav),
+                 QStringLiteral("Mic-Guest.wav"));
     }
 
     void uniquePaths()
@@ -205,6 +215,74 @@ private Q_SLOTS:
         recorder.stop();
         QVERIFY(!QFileInfo::exists(path));
         QVERIFY(!recorder.failed());
+    }
+
+    // A take: one stream split into a file per track, each with its own
+    // channels, all the same length.
+    void splitsTracks()
+    {
+        QTemporaryDir dir;
+        const auto mono = dir.filePath(QStringLiteral("Take/Mic.wav"));
+        const auto stereo = dir.filePath(QStringLiteral("Take/Mix.wav"));
+        {
+            pp::Recorder recorder({{.path = mono, .inputChannels = 1, .fileChannels = 1},
+                                   {.path = stereo, .inputChannels = 2, .fileChannels = 2}},
+                                  pp::RecordingFormat::Wav);
+            QCOMPARE(recorder.inputChannels(), 3);
+            recorder.setRate(48000);
+            // Channels: mic 0.5, mix left 0.25, mix right -0.25.
+            std::vector<float> buffer;
+            for (int i = 0; i < 4800; ++i) {
+                buffer.insert(buffer.end(), {0.5F, 0.25F, -0.25F});
+            }
+            recorder.process(buffer.data(), 4800, 2); // the wrong channel count: ignored
+            recorder.process(buffer.data(), 4800, 3);
+            recorder.stop();
+            QVERIFY2(!recorder.failed(), qPrintable(recorder.error()));
+            QCOMPARE(recorder.seconds(), 0.1);
+        }
+        const auto read = [](const QString &path, int channels) {
+            SF_INFO info{};
+            SNDFILE *file = sf_open(QFile::encodeName(path).constData(), SFM_READ, &info);
+            std::vector<float> samples;
+            if (file != nullptr && info.channels == channels) {
+                samples.resize(static_cast<std::size_t>(info.frames) * static_cast<std::size_t>(channels));
+                sf_readf_float(file, samples.data(), info.frames);
+            }
+            if (file != nullptr) {
+                sf_close(file);
+            }
+            return samples;
+        };
+        const auto mic = read(mono, 1);
+        QCOMPARE(mic.size(), std::size_t{4800});
+        QVERIFY(std::abs(mic.front() - 0.5F) < 1e-4F && std::abs(mic.back() - 0.5F) < 1e-4F);
+        const auto mix = read(stereo, 2);
+        QCOMPARE(mix.size(), std::size_t{4800} * 2);
+        QVERIFY(std::abs(mix[0] - 0.25F) < 1e-4F && std::abs(mix[1] + 0.25F) < 1e-4F);
+    }
+
+    // A single recording of a mono strip: the one channel in both of the file's.
+    void monoIntoStereo()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("mic.wav"));
+        {
+            pp::Recorder recorder(path, pp::RecordingFormat::Wav, 1);
+            recorder.setRate(48000);
+            std::vector<float> buffer(480, 0.5F);
+            recorder.process(buffer.data(), 480, 1);
+            recorder.stop();
+        }
+        SF_INFO info{};
+        SNDFILE *file = sf_open(QFile::encodeName(path).constData(), SFM_READ, &info);
+        QVERIFY(file != nullptr);
+        QCOMPARE(info.channels, 2);
+        QCOMPARE(info.frames, sf_count_t{480});
+        std::vector<float> frame(2);
+        sf_readf_float(file, frame.data(), 1);
+        sf_close(file);
+        QVERIFY(std::abs(frame[0] - 0.5F) < 1e-4F && std::abs(frame[1] - 0.5F) < 1e-4F);
     }
 
     void mp3RefusesHighRates()

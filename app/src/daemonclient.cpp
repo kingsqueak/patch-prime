@@ -13,6 +13,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusReply>
+#include <QDir>
 #include <QFile>
 #include <QGuiApplication>
 #include <QFileInfo>
@@ -274,6 +275,31 @@ void DaemonClient::setRecordingFormat(const QString &format)
     call(QStringLiteral("SetRecordingFormat"), {format});
 }
 
+void DaemonClient::setMultitrack(bool on)
+{
+    call(QStringLiteral("SetMultitrack"), {on});
+}
+
+void DaemonClient::setArmed(const QString &key, bool armed)
+{
+    call(QStringLiteral("SetArmed"), {key, armed});
+}
+
+void DaemonClient::setTakeInputsRaw(bool raw)
+{
+    call(QStringLiteral("SetTakeInputsRaw"), {raw});
+}
+
+void DaemonClient::startTake()
+{
+    callReportingError(QStringLiteral("StartTake"), {});
+}
+
+void DaemonClient::stopTake()
+{
+    call(QStringLiteral("StopTake"), {});
+}
+
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static): QML calls it on the instance
 QVariantList DaemonClient::recordings() const
 {
@@ -319,7 +345,18 @@ void DaemonClient::setPlaybackLoop(bool loop)
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static): QML calls it on the instance
 bool DaemonClient::trashFile(const QString &file)
 {
-    return QFile::moveToTrash(file);
+    if (!QFile::moveToTrash(file)) {
+        return false;
+    }
+    // A take's last track gone: its folder goes too.
+    QDir folder = QFileInfo(file).absoluteDir();
+    if (folder.dirName().startsWith(QLatin1String("Take ")) &&
+        folder.isEmpty(QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot)) {
+        const auto name = folder.dirName();
+        folder.cdUp();
+        folder.rmdir(name);
+    }
+    return true;
 }
 
 void DaemonClient::setEnabled(const QString &key, bool enabled)
@@ -807,10 +844,23 @@ void DaemonClient::onStateChanged(const QString &state)
         const int revision = root.value(QLatin1String("recordingsRevision")).toInt();
         const auto player = root.value(QLatin1String("player")).toObject().toVariantMap();
         const auto target = root.value(QLatin1String("playerTarget")).toString();
+        const bool multitrack = root.value(QLatin1String("multitrack")).toBool();
+        const auto armed = root.value(QLatin1String("armed")).toVariant().toStringList();
+        const bool inputsRaw = root.value(QLatin1String("takeInputsRaw")).toBool(true);
+        const auto takeFolder = root.value(QLatin1String("takeFolder")).toString();
         if (folder != m_recordingFolder || format != m_recordingFormat ||
             formats != m_recordingFormats ||
             recording != m_recording || error != m_recordingError ||
-            revision != m_recordingsRevision || player != m_player || target != m_playerTarget) {
+            revision != m_recordingsRevision || player != m_player || target != m_playerTarget ||
+            multitrack != m_multitrack || armed != m_armed || inputsRaw != m_takeInputsRaw ||
+            takeFolder != m_takeFolder) {
+            m_multitrack = multitrack;
+            m_armed = armed;
+            m_takeInputsRaw = inputsRaw;
+            if (takeFolder.isEmpty()) {
+                m_takeSeconds = 0.0;
+            }
+            m_takeFolder = takeFolder;
             m_recordingFolder = folder;
             m_recordingFormat = format;
             m_recordingFormats = formats;
@@ -1081,6 +1131,13 @@ void DaemonClient::onLevels(const QVariantMap &levels)
         if (it.key().startsWith(QLatin1String("rec|"))) {
             if (!peaks.isEmpty()) {
                 m_recordingSeconds.insert(it.key().mid(4), peaks.front());
+                timesChanged = true;
+            }
+            continue;
+        }
+        if (it.key() == QLatin1String("take")) {
+            if (!peaks.isEmpty()) {
+                m_takeSeconds = peaks.front();
                 timesChanged = true;
             }
             continue;

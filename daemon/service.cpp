@@ -289,6 +289,16 @@ QString PatchPrimeService::GetState() const
              return formats;
          }()},
         {QStringLiteral("recordingError"), m_recordings->lastError()},
+        {QStringLiteral("multitrack"), m_recordings->multitrack()},
+        {QStringLiteral("armed"), [this] {
+             QJsonArray armed;
+             for (const auto &key : m_recordings->armed()) {
+                 armed.append(QString::fromStdString(key));
+             }
+             return armed;
+         }()},
+        {QStringLiteral("takeInputsRaw"), m_recordings->takeInputsRaw()},
+        {QStringLiteral("takeFolder"), m_recordings->takeFolder()},
         {QStringLiteral("recordingsRevision"), m_recordingsRevision},
         {QStringLiteral("controlSurface"), QString::fromStdString(m_devices->store().controlSurface())},
         {QStringLiteral("controlSurfaceAvailable"), m_midi != nullptr && m_midi->isAvailable()},
@@ -675,6 +685,33 @@ void PatchPrimeService::StopRecording(const QString &key)
     m_recordings->stop(key.toStdString());
 }
 
+void PatchPrimeService::SetMultitrack(bool on)
+{
+    m_recordings->setMultitrack(on);
+}
+
+void PatchPrimeService::SetArmed(const QString &key, bool armed)
+{
+    m_recordings->setArmed(key.toStdString(), armed);
+}
+
+void PatchPrimeService::SetTakeInputsRaw(bool raw)
+{
+    m_recordings->setTakeInputsRaw(raw);
+}
+
+QString PatchPrimeService::StartTake()
+{
+    QString error;
+    m_recordings->startTake(&error);
+    return error;
+}
+
+void PatchPrimeService::StopTake()
+{
+    m_recordings->stopTake();
+}
+
 void PatchPrimeService::SetRecordingFormat(const QString &format)
 {
     if (const auto parsed = pp::parseRecordingFormat(format.toStdString())) {
@@ -692,6 +729,7 @@ QString PatchPrimeService::GetRecordings()
             {QStringLiteral("seconds"), f.seconds},
             {QStringLiteral("bytes"), static_cast<double>(f.bytes)},
             {QStringLiteral("modified"), f.modified.toString(Qt::ISODate)},
+            {QStringLiteral("take"), f.take},
         });
     }
     return QString::fromUtf8(QJsonDocument(files).toJson(QJsonDocument::Compact));
@@ -973,6 +1011,9 @@ void PatchPrimeService::emitLevels()
     for (const auto &[key, seconds] : m_recordings->recordedSeconds()) {
         levels.insert(QStringLiteral("rec|") + QString::fromStdString(key),
                       QVariant::fromValue(QList<double>{seconds}));
+    }
+    if (m_recordings->takeRunning()) {
+        levels.insert(QStringLiteral("take"), QVariant::fromValue(QList<double>{m_recordings->takeSeconds()}));
     }
     if (const auto player = m_recordings->player(); !player.path.isEmpty()) {
         levels.insert(QStringLiteral("player"), QVariant::fromValue(QList<double>{player.position}));

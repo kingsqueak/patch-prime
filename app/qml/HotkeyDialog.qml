@@ -28,6 +28,7 @@ Kirigami.Dialog {
         { text: qsTr("Level up 1 dB"), mode: "levelUp", action: "volume" },
         { text: qsTr("Level down 1 dB"), mode: "levelDown", action: "volume" },
         { text: qsTr("Load a scene"), mode: "toggle", action: "scene" },
+        { text: qsTr("Record a take (start/stop)"), mode: "toggle", action: "take" },
     ]
     readonly property var choices: {
         if (!fixedTarget)
@@ -40,6 +41,8 @@ Kirigami.Dialog {
                     { text: qsTr("Level down 1 dB"), mode: "levelDown", action: a }];
         if (a === "pad")
             return [{ text: qsTr("Play / stop"), mode: "toggle", action: a }];
+        if (a === "take")
+            return [{ text: qsTr("Start / stop the take"), mode: "toggle", action: a }];
         return [{ text: qsTr("On/off"), mode: "toggle", action: a }];
     }
     readonly property var choice: choices[Math.max(0, modeChoice.currentIndex)]
@@ -48,9 +51,14 @@ Kirigami.Dialog {
             return fixedTarget;
         if (choice.action === "scene")
             return { action: "scene", scene: sceneChoice.currentText };
+        if (choice.action === "take")
+            return { action: "take" };
         return { action: choice.action, key: stripChoice.currentValue || "" };
     }
-    readonly property bool complete: target.action === "scene" ? (target.scene || "") !== "" : (target.key || "") !== ""
+    readonly property bool complete: target.action === "scene" ? (target.scene || "") !== ""
+                                   : target.action === "pad" ? (target.pad || "") !== ""
+                                   : target.action === "take" ? true
+                                   : (target.key || "") !== ""
 
     title: qsTr("Add Hotkey")
     padding: Kirigami.Units.largeSpacing
@@ -101,7 +109,7 @@ Kirigami.Dialog {
         QQC2.ComboBox {
             id: stripChoice
             Kirigami.FormData.label: qsTr("Strip:")
-            visible: !dialog.fixedTarget && dialog.choice.action !== "scene"
+            visible: !dialog.fixedTarget && dialog.choice.action !== "scene" && dialog.choice.action !== "take"
             model: strips
             textRole: "label"
             valueRole: "key"

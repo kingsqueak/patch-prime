@@ -66,7 +66,7 @@ From top to bottom:
 | Microphone | Inputs only. **Mono**: mixes all of this input's channels into one, heard in both ears. Use it for a mic on one input of a stereo interface. |
 | Star | Make this strip the system default output (for strips apps play into) or default microphone (for inputs). |
 | Channel pair | On multichannel interfaces: use every channel, or only one stereo pair (for example "Ch 3–4"). |
-| **Record** | Inputs, mix buses and Desktop: record this strip to a file. While recording, the button turns red and shows the time; click it to stop. Next to a channel pair menu it's just a dot. See [Recording and playback](#recording-and-playback). |
+| **Record** | Inputs, mix buses and Desktop: record this strip to a file. While recording, the button turns red and shows the time; click it to stop. Next to a channel pair menu it's just a dot. With **Multitrack** on, it reads **Arm** and arms the strip for a take instead. See [Recording and playback](#recording-and-playback). |
 
 On a hardware **input**, effects run *before* the fader, as on a console, so apps recording your mic get the processed sound. On mix buses and outputs they run *after* the fader, which is what a limiter wants.
 
@@ -152,6 +152,20 @@ The **Recordings panel**, to the right of the outputs in the mixer, has the play
 
 - **Play** (or double-click a file) plays it through the player. **Play into** chooses the strip it plays into: an input, a mix bus, Desktop or a hardware output. Play into Stream Mix to let your stream hear it, or into your headphones' output to listen alone.
 - The player bar has play/pause, **loop** (play the file over and over), stop and a position slider (drag it to jump).
+
+### Multitrack takes
+
+A take records several strips at once, each to its own file, all starting on the same sample, so they line up as tracks in Audacity, Reaper or Ardour. Record your mic, a guest and the stream mix together, then fix the levels or the edit afterwards.
+
+1. Turn on **Multitrack** in the Recordings panel (or on the Recordings page). The strips' **Record** buttons now read **Arm**.
+2. Click **Arm** on each strip you want in the take. An armed strip's button is outlined in red and its dot blinks. Strips stay armed until you disarm them.
+3. Press **Record Take**. Every armed strip records; its button shows the time. Press **Stop Take** (or any recording strip's button) to stop them all.
+
+- **Where:** each take gets a folder, `Take 2026-11-02 14-30-00`, in the recordings folder, with one file per strip named after it: `Mic.flac`, `Stream Mix.flac`. The recordings list shows them as, for example, "Mic.flac (take 2026-11-02 14-30-00)". Moving a take's last file to the trash removes its folder.
+- **Mono inputs** are recorded as mono files; stereo strips as stereo.
+- **Inputs raw** or **Inputs processed**: raw records hardware inputs as the device sends them, before their effects, so you can process them later; processed records them after their effects and fader, as the mix hears them. Mix buses and Desktop are always recorded as mixed. You can switch while a take records; it applies at once.
+- With Multitrack off, the Record buttons record their strip on its own again, as before.
+- **Record Take** can also be started from the tray menu, a hotkey or a MIDI button (right-click **Record Take**), or `patchprime-ctl take`.
 
 ### Setting up a mic's effects on a recording
 
@@ -375,7 +389,7 @@ Then click the key button and press the key. A single key without Ctrl, Alt or M
 
 What a hotkey can do:
 
-- **Mute on/off**, **Cue on/off**, **Record on/off**, a send or an effect **on/off**, or **load a scene**.
+- **Mute on/off**, **Cue on/off**, **Record on/off**, a send or an effect **on/off**, **load a scene**, or **record a take** (start/stop).
 - **Push to talk**: the strip is unmuted while the key is held, and muted again when you let go. **Push to mute** is the opposite (a cough button).
 - **Duck while held**: the strip drops 15 dB while the key is held, and comes back when you let go (unless you changed its level in the meantime).
 - **Level up** and **Level down**: 1 dB per press. Hold the key to keep going.
@@ -397,6 +411,8 @@ patchprime-ctl send Mic "Stream Mix" on
 patchprime-ctl send-level Mic "Stream Mix" up
 patchprime-ctl effect Mic 2 off          # the strip's second effect
 patchprime-ctl record "Stream Mix"
+patchprime-ctl arm Mic on               # multitrack: arm a strip for the next take
+patchprime-ctl take                     # start (or stop) the take
 patchprime-ctl scene Podcast
 patchprime-ctl pad Applause              # play a soundboard pad (again to stop)
 patchprime-ctl get Mic muted             # yes or no: for a button's state

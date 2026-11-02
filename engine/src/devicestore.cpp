@@ -241,6 +241,9 @@ bool DeviceStore::load()
     m_blockSize = 0;
     m_recordingFormat = "flac";
     m_playerTarget.clear();
+    m_multitrack = false;
+    m_armed.clear();
+    m_takeInputsRaw = true;
     m_currentScene.clear();
     m_controlSurface.clear();
     m_midiController.clear();
@@ -274,6 +277,13 @@ bool DeviceStore::load()
     m_recordingFormat =
         root.value(QLatin1String("recordingFormat")).toString(QStringLiteral("flac")).toStdString();
     m_playerTarget = root.value(QLatin1String("playerTarget")).toString().toStdString();
+    m_multitrack = root.value(QLatin1String("multitrack")).toBool(false);
+    for (const auto &k : root.value(QLatin1String("armed")).toArray()) {
+        if (const auto key = k.toString().toStdString(); !key.empty() && !std::ranges::contains(m_armed, key)) {
+            m_armed.push_back(key);
+        }
+    }
+    m_takeInputsRaw = root.value(QLatin1String("takeInputsRaw")).toBool(true);
     m_currentScene = root.value(QLatin1String("currentScene")).toString().toStdString();
     m_controlSurface = root.value(QLatin1String("controlSurface")).toString().toStdString();
     m_midiController = root.value(QLatin1String("midiController")).toString().toStdString();
@@ -326,6 +336,15 @@ bool DeviceStore::save()
         {QStringLiteral("blockSize"), m_blockSize},
         {QStringLiteral("recordingFormat"), qs(m_recordingFormat)},
         {QStringLiteral("playerTarget"), qs(m_playerTarget)},
+        {QStringLiteral("multitrack"), m_multitrack},
+        {QStringLiteral("armed"), [this] {
+             QJsonArray armed;
+             for (const auto &key : m_armed) {
+                 armed.append(qs(key));
+             }
+             return armed;
+         }()},
+        {QStringLiteral("takeInputsRaw"), m_takeInputsRaw},
         {QStringLiteral("currentScene"), qs(m_currentScene)},
         {QStringLiteral("controlSurface"), qs(m_controlSurface)},
         {QStringLiteral("midiController"), qs(m_midiController)},
@@ -409,6 +428,7 @@ bool DeviceStore::remove(const std::string &key)
     if (m_soundboardTarget == key) {
         m_soundboardTarget.clear();
     }
+    std::erase(m_armed, key);
     return true;
 }
 
@@ -429,6 +449,7 @@ bool DeviceStore::rekey(const std::string &from, const std::string &to)
     if (m_playerTarget == from) {
         m_playerTarget = to;
     }
+    std::ranges::replace(m_armed, from, to);
     if (m_cueOutput == from) {
         m_cueOutput = to;
     }

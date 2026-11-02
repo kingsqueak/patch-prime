@@ -468,6 +468,85 @@ private Q_SLOTS:
             5000));
     }
 
+    // A multitrack take: two armed mix buses, one stream, a file each, the
+    // same length; the tone only in the one it played into.
+    void recordsATake()
+    {
+        QTemporaryDir dir;
+        DeviceStore store(dir.filePath(QStringLiteral("devices.json")));
+        DeviceModel devices(&store);
+        devices.attach(&m_graph);
+        BusManager buses(&m_graph, &devices);
+        m_owners.insert(busOwnerFor(store.path()));
+        RecordingManager recordings(&m_graph, &devices, &buses, dir.filePath(QStringLiteral("rec")));
+
+        const auto aKey = devices.createVirtual(QStringLiteral("Take A"), EndpointKind::VirtualSink).toStdString();
+        const auto bKey = devices.createVirtual(QStringLiteral("Take B"), EndpointKind::VirtualSink).toStdString();
+        const auto aNode = store.find(aKey)->busName;
+        const auto bNode = store.find(bKey)->busName;
+        QVERIFY(QTest::qWaitFor([&] { return nodeNamed(m_graph, aNode) && nodeNamed(m_graph, bNode); }, 5000));
+        QVERIFY(QTest::qWaitFor([&] { return devices.rowForKey(aKey) >= 0 && devices.rowForKey(bKey) >= 0; }, 5000));
+
+        QString error;
+        QVERIFY(!recordings.startTake(&error)); // nothing armed
+        QVERIFY(!error.isEmpty());
+        recordings.setMultitrack(true);
+        recordings.setArmed(aKey, true);
+        recordings.setArmed(bKey, true);
+        QCOMPARE(recordings.armed(), (std::vector<std::string>{aKey, bKey}));
+        recordings.setFormat(RecordingFormat::Wav);
+        QVERIFY2(recordings.startTake(&error), qPrintable(error));
+        const auto takeNode = std::string(RecordingManager::takeName);
+        QVERIFY(QTest::qWaitFor(
+            [&] { return linkCount(m_graph, aNode, takeNode) == 2 && linkCount(m_graph, bNode, takeNode) == 2; },
+            5000));
+        QCOMPARE(recordings.recording().size(), std::size_t{2});
+
+        QTemporaryDir toneDir;
+        const auto tone = toneDir.filePath(QStringLiteral("tone.wav"));
+        QVERIFY(writeTone(tone));
+        QProcess player;
+        player.start(QStringLiteral("pw-play"),
+                     {QStringLiteral("-P"), QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                      QStringLiteral("--target"), QString::fromStdString(aNode), tone});
+        QVERIFY(QTest::qWaitFor([&] { return recordings.takeSeconds() > 2.0; }, 8000));
+        player.kill();
+        player.waitForFinished();
+        const auto folder = recordings.takeFolder();
+        QVERIFY(QFileInfo(folder).fileName().startsWith(QStringLiteral("Take ")));
+        recordings.stop(bKey); // one strip's stop stops the take
+        QVERIFY(!recordings.takeRunning());
+        QVERIFY(recordings.recording().empty());
+        QVERIFY(QTest::qWaitFor([&] { return !nodeNamed(m_graph, takeNode); }, 3000));
+
+        const auto files = recordings.files();
+        QCOMPARE(files.size(), std::size_t{2});
+        QCOMPARE(files.at(0).name, QStringLiteral("Take A.wav"));
+        QCOMPARE(files.at(1).name, QStringLiteral("Take B.wav"));
+        QCOMPARE(files.at(0).take, QFileInfo(folder).fileName());
+        QCOMPARE(files.at(0).seconds, files.at(1).seconds); // sample-aligned, same length
+        QVERIFY(files.at(0).seconds > 2.0);
+        const auto peakOf = [&error](const QString &path) {
+            const auto file = Player::open(path, &error);
+            float peak = 0.0F;
+            std::vector<float> buffer(512);
+            for (int i = 0; file && i < 2000 && !file->finished(); ++i) {
+                file->process(buffer.data(), 256, 2);
+                for (const float x : buffer) {
+                    peak = std::max(peak, std::abs(x));
+                }
+                QTest::qWait(0);
+            }
+            return peak;
+        };
+        QVERIFY(std::abs(peakOf(files.at(0).path) - 0.5F) < 0.05F);
+        QVERIFY(peakOf(files.at(1).path) < 0.01F);
+
+        devices.forget(devices.rowForKey(aKey));
+        devices.forget(devices.rowForKey(bKey));
+        QVERIFY(QTest::qWaitFor([&] { return !nodeNamed(m_graph, aNode) && !nodeNamed(m_graph, bNode); }, 5000));
+    }
+
     // Records a mix bus while a tone plays into it, then plays the file
     // into a routed input.
     void recordsAndPlays()

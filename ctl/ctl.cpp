@@ -225,6 +225,9 @@ share a label. Switches take on, off or toggle (the default).
   send-level <from> <to> <dB>|up|down [dB]
   effect <strip> <n> [on|off|toggle]  turn its n-th effect on or off
   record <strip> [on|off|toggle]    record it to the recordings folder
+  multitrack [on|off|toggle]        Record buttons arm strips for takes
+  arm <strip> [on|off|toggle]       arm it for the next take
+  take [on|off|toggle]              record the armed strips, a file each
   scene <name>                      load a scene
   scenes                            list the scenes
   pad <name>                        play a soundboard pad (stop it if playing)
@@ -288,10 +291,36 @@ std::expected<Plan, QString> plan(const QStringList &args, const QJsonObject &st
         return fail(QStringLiteral("no pad called \"%1\" (see: patchprime-ctl pads)").arg(wanted));
     }
 
+    if (command == QLatin1String("multitrack")) {
+        const bool current = state.value(QLatin1String("multitrack")).toBool();
+        const auto on = onOff(args, 1, current);
+        if (!on) {
+            return fail(on.error());
+        }
+        if (*on == current) {
+            return Plan{};
+        }
+        return Plan{.calls = {{.method = QStringLiteral("SetMultitrack"), .args = {*on}}}, .output = {}};
+    }
+    if (command == QLatin1String("take")) {
+        const bool running = !state.value(QLatin1String("takeFolder")).toString().isEmpty();
+        const auto on = onOff(args, 1, running);
+        if (!on) {
+            return fail(on.error());
+        }
+        if (*on == running) {
+            return Plan{};
+        }
+        return Plan{.calls = {{.method = *on ? QStringLiteral("StartTake") : QStringLiteral("StopTake"),
+                               .args = {},
+                               .returnsError = *on}},
+                    .output = {}};
+    }
+
     // Everything else acts on a strip.
-    static const QStringList stripCommands{QStringLiteral("volume"), QStringLiteral("mute"), QStringLiteral("cue"),
+    static const QStringList stripCommands{QStringLiteral("volume"), QStringLiteral("mute"),   QStringLiteral("cue"),
                                            QStringLiteral("send"),   QStringLiteral("send-level"),
-                                           QStringLiteral("effect"), QStringLiteral("record")};
+                                           QStringLiteral("effect"), QStringLiteral("record"), QStringLiteral("arm")};
     if (!stripCommands.contains(command)) {
         return fail(QStringLiteral("unknown command \"%1\" (see: patchprime-ctl --help)").arg(args.front()));
     }
@@ -366,6 +395,17 @@ std::expected<Plan, QString> plan(const QStringList &args, const QJsonObject &st
         }
         return Plan{.calls = {{.method = QStringLiteral("SetEffectEnabled"), .args = {key(*strip), n - 1, *on}}},
                     .output = {}};
+    }
+    if (command == QLatin1String("arm")) {
+        const bool armed = state.value(QLatin1String("armed")).toArray().contains(key(*strip));
+        const auto on = onOff(args, 2, armed);
+        if (!on) {
+            return fail(on.error());
+        }
+        if (*on == armed) {
+            return Plan{};
+        }
+        return Plan{.calls = {{.method = QStringLiteral("SetArmed"), .args = {key(*strip), *on}}}, .output = {}};
     }
     if (command == QLatin1String("record")) {
         const bool recording = state.value(QLatin1String("recording")).toObject().contains(key(*strip));

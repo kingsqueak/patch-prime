@@ -112,6 +112,11 @@ ColumnLayout {
                 }
             }
 
+            TakeControls {
+                Layout.fillWidth: true
+                compact: true
+            }
+
             QQC2.Label {
                 Layout.fillWidth: true
                 visible: Devices.recordingError.length > 0

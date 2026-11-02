@@ -1342,7 +1342,7 @@ void BusManager::linkKeys(const std::map<std::string, FxPorts> &fx,
     }
 }
 
-void BusManager::setTaps(std::map<std::string, std::string> recorders, std::string playerNode,
+void BusManager::setTaps(std::map<std::string, std::vector<TapTrack>> recorders, std::string playerNode,
                          std::string playerTarget)
 {
     m_recorders = std::move(recorders);
@@ -1402,28 +1402,38 @@ void BusManager::linkTaps(const std::map<std::string, std::uint32_t> &ready,
     for (const auto &[name, w] : wanted) {
         nameOf[w.key] = name;
     }
-    for (const auto &[nodeName, key] : m_recorders) {
+    for (const auto &[nodeName, tracks] : m_recorders) {
         const auto node = tapNode(nodeName);
-        const auto bus = nameOf.find(key);
-        if (!node || bus == nameOf.end()) {
+        if (!node) {
             continue;
         }
-        const auto &w = wanted.at(bus->second);
-        // A hardware input raw, as it comes in (summed to mono like the strip).
-        std::vector<PortRef> from;
-        if (effectsBeforeBus(w)) {
-            from = hardwarePortsOf(w);
-        } else if (const auto out = stripOuts.find(bus->second); out != stripOuts.end()) {
-            from = out->second;
-        }
         const auto into = portsOf(*node, "in", false);
-        link(from, into, existingLinks);
-        // Only from there: the strip's last node may have changed (a plugin
-        // added at the end, or one that crashed).
         std::set<std::uint32_t> fromIds;
-        for (const auto &p : from) {
-            fromIds.insert(p.portId);
+        std::size_t first = 0;
+        for (const auto &track : tracks) {
+            const std::size_t end = std::min(first + track.channels, into.size());
+            const std::vector<PortRef> ports(into.begin() + static_cast<std::ptrdiff_t>(std::min(first, end)),
+                                             into.begin() + static_cast<std::ptrdiff_t>(end));
+            first += track.channels;
+            const auto bus = nameOf.find(track.key);
+            if (bus == nameOf.end() || ports.empty()) {
+                continue;
+            }
+            const auto &w = wanted.at(bus->second);
+            // A hardware input raw, as it comes in (summed to mono like the strip).
+            std::vector<PortRef> from;
+            if (track.raw && effectsBeforeBus(w)) {
+                from = hardwarePortsOf(w);
+            } else if (const auto out = stripOuts.find(bus->second); out != stripOuts.end()) {
+                from = out->second;
+            }
+            link(from, ports, existingLinks);
+            for (const auto &p : from) {
+                fromIds.insert(p.portId);
+            }
         }
+        // Only from there: a strip's last node may have changed (a plugin
+        // added at the end, or one that crashed).
         std::set<std::uint32_t> intoIds;
         for (const auto &p : into) {
             intoIds.insert(p.portId);

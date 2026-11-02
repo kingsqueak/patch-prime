@@ -46,11 +46,13 @@ QQC2.ItemDelegate {
             spacing: 0
             QQC2.Label {
                 Layout.fillWidth: true
-                text: row.modelData.name
+                // A take's track: its file name, and which take.
+                text: row.modelData.take ? qsTr("%1 (take %2)").arg(row.modelData.name).arg(row.modelData.take.slice(5))
+                                         : row.modelData.name
                 elide: row.compact ? Text.ElideMiddle : Text.ElideRight
                 font.pointSize: row.compact ? Kirigami.Theme.smallFont.pointSize
                                             : Kirigami.Theme.defaultFont.pointSize
-                QQC2.ToolTip.text: row.modelData.name
+                QQC2.ToolTip.text: text
                 QQC2.ToolTip.visible: row.compact && truncated && row.hovered
                 QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
             }

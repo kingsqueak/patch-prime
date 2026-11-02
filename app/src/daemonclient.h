@@ -109,6 +109,13 @@ class DaemonClient : public QAbstractListModel
     Q_PROPERTY(QVariantMap recording READ recording NOTIFY recordingChanged)
     Q_PROPERTY(QVariantMap recordingSeconds READ recordingSeconds NOTIFY recordingTimesChanged)
     Q_PROPERTY(QString recordingError READ recordingError NOTIFY recordingChanged)
+    // Multitrack takes: on, the strips armed (keys), inputs raw or processed,
+    // and the running take's folder ("" when none) and length.
+    Q_PROPERTY(bool multitrack READ multitrack NOTIFY recordingChanged)
+    Q_PROPERTY(QStringList armed READ armed NOTIFY recordingChanged)
+    Q_PROPERTY(bool takeInputsRaw READ takeInputsRaw NOTIFY recordingChanged)
+    Q_PROPERTY(QString takeFolder READ takeFolder NOTIFY recordingChanged)
+    Q_PROPERTY(double takeSeconds READ takeSeconds NOTIFY recordingTimesChanged)
     // Goes up when the folder's files change (call recordings() again).
     Q_PROPERTY(int recordingsRevision READ recordingsRevision NOTIFY recordingChanged)
     // The player: {path (empty when stopped), paused, duration, loop}, where it
@@ -220,6 +227,11 @@ public:
     [[nodiscard]] QVariantMap recording() const { return m_recording; }
     [[nodiscard]] QVariantMap recordingSeconds() const { return m_recordingSeconds; }
     [[nodiscard]] QString recordingError() const { return m_recordingError; }
+    [[nodiscard]] bool multitrack() const { return m_multitrack; }
+    [[nodiscard]] QStringList armed() const { return m_armed; }
+    [[nodiscard]] bool takeInputsRaw() const { return m_takeInputsRaw; }
+    [[nodiscard]] QString takeFolder() const { return m_takeFolder; }
+    [[nodiscard]] double takeSeconds() const { return m_takeSeconds; }
     [[nodiscard]] int recordingsRevision() const { return m_recordingsRevision; }
     [[nodiscard]] QVariantMap player() const { return m_player; }
     [[nodiscard]] double playerPosition() const { return m_playerPosition; }
@@ -279,6 +291,11 @@ public:
     Q_INVOKABLE void startRecording(const QString &key);
     Q_INVOKABLE void stopRecording(const QString &key);
     Q_INVOKABLE void setRecordingFormat(const QString &format);
+    Q_INVOKABLE void setMultitrack(bool on);
+    Q_INVOKABLE void setArmed(const QString &key, bool armed);
+    Q_INVOKABLE void setTakeInputsRaw(bool raw);
+    Q_INVOKABLE void startTake();
+    Q_INVOKABLE void stopTake();
     // The recordings folder's files, newest first: [{path, name, seconds,
     // bytes, modified}]. Asks the daemon and waits for the answer.
     [[nodiscard]] Q_INVOKABLE QVariantList recordings() const;
@@ -408,6 +425,11 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QVariantMap m_recording;
     QVariantMap m_recordingSeconds;
     QString m_recordingError;
+    bool m_multitrack = false;
+    QStringList m_armed;
+    bool m_takeInputsRaw = true;
+    QString m_takeFolder;
+    double m_takeSeconds = 0.0;
     int m_recordingsRevision = 0;
     QVariantMap m_player;
     double m_playerPosition = 0.0;

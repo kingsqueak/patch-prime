@@ -180,12 +180,12 @@ struct PipeWireGraph::Session
         pw_stream *stream = nullptr;
         pw_filter *filter = nullptr;
         spa_hook listener{};
-        std::array<void *, 2> ports{};
+        std::vector<void *> ports; // a recorder's, one per channel
         std::shared_ptr<StreamIo> io;
         // Realtime only (recorder): the last rate passed on, and the cycle
-        // interleaved for the recorder.
+        // interleaved for the recorder (sized when the ports are added).
         std::uint32_t rate = 0;
-        std::array<float, std::size_t{maxFrames} * 2> interleaved{};
+        std::vector<float> interleaved;
     };
 
     void bind(const GraphObject &object, std::uint32_t version);
@@ -710,20 +710,17 @@ void PipeWireGraph::Session::onTapProcess(void *data, spa_io_position *position)
     }
     const auto frames =
         std::min(static_cast<std::uint32_t>(position->clock.duration), IoStream::maxFrames);
-    const auto *left = static_cast<const float *>(pw_filter_get_dsp_buffer(s->ports[0], frames));
-    // One port (MONO): heard in both channels.
-    const auto *right = s->ports[1] != nullptr
-                            ? static_cast<const float *>(pw_filter_get_dsp_buffer(s->ports[1], frames))
-                            : left;
-    auto &out = s->interleaved;
-    for (std::uint32_t i = 0; i < frames; ++i) {
-        // Bounds: frames <= maxFrames, the array holds two per frame.
-        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
-        out[std::size_t{i} * 2] = left != nullptr ? left[i] : 0.0F;
-        out[(std::size_t{i} * 2) + 1] = right != nullptr ? right[i] : 0.0F;
-        // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
+    const std::size_t channels = s->ports.size();
+    float *out = s->interleaved.data();
+    for (std::size_t c = 0; c < channels; ++c) {
+        const auto *in = static_cast<const float *>(pw_filter_get_dsp_buffer(s->ports[c], frames));
+        for (std::uint32_t i = 0; i < frames; ++i) {
+            // Bounds: frames <= maxFrames, the buffer holds every channel of those.
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+            out[(std::size_t{i} * channels) + c] = in != nullptr ? in[i] : 0.0F;
+        }
     }
-    s->io->process(out.data(), frames, 2);
+    s->io->process(out, frames, static_cast<std::uint32_t>(channels));
 }
 
 void PipeWireGraph::Session::onMeterProcess(void *data)
@@ -1181,7 +1178,8 @@ bool PipeWireGraph::addStream(const std::string &name, bool capture, int rate,
                               const Properties &extraProps, const std::shared_ptr<StreamIo> &io,
                               const std::vector<std::string> &positions)
 {
-    if (!m_session || !io || positions.empty() || positions.size() > 2) {
+    if (!m_session || !io || positions.empty() ||
+        positions.size() > (capture ? maxCaptureChannels : std::size_t{2})) {
         return false;
     }
     auto &session = *m_session;
@@ -1205,16 +1203,24 @@ bool PipeWireGraph::addStream(const std::string &name, bool capture, int rate,
         ok = s->filter != nullptr;
         if (ok) {
             pw_filter_add_listener(s->filter, &s->listener, &tapEvents, s.get());
-            for (std::size_t c = 0; c < positions.size(); ++c) {
-                s->ports.at(c) = pw_filter_add_port(
+            s->interleaved.resize(std::size_t{Session::IoStream::maxFrames} * positions.size());
+            // Port names stay unique when channels repeat (a take records
+            // several stereo strips: input_1_FL, input_1_FR, input_2_FL, ...).
+            std::map<std::string, int> seen;
+            for (const auto &position : positions) {
+                const int n = ++seen[position];
+                const bool repeats = std::ranges::count(positions, position) > 1;
+                void *port = pw_filter_add_port(
                     s->filter, PW_DIRECTION_INPUT, PW_FILTER_PORT_FLAG_MAP_BUFFERS, 0,
                     toPwProperties({
                         {PW_KEY_FORMAT_DSP, "32 bit float mono audio"},
-                        {PW_KEY_PORT_NAME, "input_" + positions.at(c)},
-                        {PW_KEY_AUDIO_CHANNEL, positions.at(c)},
+                        {PW_KEY_PORT_NAME,
+                         "input_" + (repeats ? std::to_string(n) + "_" : std::string()) + position},
+                        {PW_KEY_AUDIO_CHANNEL, position},
                     }),
                     nullptr, 0);
-                ok = ok && s->ports.at(c) != nullptr;
+                s->ports.push_back(port);
+                ok = ok && port != nullptr;
             }
             ok = ok && pw_filter_connect(s->filter, PW_FILTER_FLAG_RT_PROCESS, nullptr, 0) >= 0;
             if (!ok) {

@@ -49,8 +49,9 @@ class RecordingManager;
 // output peaks, output RMS] (linear, a quarter of the list each: one value
 // for a mono strip, left and right otherwise; peaks ad, RMS ~300 ms), then
 // on a strip with a key input (a ducker's) [key peak, key RMS].
-// While recording or playing: "rec|<device key>" -> [seconds recorded] and
-// "player" -> [position in seconds].
+// While recording or playing: "rec|<device key>" -> [seconds recorded],
+// "take" -> [seconds] while a multitrack take records, and "player" ->
+// [position in seconds].
 class PatchPrimeService : public QObject, protected QDBusContext
 {
     Q_OBJECT
@@ -192,11 +193,23 @@ public Q_SLOTS:
     // "recordingError"). Start returns an error message, or "" on success.
     QString StartRecording(const QString &key);
     void StopRecording(const QString &key);
+    // Multitrack takes (state: "multitrack", "armed" = [keys], "takeInputsRaw",
+    // "takeFolder" = the running take's folder or ""): with multitrack on,
+    // strip REC buttons arm strips, and StartTake records every armed strip
+    // at once, a file each in a "Take <date time>" folder, sample-aligned.
+    // Inputs are recorded raw (before effects) or processed. StartTake
+    // returns an error message, or "" on success.
+    void SetMultitrack(bool on);
+    void SetArmed(const QString &key, bool armed);
+    void SetTakeInputsRaw(bool raw);
+    QString StartTake();
+    void StopTake();
     // "flac", "wav" or "mp3" (those this build can write are in the state as
     // "recordingFormats"); applies to the next recording.
     void SetRecordingFormat(const QString &format);
     // The folder's sound files, newest first, as JSON: [{path, name,
-    // seconds, bytes, modified (ISO date)}]. "recordingsRevision" in the
+    // seconds, bytes, modified (ISO date), take (a take's folder name, for
+    // its tracks)}]. "recordingsRevision" in the
     // state goes up when they change.
     QString GetRecordings();
     // The player (state: "player" = {path, paused, duration, loop},
