@@ -56,6 +56,49 @@ QQC2.ApplicationWindow {
         RowLayout {
             anchors.fill: parent
 
+            // Every effect off at once, to hear the strip dry; clicked again,
+            // the ones that were on come back (all of them, if nothing's
+            // remembered: after the window was reopened, say).
+            QQC2.ToolButton {
+                id: bypassAll
+
+                readonly property bool anyOn: panel.effects.some(e => e.enabled)
+                property var restore: [] // indices that were on when bypassed
+                readonly property int count: panel.effects.length
+
+                Layout.leftMargin: Kirigami.Units.smallSpacing
+                icon.name: "system-shutdown-symbolic"
+                text: anyOn ? qsTr("Bypass All") : restore.length > 0 ? qsTr("Restore") : qsTr("Turn All On")
+                display: QQC2.AbstractButton.TextBesideIcon
+                enabled: Devices.daemonRunning && count > 0
+                onAnyOnChanged: {
+                    if (anyOn)
+                        restore = []; // turned on (by Restore or by hand): nothing to remember
+                }
+                onCountChanged: restore = [] // the indices no longer mean the same effects
+                onClicked: {
+                    if (anyOn) {
+                        const wereOn = [];
+                        panel.effects.forEach((e, i) => {
+                            if (e.enabled) {
+                                wereOn.push(i);
+                                Devices.setEffectEnabled(panel.key, i, false);
+                            }
+                        });
+                        restore = wereOn;
+                    } else {
+                        const back = restore.length > 0 ? restore : panel.effects.map((e, i) => i);
+                        for (const i of back)
+                            Devices.setEffectEnabled(panel.key, i, true);
+                    }
+                }
+                QQC2.ToolTip.text: anyOn ? qsTr("Bypass every effect on this strip, to hear it without them")
+                                 : restore.length > 0 ? qsTr("Turn back on the effects that were on")
+                                                      : qsTr("Turn every effect on this strip on")
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+            }
+
             QQC2.Label {
                 Layout.fillWidth: true
                 Layout.leftMargin: Kirigami.Units.smallSpacing
