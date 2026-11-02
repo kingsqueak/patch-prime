@@ -351,6 +351,7 @@ QString PatchPrimeService::GetState() const
          }()},
         {QStringLiteral("chainPresets"),
          m_presets != nullptr ? QJsonArray::fromStringList(m_presets->chainNames()) : QJsonArray()},
+        {QStringLiteral("voiceChains"), QJsonArray::fromStringList(pp::PresetStore::voiceChainNames())},
         {QStringLiteral("effectPresets"), [this] {
              QJsonObject byType;
              if (m_presets != nullptr) {
@@ -1269,6 +1270,19 @@ void PatchPrimeService::LoadChainPreset(const QString &key, const QString &name)
         m_devices->setEffects(row, *chain);
     } else if (calledFromDBus()) {
         sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no chain preset called ") + name);
+    }
+}
+
+void PatchPrimeService::LoadVoiceChain(const QString &key, const QString &name)
+{
+    const int row = rowFor(key);
+    if (row < 0) {
+        return;
+    }
+    if (const auto chain = pp::PresetStore::voiceChain(name)) {
+        m_devices->setEffects(row, *chain);
+    } else if (calledFromDBus()) {
+        sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("no voice chain called ") + name);
     }
 }
 

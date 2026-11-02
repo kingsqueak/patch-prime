@@ -297,6 +297,9 @@ public Q_SLOTS:
     void SaveChainPreset(const QString &key, const QString &name);
     void LoadChainPreset(const QString &key, const QString &name);
     void DeleteChainPreset(const QString &name);
+    // A built-in voice chain (state "voiceChains" = [names]) onto a strip,
+    // replacing its effects.
+    void LoadVoiceChain(const QString &key, const QString &name);
     void SaveEffectPreset(const QString &key, int index, const QString &name);
     void LoadEffectPreset(const QString &key, int index, const QString &name);
     void DeleteEffectPreset(const QString &type, const QString &name);
