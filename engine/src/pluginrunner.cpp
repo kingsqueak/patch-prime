@@ -131,6 +131,12 @@ std::string PluginRunner::error(const std::string &node) const
     return it == m_hosts.end() ? std::string() : it->second->error;
 }
 
+int PluginRunner::latency(const std::string &node) const
+{
+    const auto it = m_hosts.find(node);
+    return it == m_hosts.end() ? 0 : it->second->latency;
+}
+
 void PluginRunner::setMetering(const std::string &node, bool on)
 {
     const auto it = m_hosts.find(node);
@@ -421,6 +427,14 @@ void PluginRunner::handleLine(const std::string &node, Host &host, const QByteAr
         }
         if (report) {
             Q_EMIT changed();
+        }
+    } else if (const auto latency = o.value(QLatin1String("latency")); latency.isDouble()) {
+        const int samples = std::clamp(latency.toInt(), 0, 1 << 20);
+        if (samples != host.latency) {
+            host.latency = samples;
+            if (report) {
+                Q_EMIT changed();
+            }
         }
     } else if (const auto error = o.value(QLatin1String("error")); error.isString()) {
         host.reported = error.toString().toStdString();

@@ -79,12 +79,16 @@ private:
 
 // One file a Recorder writes: its share of the stream's channels (in
 // order), and the file's own channel count (a mono input can be written as
-// stereo, the one channel in both).
+// stereo, the one channel in both). lateSeconds: how late its sound comes
+// (its effects' latency); that much is left off the file's start and made
+// up with silence at its end, so it lines up with real time and with the
+// take's other tracks, and every track keeps the same length.
 struct RecorderTrack
 {
     QString path;
     int inputChannels = 2;
     int fileChannels = 2;
+    double lateSeconds = 0.0;
 };
 
 // Records a stream to one file, or (a multitrack take) splits it into one

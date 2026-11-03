@@ -21,6 +21,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -115,6 +116,8 @@ public:
     void prepare(double sampleRate, int channels) override;
     void process(float *const *channels, int channelCount, int frames) noexcept override;
     void setParam(const std::string &name, double value) override;
+    // What its latency port (lv2:reportsLatency) last said, if it has one.
+    [[nodiscard]] int latency() const override;
 
     [[nodiscard]] const std::string &error() const override { return m_error; }
     std::unique_ptr<PluginWindow>
@@ -210,6 +213,7 @@ private:
     LV2_URID m_chunk = 0;
     std::string m_error;
     std::string m_initialState;
+    std::optional<std::uint32_t> m_latencyPort; // a control output
     // Atom events between the UI and the realtime thread, and scratch space
     // for one event on each side.
     EventRing m_toPlugin;

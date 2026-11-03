@@ -164,6 +164,10 @@ public:
                    bool keyInput = false);
     void removeFilter(const std::string &name);
     [[nodiscard]] bool hasFilter(const std::string &name) const;
+    // Tells PipeWire how late a filter's output comes (samples at the
+    // graph's rate): its ProcessLatency, which PipeWire adds to the latency
+    // its ports report downstream. False when there's no such filter.
+    bool setFilterLatency(const std::string &name, int samples);
 
     // A node named name that never links itself (the caller links it),
     // running io on the realtime thread: capture (a recorder: a filter with

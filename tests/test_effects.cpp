@@ -761,6 +761,49 @@ private Q_SLOTS:
         QVERIFY2(std::abs(values[0] - 6.0F) < 0.3F, qPrintable(QString::number(values[0])));
     }
 
+    void latencyIsWhereTheSoundComesOut()
+    {
+        // The limiter: an impulse under the ceiling comes out exactly its
+        // latency later, in both modes.
+        for (const double truePeak : {0.0, 1.0}) {
+            LimiterEffect limiter;
+            limiter.setParam("truePeak", truePeak);
+            limiter.prepare(rate, 1);
+            QCOMPARE(limiter.latency(),
+                     static_cast<int>(std::lround(LimiterEffect::lookaheadSeconds * rate)) + TruePeakDetector::delay);
+            std::vector<float> samples(1024, 0.0F);
+            samples[100] = 0.5F;
+            std::array<float *, 1> planes{samples.data()};
+            limiter.process(planes.data(), 1, static_cast<int>(samples.size()));
+            const auto peak = std::ranges::max_element(samples, {}, [](float s) { return std::abs(s); });
+            QCOMPARE(static_cast<int>(peak - samples.begin()), 100 + limiter.latency());
+        }
+#ifdef PATCHPRIME_HAVE_RNNOISE
+        DenoiseEffect denoise;
+        denoise.prepare(rate, 1);
+        QCOMPARE(denoise.latency(), DenoiseEffect::frameSize);
+        DenoiseEffect passing;
+        passing.prepare(44100.0, 1); // passes the sound through: no delay
+        QCOMPARE(passing.latency(), 0);
+#endif
+        // A delay set on purpose isn't latency; nor are filters.
+        DelayEffect delay;
+        delay.setParam("time", 20.0);
+        delay.prepare(rate, 1);
+        QCOMPARE(delay.latency(), 0);
+
+        // A chain: the effects that are on, together.
+        std::vector<std::unique_ptr<Effect>> effects;
+        effects.push_back(makeEffect("limiter"));
+        effects.push_back(makeEffect("eq"));
+        effects.push_back(makeEffect("limiter"));
+        EffectChain chain(std::move(effects), rate, 2);
+        const int one = chain.at(0).latency();
+        QCOMPARE(chain.latency(), 2 * one);
+        chain.at(2).enabled = false;
+        QCOMPARE(chain.latency(), one);
+    }
+
     void limiterHoldsTheCeiling()
     {
         const float ceiling = std::pow(10.0F, -1.0F / 20.0F);

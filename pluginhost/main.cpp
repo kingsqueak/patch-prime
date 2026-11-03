@@ -300,9 +300,25 @@ int main(int argc, char *argv[])
         {"patchprime.fx.owner", parser.value(owner).toStdString()},
         {"node.group", "patchprime.fx"},
     };
+    // The plugin's latency, sent to the engine as it reports it, and given
+    // to PipeWire while the plugin is on (bypassed, it adds none).
+    int saidLatency = -1;
+    int nodeLatency = -1;
+    const auto checkLatency = [&](bool force) {
+        const int samples = plugin.latency();
+        if (force || samples != saidLatency) {
+            saidLatency = samples;
+            say({{QStringLiteral("latency"), samples}});
+        }
+        const int now = plugin.enabled.load() ? samples : 0;
+        if ((force || now != nodeLatency) && graph.setFilterLatency(nodeName, now)) {
+            nodeLatency = now;
+        }
+    };
     QObject::connect(&graph, &pp::PipeWireGraph::connectedChanged, &app, [&](bool connected) {
         if (connected && graph.addFilter(nodeName, channels, props, processor)) {
             say({{QStringLiteral("ready"), true}});
+            checkLatency(true);
         }
     });
     graph.start();
@@ -353,6 +369,7 @@ int main(int argc, char *argv[])
         }
         plugin.mainThreadTick();
         plugin.takeParamChanges(sayParam); // ones the plugin reports itself
+        checkLatency(false);
         if (plugin.wantsRestart()) {
             QCoreApplication::exit(3); // the engine starts it again
         }

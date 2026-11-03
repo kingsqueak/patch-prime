@@ -425,6 +425,17 @@ void EffectChain::process(float *const *channels, int frames, const float *key,
     }
 }
 
+int EffectChain::latency() const
+{
+    int total = 0;
+    for (const auto &effect : m_effects) {
+        if (effect->enabled.load(std::memory_order_relaxed)) {
+            total += effect->latency();
+        }
+    }
+    return total;
+}
+
 void EffectChain::measureAt(Point &point, std::span<const float *const> planes, int frames,
                             double rmsStep, std::size_t groups) noexcept
 {

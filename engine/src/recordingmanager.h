@@ -141,6 +141,9 @@ private:
     {
         QString label;
         std::vector<std::string> positions;
+        // How late its sound reaches the recorder: its effects' latency,
+        // unless it's recorded raw (see RecorderTrack::lateSeconds).
+        double lateSeconds = 0.0;
     };
     std::optional<Source> source(const std::string &key, QString *error) const;
     void close(Recording &recording);

@@ -84,6 +84,8 @@ class DaemonClient : public QAbstractListModel
     Q_PROPERTY(QDateTime pluginsLastScan READ pluginsLastScan NOTIFY pluginsChanged)
     // Plugins that are off because they failed: {stripKey: {index: message}}.
     Q_PROPERTY(QVariantMap pluginErrors READ pluginErrors NOTIFY pluginsChanged)
+    // {key: {"total": ms, "effects": {index: ms}}}: how late strips' effects make them.
+    Q_PROPERTY(QVariantMap latency READ latency NOTIFY latencyChanged)
     // Plugins' own windows: open ones, {stripKey: [index]}; and why ones
     // couldn't be opened, {stripKey: {index: message}}.
     Q_PROPERTY(QVariantMap pluginWindows READ pluginWindows NOTIFY pluginsChanged)
@@ -163,6 +165,7 @@ public:
     [[nodiscard]] QVariantMap pluginsScan() const { return m_pluginsScan; }
     [[nodiscard]] QDateTime pluginsLastScan() const { return m_pluginsLastScan; }
     [[nodiscard]] QVariantMap pluginErrors() const { return m_pluginErrors; }
+    [[nodiscard]] QVariantMap latency() const { return m_latency; }
     [[nodiscard]] QVariantMap pluginWindows() const { return m_pluginWindows; }
     [[nodiscard]] QVariantMap pluginWindowErrors() const { return m_pluginWindowErrors; }
     Q_INVOKABLE void setPluginWindow(const QString &key, int index, bool open);
@@ -341,6 +344,7 @@ public:
     static double effectMeterFraction(double peak);
 
 Q_SIGNALS:
+    void latencyChanged();
     void daemonRunningChanged();
     void connectedChanged();
     void lastErrorChanged();
@@ -416,6 +420,7 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QVariantMap m_pluginsScan;
     QDateTime m_pluginsLastScan;
     QVariantMap m_pluginErrors;
+    QVariantMap m_latency;
     QVariantMap m_pluginWindows;
     QVariantMap m_pluginWindowErrors;
     QString m_cueOutput;

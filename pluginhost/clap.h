@@ -72,6 +72,8 @@ public:
     openWindow(const std::string &title, std::function<void(const std::string &, double)> onParam) override;
     void takeParamChanges(const std::function<void(const std::string &, double)> &fn) override;
     void mainThreadTick() override;
+    // What the plugin's latency extension says, while it's active.
+    [[nodiscard]] int latency() const override;
     void stopProcessingSoon() override { m_stopRequested.store(true, std::memory_order_release); }
     [[nodiscard]] bool processingStopped() const override { return m_stopped.load(std::memory_order_acquire); }
 

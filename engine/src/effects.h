@@ -57,6 +57,12 @@ public:
     // per band, say) into out; returns how many it wrote. Most have none.
     virtual std::size_t takeMeters(std::span<float> /*out*/) { return 0; }
 
+    // Main thread, once prepared: how many samples late its output comes
+    // (noise suppression's frame, a limiter's lookahead, what a plugin
+    // reports), whether or not it's on. A delay set on purpose (the Delay
+    // effect) isn't latency: 0. A plugin's may change while it runs.
+    [[nodiscard]] virtual int latency() const { return 0; }
+
     // Effects driven by another strip's sound (a ducker) read it here: the
     // key signal for the current process() call, mono, or null when there's
     // none. Set by the chain on the realtime thread just before process().
@@ -158,6 +164,8 @@ public:
     [[nodiscard]] int channels() const { return m_channels; }
     [[nodiscard]] std::size_t size() const { return m_effects.size(); }
     [[nodiscard]] Effect &at(std::size_t index) { return *m_effects.at(index); }
+    // Main thread: the latency of the effects that are on, together (samples).
+    [[nodiscard]] int latency() const;
 
     // Realtime. key: the strip's key input (mono, frames long), or null.
     // measure: also measure the levels (only while someone looks at them).

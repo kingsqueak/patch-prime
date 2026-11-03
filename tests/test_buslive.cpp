@@ -12,6 +12,7 @@
 #include "devicemodel.h"
 #include "pipewiregraph.h"
 #include "plugins.h"
+#include "loudness.h"
 #include "loudnessmanager.h"
 #include "recordingmanager.h"
 #include "soundboard.h"
@@ -1152,6 +1153,19 @@ private Q_SLOTS:
         QVERIFY2(fxIn > 0.3F && std::abs((20.0F * std::log10(fxOut / fxIn)) + 20.0F) < 1.0F,
                  qPrintable(QStringLiteral("%1 %2").arg(fxIn).arg(fxOut)));
         buses.setEffectMetering({});
+        // Its latency, as the plugin reports it (the test gain says 64
+        // samples), reaches the engine; bypassed, it's no longer counted.
+        const double plugLatency = 64.0 / store.sampleRate();
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                const auto l = buses.latency(micKey);
+                return l.effects.contains(0) && std::abs(l.effects.at(0) - plugLatency) < 1e-9 &&
+                       std::abs(l.seconds - plugLatency) < 1e-9;
+            },
+            5000));
+        devices.setEffectEnabled(micRow(), 0, false);
+        QCOMPARE(buses.latency(micKey).seconds, 0.0);
+        devices.setEffectEnabled(micRow(), 0, true);
 
         // A built-in after it, then before it: the series follows the chain.
         const auto fx = effectsNodeName(inBus);
@@ -1171,6 +1185,19 @@ private Q_SLOTS:
             },
             10000));
         QVERIFY(linksHold(m_graph, {{mic, fx}, {fx, plug}, {plug, inBus}}));
+        // A limiter after them: its lookahead counts too, with the plugin's.
+        devices.addEffect(micRow(), QStringLiteral("limiter"));
+        QVERIFY(QTest::qWaitFor([&] { return buses.latency(micKey).effects.contains(2); }, 10000));
+        {
+            const auto l = buses.latency(micKey);
+            const auto samples = static_cast<int>(std::lround(LimiterEffect::lookaheadSeconds * store.sampleRate())) +
+                                 TruePeakDetector::delay;
+            const double limiter = samples / static_cast<double>(store.sampleRate());
+            QVERIFY(std::abs(l.effects.at(2) - limiter) < 1e-9);
+            QVERIFY(std::abs(l.seconds - (limiter + plugLatency)) < 1e-9);
+        }
+        devices.removeEffect(micRow(), 2);
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, plug, inBus) == 2; }, 10000));
 
         // It crashes (and again, each time it's restarted): the strip
         // carries on without it, and after a few tries it's left off.

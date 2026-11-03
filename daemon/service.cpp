@@ -264,6 +264,25 @@ QString PatchPrimeService::GetState() const
              }
              return errors;
          }()},
+        // {key: {"total": ms, "effects": {index: ms}}}, for strips whose
+        // effects add latency (the total: those that are on).
+        {QStringLiteral("latency"), [this] {
+             QJsonObject latency;
+             for (int row = 0; row < m_devices->rowCount(); ++row) {
+                 const auto key = m_devices->data(m_devices->index(row), pp::DeviceModel::KeyRole).toString();
+                 const auto l = m_buses->latency(key.toStdString());
+                 if (l.effects.empty()) {
+                     continue;
+                 }
+                 QJsonObject effects;
+                 for (const auto &[index, seconds] : l.effects) {
+                     effects.insert(QString::number(index), seconds * 1000.0);
+                 }
+                 latency.insert(key, QJsonObject{{QStringLiteral("total"), l.seconds * 1000.0},
+                                                 {QStringLiteral("effects"), effects}});
+             }
+             return latency;
+         }()},
         {QStringLiteral("connected"), m_devices->isConnected()},
         {QStringLiteral("devices"), devices},
         {QStringLiteral("apps"), apps},

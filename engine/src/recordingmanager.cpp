@@ -104,11 +104,15 @@ std::optional<RecordingManager::Source> RecordingManager::source(const std::stri
     if (busName.empty() || !m_graph->isConnected()) {
         return fail(QStringLiteral("the strip isn't running"));
     }
+    // A hardware input recorded raw comes straight from the device; any
+    // other recording comes after the strip's effects, as late as they make it.
+    const bool raw = kind == EndpointKind::Hardware && direction == Direction::Input && recordInputsRaw();
     // A mono input records as it's mixed: one channel.
     return Source{.label = m_devices->data(index, DeviceModel::LabelRole).toString(),
                   .positions = m_buses->stripPositions(key).size() == 1
                                    ? std::vector<std::string>{"MONO"}
-                                   : std::vector<std::string>{"FL", "FR"}};
+                                   : std::vector<std::string>{"FL", "FR"},
+                  .lateSeconds = raw ? 0.0 : m_buses->latency(key).seconds};
 }
 
 bool RecordingManager::start(const std::string &key, QString *error)
@@ -123,7 +127,12 @@ bool RecordingManager::start(const std::string &key, QString *error)
     const auto path = uniquePath(
         QDir(m_folder).filePath(recordingFileName(src->label, QDateTime::currentDateTime(), format())));
     // A mono input goes in both of the file's channels.
-    auto recorder = std::make_shared<Recorder>(path, format(), static_cast<int>(src->positions.size()));
+    auto recorder = std::make_shared<Recorder>(
+        std::vector<RecorderTrack>{{.path = path,
+                                    .inputChannels = static_cast<int>(src->positions.size()),
+                                    .fileChannels = 2,
+                                    .lateSeconds = src->lateSeconds}},
+        format());
     const int row = m_devices->rowForKey(key);
     const auto busName =
         m_devices->data(m_devices->index(row), DeviceModel::BusNameRole).toString().toStdString();
@@ -264,7 +273,8 @@ bool RecordingManager::startTake(QString *error)
         tracks.push_back(RecorderTrack{
             .path = uniquePath(QDir(folder).filePath(takeTrackFileName(src->label, format()))),
             .inputChannels = channels,
-            .fileChannels = channels});
+            .fileChannels = channels,
+            .lateSeconds = src->lateSeconds});
         keys.push_back(key);
         positions.insert(positions.end(), src->positions.begin(), src->positions.end());
     }

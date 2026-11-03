@@ -22,6 +22,12 @@ QQC2.ApplicationWindow {
     property string key
     property string label
     property var effects: []
+    // How late the effects make the strip ({"total": ms, "effects": {index: ms}}).
+    readonly property var latency: Devices.latency[key] || ({})
+
+    function ms(value) {
+        return value < 100 ? value.toFixed(1) : Math.round(value).toString();
+    }
 
 
     // Shows the window (or brings it forward), sized for its editors.
@@ -102,8 +108,16 @@ QQC2.ApplicationWindow {
             QQC2.Label {
                 Layout.fillWidth: true
                 Layout.leftMargin: Kirigami.Units.smallSpacing
-                text: panel.effects.length === 1 ? qsTr("1 effect") : qsTr("%1 effects, top to bottom").arg(panel.effects.length)
+                text: (panel.effects.length === 1 ? qsTr("1 effect") : qsTr("%1 effects, top to bottom").arg(panel.effects.length))
+                      + ((panel.latency.total || 0) >= 0.05 ? qsTr(" · latency %1 ms").arg(panel.ms(panel.latency.total)) : "")
                 color: Style.dimText
+
+                HoverHandler {
+                    id: latencyHover
+                }
+                QQC2.ToolTip.visible: latencyHover.hovered && (panel.latency.total || 0) >= 0.05
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                QQC2.ToolTip.text: qsTr("The effects that are on make this strip %1 ms late. PipeWire is told, and recordings after the effects are moved back by that much, so they line up with raw tracks.").arg(panel.ms(panel.latency.total || 0))
             }
 
             PresetButton {
@@ -220,6 +234,24 @@ QQC2.ApplicationWindow {
                             font.bold: true
                             elide: Text.ElideRight
                             opacity: slot.modelData.enabled ? 1 : 0.6
+                        }
+                        // The delay this effect adds (when it's on).
+                        QQC2.Label {
+                            readonly property real value: (panel.latency.effects || {})[slot.index] || 0
+                            visible: value >= 0.05
+                            text: qsTr("%1 ms").arg(panel.ms(value))
+                            font: Kirigami.Theme.smallFont
+                            color: Style.dimText
+                            opacity: slot.modelData.enabled ? 1 : 0.6
+                            QQC2.ToolTip.text: slot.modelData.enabled
+                                               ? qsTr("Latency: this effect makes the sound %1 ms late").arg(panel.ms(value))
+                                               : qsTr("Latency: %1 ms when it's on").arg(panel.ms(value))
+                            QQC2.ToolTip.visible: effectLatencyHover.hovered
+                            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+
+                            HoverHandler {
+                                id: effectLatencyHover
+                            }
                         }
                         QQC2.Label {
                             visible: slot.plugin

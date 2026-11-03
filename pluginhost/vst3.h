@@ -61,6 +61,8 @@ public:
     void takeParamChanges(const std::function<void(const std::string &, double)> &fn) override;
     void mainThreadTick() override;
     [[nodiscard]] bool wantsRestart() const override;
+    // The processor's getLatencySamples, while it's active.
+    [[nodiscard]] int latency() const override;
 
     struct Impl;
 

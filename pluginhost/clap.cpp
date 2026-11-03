@@ -442,6 +442,19 @@ void ClapEffect::destroyInstance(Instance &instance)
     instance.plugin = nullptr;
 }
 
+int ClapEffect::latency() const
+{
+    if (m_instances.empty() || !m_instances.front()->active) {
+        return 0;
+    }
+    const clap_plugin_t *plugin = m_instances.front()->plugin;
+    const auto *ext =
+        static_cast<const clap_plugin_latency_t *>(plugin->get_extension(plugin, CLAP_EXT_LATENCY));
+    return ext != nullptr && ext->get != nullptr
+               ? static_cast<int>(std::min<std::uint32_t>(ext->get(plugin), 1U << 20))
+               : 0;
+}
+
 void ClapEffect::readPorts(const clap_plugin_t *plugin)
 {
     const auto *ports = static_cast<const clap_plugin_audio_ports_t *>(

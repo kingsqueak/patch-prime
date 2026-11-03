@@ -49,8 +49,9 @@ struct PluginSpec
 // {"metering": bool}, {"window": bool} (its own window) and
 // {"saveState": true}. From it: {"ready"} (its node is up), {"levels": ...},
 // {"error": message}, {"window": bool}, {"windowError": message},
-// {"param": {"name", "value"}} (changed in its window) and {"state": ...}
-// (its own state changed). The host exits when its stdin closes (sending
+// {"param": {"name", "value"}} (changed in its window), {"state": ...}
+// (its own state changed) and {"latency": samples} (what the plugin reports,
+// when it's up and whenever it changes). The host exits when its stdin closes (sending
 // its state first), so it never outlives the engine.
 //
 // A host that crashes, or doesn't bring its node up within readyTimeout, is
@@ -87,6 +88,9 @@ public:
 
     // Why the node's plugin is off ("" while it runs or starts).
     [[nodiscard]] std::string error(const std::string &node) const;
+    // The plugin's latency (samples at its rate) as its host last reported
+    // it, whether or not it's on; 0 until it has.
+    [[nodiscard]] int latency(const std::string &node) const;
     // The plugin's input and output levels, measured while metering is on.
     void setMetering(const std::string &node, bool on);
     std::optional<EffectLevels> takeLevels(const std::string &node);
@@ -131,6 +135,7 @@ private:
         bool stateWanted = false;
         bool hasLevels = false;
         EffectLevels levels;
+        int latency = 0;
     };
 
     void start(const std::string &node, Host &host);

@@ -1256,6 +1256,14 @@ bool Vst3Effect::wantsRestart() const
     return d->reload;
 }
 
+int Vst3Effect::latency() const
+{
+    if (!d->active || !d->processor) {
+        return 0;
+    }
+    return static_cast<int>(std::min<uint32>(d->processor->getLatencySamples(), 1U << 20));
+}
+
 // --- Finding and reading bundles ----------------------------------------------
 
 std::vector<std::string> vst3Bundles()

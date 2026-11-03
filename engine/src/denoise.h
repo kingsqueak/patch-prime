@@ -43,6 +43,9 @@ public:
     // The voice probability RNNoise saw, as a percentage (the largest since
     // the last call).
     std::size_t takeMeters(std::span<float> out) override;
+    // One frame, while it works (at 48 kHz; otherwise it passes the sound
+    // through as it is).
+    [[nodiscard]] int latency() const override { return m_active ? frameSize : 0; }
 
 private:
     struct Channel

@@ -14,6 +14,7 @@
 #include <pipewire/filter.h>
 #include <pipewire/pipewire.h>
 #include <spa/param/audio/format-utils.h>
+#include <spa/param/latency-utils.h>
 #include <spa/param/props.h>
 #include <spa/pod/builder.h>
 #include <spa/utils/result.h>
@@ -1143,6 +1144,29 @@ bool PipeWireGraph::addFilter(const std::string &name, const std::vector<std::st
     }
     if (ok) {
         session.filters[name] = std::move(f);
+    }
+    pw_thread_loop_unlock(session.loop);
+    return ok;
+}
+
+bool PipeWireGraph::setFilterLatency(const std::string &name, int samples)
+{
+    if (!m_session) {
+        return false;
+    }
+    auto &session = *m_session;
+    pw_thread_loop_lock(session.loop);
+    const auto it = session.filters.find(name);
+    bool ok = it != session.filters.end();
+    if (ok) {
+        std::array<std::uint8_t, 256> buffer{};
+        spa_pod_builder b{};
+        spa_pod_builder_init(&b, buffer.data(), static_cast<std::uint32_t>(buffer.size()));
+        spa_process_latency_info info{};
+        info.rate = std::max(samples, 0);
+        std::array<const spa_pod *, 1> params{
+            spa_process_latency_build(&b, SPA_PARAM_ProcessLatency, &info)};
+        ok = pw_filter_update_params(it->second->filter, nullptr, params.data(), params.size()) >= 0;
     }
     pw_thread_loop_unlock(session.loop);
     return ok;

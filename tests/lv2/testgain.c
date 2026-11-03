@@ -21,7 +21,11 @@
 
 #define TEST_GAIN_URI "https://github.com/kingsqueak/patch-prime/tests/gain"
 
-enum { PORT_GAIN = 0, PORT_CRASH = 1, PORT_IN = 2, PORT_OUT = 3, PORT_HALVE = 4 };
+enum { PORT_GAIN = 0, PORT_CRASH = 1, PORT_IN = 2, PORT_OUT = 3, PORT_HALVE = 4, PORT_LATENCY = 5 };
+
+// What it reports as its latency (it doesn't really delay: the tests only
+// look at what reaches the engine).
+#define TEST_GAIN_LATENCY 64.0f
 
 typedef struct {
     const float *gain;
@@ -29,6 +33,7 @@ typedef struct {
     const float *in;
     float *out;
     const float *halve;
+    float *latency;
     float trim;
     LV2_URID trimKey;
     LV2_URID floatType;
@@ -76,6 +81,9 @@ static void connect_port(LV2_Handle instance, uint32_t port, void *data)
     case PORT_HALVE:
         self->halve = (const float *)data;
         break;
+    case PORT_LATENCY:
+        self->latency = (float *)data;
+        break;
     default:
         break;
     }
@@ -89,6 +97,9 @@ static void run(LV2_Handle instance, uint32_t frames)
     }
     if (*self->halve > 0.5f) {
         self->trim = 0.5f;
+    }
+    if (self->latency != NULL) {
+        *self->latency = TEST_GAIN_LATENCY;
     }
     const float gain = *self->gain * self->trim;
     for (uint32_t i = 0; i < frames; ++i) {

@@ -430,6 +430,12 @@ Lv2Effect::Lv2Effect(Lv2World &world, const LilvPlugin *plugin)
             m_bySymbol[p.symbol] = p.index;
         }
     }
+    if (lilv_plugin_has_latency(plugin)) {
+        const auto index = lilv_plugin_get_latency_port_index(plugin);
+        if (index < m_ports.size() && m_ports[index].kind == PortKind::ControlOut) {
+            m_latencyPort = index;
+        }
+    }
     m_sequence = world.map(LV2_ATOM__Sequence);
     m_chunk = world.map(LV2_ATOM__Chunk);
     int atomIns = 0;
@@ -461,6 +467,15 @@ void Lv2Effect::free()
         }
     }
     m_instances.clear();
+}
+
+int Lv2Effect::latency() const
+{
+    if (!m_latencyPort) {
+        return 0;
+    }
+    const float samples = m_targets[*m_latencyPort].load(std::memory_order_relaxed);
+    return std::isfinite(samples) ? std::max(0, static_cast<int>(std::lround(samples))) : 0;
 }
 
 void Lv2Effect::prepare(double sampleRate, int channels)

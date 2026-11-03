@@ -546,6 +546,38 @@ std::map<std::pair<std::string, std::size_t>, EffectLevels> BusManager::takeEffe
     return out;
 }
 
+BusManager::Latency BusManager::latency(const std::string &key) const
+{
+    Latency out;
+    for (const auto &[name, fx] : m_effects) {
+        auto *chain = fx.key == key ? fx.processor->chain() : nullptr; // only swapped on this thread
+        if (chain == nullptr || fx.sampleRate <= 0) {
+            continue;
+        }
+        auto &effects = *chain;
+        for (std::size_t i = 0; i < effects.size() && i < fx.indices.size(); ++i) {
+            if (const int samples = effects.at(i).latency(); samples > 0) {
+                out.effects[fx.indices[i]] = samples / static_cast<double>(fx.sampleRate);
+            }
+        }
+    }
+    const int rate = m_devices->store().sampleRate();
+    for (const auto &[node, at] : m_plugins) {
+        if (at.first == key && rate > 0) {
+            if (const int samples = m_runner->latency(node); samples > 0) {
+                out.effects[at.second] = samples / static_cast<double>(rate);
+            }
+        }
+    }
+    const auto *settings = m_devices->store().find(key);
+    for (const auto &[index, seconds] : out.effects) {
+        if (settings != nullptr && index < settings->effects.size() && settings->effects[index].enabled) {
+            out.seconds += seconds;
+        }
+    }
+    return out;
+}
+
 int BusManager::pluginRow(const std::string &node, const std::string &type) const
 {
     const auto at = m_plugins.find(node);
@@ -1032,6 +1064,13 @@ std::optional<bool> BusManager::ensureEffectsNode(const std::string &fxName, con
         fx->second.indices = std::move(indices);
     }
     fx->second.processor->collect();
+    // PipeWire's view of the node's latency, as the chain is now.
+    if (const auto *chain = fx->second.processor->chain()) {
+        if (const int samples = chain->latency(); samples != fx->second.latency &&
+                                                  m_graph->setFilterLatency(fxName, samples)) {
+            fx->second.latency = samples;
+        }
+    }
     return created;
 }
 

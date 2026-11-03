@@ -262,6 +262,53 @@ private Q_SLOTS:
         QVERIFY(std::abs(mix[0] - 0.25F) < 1e-4F && std::abs(mix[1] + 0.25F) < 1e-4F);
     }
 
+    // A late track (its effects' latency) loses that much at its start and
+    // gets it back as silence at its end, so the take's tracks line up.
+    void lateTracksMoveBack()
+    {
+        QTemporaryDir dir;
+        const auto raw = dir.filePath(QStringLiteral("Take/Raw.wav"));
+        const auto late = dir.filePath(QStringLiteral("Take/Late.wav"));
+        {
+            pp::Recorder recorder({{.path = raw, .inputChannels = 1, .fileChannels = 1},
+                                   {.path = late, .inputChannels = 1, .fileChannels = 1, .lateSeconds = 0.01}},
+                                  pp::RecordingFormat::Wav);
+            recorder.setRate(48000);
+            // A click at frame 1000 on the raw track, the same click 480
+            // frames (10 ms) later on the late one; in chunks of 256.
+            std::vector<float> buffer(std::size_t{4800} * 2, 0.0F);
+            buffer[std::size_t{1000} * 2] = 1.0F;
+            buffer[(std::size_t{1480} * 2) + 1] = 1.0F;
+            for (std::size_t at = 0; at < 4800; at += 256) {
+                const auto n = static_cast<std::uint32_t>(std::min<std::size_t>(256, 4800 - at));
+                recorder.process(buffer.data() + (at * 2), n, 2); // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+            }
+            recorder.stop();
+            QVERIFY2(!recorder.failed(), qPrintable(recorder.error()));
+        }
+        const auto read = [](const QString &path) {
+            SF_INFO info{};
+            SNDFILE *file = sf_open(QFile::encodeName(path).constData(), SFM_READ, &info);
+            std::vector<float> samples;
+            if (file != nullptr) {
+                samples.resize(static_cast<std::size_t>(info.frames));
+                sf_readf_float(file, samples.data(), info.frames);
+                sf_close(file);
+            }
+            return samples;
+        };
+        const auto a = read(raw);
+        const auto b = read(late);
+        QCOMPARE(a.size(), std::size_t{4800});
+        QCOMPARE(b.size(), a.size()); // made up at the end
+        const auto click = [](const std::vector<float> &s) {
+            return std::ranges::max_element(s) - s.begin();
+        };
+        QCOMPARE(click(a), 1000);
+        QCOMPARE(click(b), 1000); // lined up
+        QCOMPARE(b.back(), 0.0F);
+    }
+
     // A single recording of a mono strip: the one channel in both of the file's.
     void monoIntoStereo()
     {

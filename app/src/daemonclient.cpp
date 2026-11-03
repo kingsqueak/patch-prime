@@ -1040,6 +1040,12 @@ void DaemonClient::onStateChanged(const QString &state)
         }
     }
 
+    if (const auto latency = root.value(QLatin1String("latency")).toObject().toVariantMap();
+        latency != m_latency) {
+        m_latency = latency;
+        Q_EMIT latencyChanged();
+    }
+
     QList<QVariantMap> rows;
     for (const auto &device : root.value(QLatin1String("devices")).toArray()) {
         rows.append(device.toObject().toVariantMap());

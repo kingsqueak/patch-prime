@@ -102,6 +102,8 @@ public:
     void process(float *const *channels, int channelCount, int frames) noexcept override;
     void setParam(const std::string &name, double value) override;
     void resume() noexcept override;
+    // The lookahead, in both modes.
+    [[nodiscard]] int latency() const override { return m_length - 1; }
     // The gain reduction (dB, positive), the largest since the last call.
     std::size_t takeMeters(std::span<float> out) override;
 

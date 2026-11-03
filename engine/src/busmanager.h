@@ -247,6 +247,16 @@ public:
     // with an effects window open), since measuring costs CPU.
     void setEffectMetering(std::set<std::string> keys);
     std::map<std::pair<std::string, std::size_t>, EffectLevels> takeEffectLevels();
+    // How late a strip's processing makes its sound: each effect's latency
+    // (seconds, whether or not it's on; only effects that have any, by
+    // index) and the total of those that are on. Built-in effects count
+    // once their node is made, plugins once their host reports.
+    struct Latency
+    {
+        double seconds = 0.0;
+        std::map<std::size_t, double> effects;
+    };
+    [[nodiscard]] Latency latency(const std::string &key) const;
     // Plugins that are off because they failed (couldn't load, kept
     // crashing): why, by endpoint key and effect index.
     [[nodiscard]] std::map<std::pair<std::string, std::size_t>, std::string> pluginErrors() const;
@@ -344,6 +354,7 @@ private:
         std::vector<EffectSettings> effects; // what the chain was last given
         std::vector<std::size_t> indices;    // their positions in the strip's list
         int sampleRate = 0;
+        int latency = -1; // what PipeWire was last told (samples); -1: nothing yet
     };
 
     // A strip's processing, from its first node that's up to its last.

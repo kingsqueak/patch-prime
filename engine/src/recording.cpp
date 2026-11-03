@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <cmath>
 #include <chrono>
 #include <utility>
 
@@ -321,6 +322,30 @@ void Recorder::run(const std::stop_token &stop)
     const auto channels = static_cast<std::size_t>(m_inputChannels);
     std::vector<float> chunk(chunkFrames * channels);
     std::vector<float> trackSamples(chunkFrames * 2);
+    // Per track: frames still to leave off its start, and how many were.
+    std::vector<std::size_t> toSkip;
+    toSkip.reserve(m_tracks.size());
+    std::vector<std::size_t> skipped(m_tracks.size(), 0);
+    for (const auto &track : m_tracks) {
+        toSkip.push_back(static_cast<std::size_t>(std::lround(std::max(track.lateSeconds, 0.0) * rate)));
+    }
+    // At the end, the silence that makes up for what was left off.
+    const auto finish = [&]() -> bool {
+        for (std::size_t t = 0; t < m_tracks.size(); ++t) {
+            const auto out = static_cast<std::size_t>(m_tracks[t].fileChannels);
+            for (std::size_t left = skipped[t]; left > 0;) {
+                const std::size_t n = std::min(left, chunkFrames);
+                trackSamples.assign(n * out, 0.0F);
+                const auto count = static_cast<sf_count_t>(n);
+                if (sf_writef_float(files[t].get(), trackSamples.data(), count) != count) {
+                    fail(QString::fromUtf8(sf_strerror(files[t].get())));
+                    return false;
+                }
+                left -= n;
+            }
+        }
+        return true;
+    };
     for (;;) {
         const bool stopping = stop.stop_requested();
         const auto got = m_ring.pop(chunk.data(), chunk.size());
@@ -331,14 +356,19 @@ void Recorder::run(const std::stop_token &stop)
                 const auto &track = m_tracks[t];
                 const auto in = static_cast<std::size_t>(track.inputChannels);
                 const auto out = static_cast<std::size_t>(track.fileChannels);
-                trackSamples.resize(frames * out);
-                for (std::size_t i = 0; i < frames; ++i) {
+                const std::size_t skip = std::min(toSkip[t], frames);
+                toSkip[t] -= skip;
+                skipped[t] += skip;
+                const std::size_t keep = frames - skip;
+                trackSamples.resize(keep * out);
+                for (std::size_t i = 0; i < keep; ++i) {
                     for (std::size_t c = 0; c < out; ++c) {
-                        trackSamples[(i * out) + c] = chunk[(i * channels) + first + std::min(c, in - 1)];
+                        trackSamples[(i * out) + c] =
+                            chunk[((skip + i) * channels) + first + std::min(c, in - 1)];
                     }
                 }
-                const auto count = static_cast<sf_count_t>(frames);
-                if (sf_writef_float(files[t].get(), trackSamples.data(), count) != count) {
+                const auto count = static_cast<sf_count_t>(keep);
+                if (count > 0 && sf_writef_float(files[t].get(), trackSamples.data(), count) != count) {
                     fail(QString::fromUtf8(sf_strerror(files[t].get())));
                     return;
                 }
@@ -352,7 +382,8 @@ void Recorder::run(const std::stop_token &stop)
         }
         if (got < chunk.size()) {
             if (stopping) {
-                return; // everything queued is written
+                finish(); // everything queued is written
+                return;
             }
             std::this_thread::sleep_for(20ms);
         }
