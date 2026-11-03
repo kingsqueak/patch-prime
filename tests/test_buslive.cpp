@@ -370,8 +370,20 @@ private Q_SLOTS:
         // The bus outranks any hardware as the graph driver in both clock
         // modes, so changing the mode doesn't rebuild it: a chosen master
         // interface outranks it through WirePlumber rules instead, and when
-        // that interface is unplugged the buses take over by themselves.
+        // that interface is unplugged the clock node takes over by itself.
         QVERIFY(QTest::qWaitFor([&] { return driverPriority() == "20000"; }, 5000));
+        const auto ourClock = [&]() -> const GraphObject * {
+            for (const auto &[id, node] : m_graph.nodes()) {
+                if (prop(node, "node.name") == clockNodeName &&
+                    prop(node, "patchprime.owner") == buses.owner()) {
+                    return &node;
+                }
+            }
+            return nullptr;
+        };
+        QVERIFY(QTest::qWaitFor([&] { return ourClock() != nullptr; }, 5000));
+        QCOMPARE(prop(*ourClock(), "priority.driver"), std::to_string(clockNodePriority));
+        QCOMPARE(prop(*nodeNamed(m_graph, bus), "node.group"), std::string(nodeGroup));
         const auto busId = nodeNamed(m_graph, bus)->id;
         devices.setClock(ClockMode::Hardware);
         QTest::qWait(300);

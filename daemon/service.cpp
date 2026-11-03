@@ -594,7 +594,7 @@ void PatchPrimeService::SetClockDevice(const QString &key)
 
 QString PatchPrimeService::clockNow() const
 {
-    // The clock follows from the setting: Patch Prime's buses, or the chosen
+    // The clock follows from the setting: Patch Prime's clock node, or the chosen
     // device, outrank everything else as the graph driver. (PipeWire's own
     // node.driver-id isn't reliably updated on our side when it changes.)
     const auto &store = m_devices->store();
@@ -603,12 +603,12 @@ QString PatchPrimeService::clockNow() const
     }
     const int row = m_devices->rowForKey(store.clockDevice());
     if (row < 0) {
-        return QStringLiteral("Patch Prime"); // no master chosen: the buses outrank the hardware
+        return QStringLiteral("Patch Prime"); // no master chosen: the clock node outranks the hardware
     }
     const auto index = m_devices->index(row);
     const auto label = m_devices->data(index, pp::DeviceModel::LabelRole).toString();
-    // Unplugged: Patch Prime's buses outrank everything left, so they take
-    // over until the master is back.
+    // Unplugged: Patch Prime's clock node outranks everything left, so it
+    // takes over until the master is back.
     return m_devices->data(index, pp::DeviceModel::OnlineRole).toBool()
                ? label
                : QStringLiteral("Patch Prime (%1 is unplugged)").arg(label);

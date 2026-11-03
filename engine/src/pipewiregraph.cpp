@@ -907,6 +907,11 @@ bool PipeWireGraph::createNode(const Properties &props)
     return createObject("adapter", PW_TYPE_INTERFACE_Node, PW_VERSION_NODE, props);
 }
 
+bool PipeWireGraph::createSpaNode(const Properties &props)
+{
+    return createObject("spa-node-factory", PW_TYPE_INTERFACE_Node, PW_VERSION_NODE, props);
+}
+
 bool PipeWireGraph::createLink(std::uint32_t outputNode, std::uint32_t outputPort,
                                std::uint32_t inputNode, std::uint32_t inputPort, bool linger)
 {

@@ -93,6 +93,17 @@ private Q_SLOTS:
         QCOMPARE(props["priority.driver"], "20000");
         QCOMPARE(props["priority.session"], "0");
         QVERIFY(busDriverPriority < clockDevicePriority());
+        QCOMPARE(props["node.group"], "patchprime");
+        // The clock node outranks the buses (so no bus drives the graph and
+        // hands its input on a cycle late); a chosen master outranks it.
+        auto clock = clockProperties("cafe1234");
+        QCOMPARE(clock["factory.name"], "support.node.driver");
+        QCOMPARE(clock["node.name"], "patchprime.clock");
+        QCOMPARE(clock["node.group"], "patchprime");
+        QCOMPARE(clock["object.linger"], "true");
+        QCOMPARE(clock["patchprime.owner"], "cafe1234");
+        QVERIFY(busDriverPriority < clockNodePriority);
+        QVERIFY(clockNodePriority < clockDevicePriority());
         QCOMPARE(busOwnerFor(QStringLiteral("/a/devices.json")).size(), std::size_t{8});
         QVERIFY(busOwnerFor(QStringLiteral("/a/devices.json")) !=
                 busOwnerFor(QStringLiteral("/b/devices.json")));

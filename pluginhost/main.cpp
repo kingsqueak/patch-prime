@@ -298,7 +298,7 @@ int main(int argc, char *argv[])
         {"media.class", std::string(pp::effectsMediaClass)},
         {"node.description", parser.value(description).toStdString()},
         {"patchprime.fx.owner", parser.value(owner).toStdString()},
-        {"node.group", "patchprime.fx"},
+        {"node.group", std::string(pp::nodeGroup)},
     };
     // The plugin's latency, sent to the engine as it reports it, and given
     // to PipeWire while the plugin is on (bypassed, it adds none).

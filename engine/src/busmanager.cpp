@@ -84,6 +84,7 @@ Properties sendProperties(const std::string &name, const std::vector<std::string
         {"object.linger", "true"},
         {"priority.session", "0"},
         {"priority.driver", "0"},
+        {"node.group", std::string(nodeGroup)},
         {"patchprime.owner", owner},
     };
 }
@@ -272,7 +273,21 @@ Properties busProperties(const Endpoint &endpoint, const DeviceSettings &setting
         // Low priority so WirePlumber never picks a bus as the default device.
         {"priority.session", "0"},
         {"priority.driver", std::to_string(busDriverPriority)},
+        {"node.group", std::string(nodeGroup)},
         {"patchprime.key", endpoint.key},
+        {"patchprime.owner", owner},
+    };
+}
+
+Properties clockProperties(const std::string &owner)
+{
+    return {
+        {"factory.name", "support.node.driver"},
+        {"node.name", std::string(clockNodeName)},
+        {"node.description", "Patch Prime clock"},
+        {"node.group", std::string(nodeGroup)},
+        {"priority.driver", std::to_string(clockNodePriority)},
+        {"object.linger", "true"},
         {"patchprime.owner", owner},
     };
 }
@@ -787,7 +802,7 @@ void BusManager::reconcile()
     // is the system default output, hand the default back to its hardware
     // first; otherwise WirePlumber would pick some other device.
     for (const auto &[name, id] : existing) {
-        if (wanted.contains(name) || sends.contains(name)) {
+        if (wanted.contains(name) || sends.contains(name) || name == clockNodeName) {
             continue;
         }
         // A bus that is the system default output or input hands the default
@@ -844,6 +859,7 @@ void BusManager::reconcile()
         const bool stale =
             prop(node, "media.class") != busMediaClass(w.endpoint, *w.settings) ||
             prop(node, "priority.driver") != std::to_string(busDriverPriority) ||
+            prop(node, "node.group") != nodeGroup ||
             parseId(prop(node, "audio.channels")) != channels ||
             (w.settings->kind != EndpointKind::Hardware &&
              prop(node, "node.description") != busDescription(w.endpoint, *w.settings));
@@ -867,6 +883,25 @@ void BusManager::reconcile()
         }
     }
 
+    // The clock, made and checked like a bus.
+    if (const auto it = existing.find(std::string(clockNodeName)); it == existing.end()) {
+        const std::string name(clockNodeName);
+        if (!m_pendingBuses.contains(name) && mayCreate(name, now)) {
+            qCInfo(lcBus, "creating the clock %s", name.c_str());
+            if (m_graph->createSpaNode(clockProperties(m_owner))) {
+                m_pendingBuses[name] = now;
+            }
+        }
+    } else {
+        m_limiter.appeared(it->first);
+        m_pendingBuses.erase(it->first);
+        const auto &node = m_graph->nodes().at(it->second);
+        if (prop(node, "priority.driver") != std::to_string(clockNodePriority) ||
+            prop(node, "node.group") != nodeGroup) {
+            m_graph->destroyObject(it->second);
+        }
+    }
+
     // Send gain nodes, made and checked like buses.
     std::map<std::string, std::uint32_t> readySends;
     for (const auto &[name, s] : sends) {
@@ -880,9 +915,11 @@ void BusManager::reconcile()
         }
         m_limiter.appeared(name);
         m_pendingBuses.erase(name);
-        if (parseId(prop(m_graph->nodes().at(it->second), "audio.channels")) !=
-            s.positions.size()) {
-            m_graph->destroyObject(it->second); // the sending bus changed shape (mono)
+        const auto &sendNode = m_graph->nodes().at(it->second);
+        if (parseId(prop(sendNode, "audio.channels")) != s.positions.size() ||
+            prop(sendNode, "node.group") != nodeGroup) {
+            // The sending bus changed shape (mono), or an older version made it.
+            m_graph->destroyObject(it->second);
             continue;
         }
         readySends[name] = it->second;
@@ -1037,7 +1074,7 @@ std::optional<bool> BusManager::ensureEffectsNode(const std::string &fxName, con
             {"node.description",
              "Patch Prime effects: " + busDescription(wanted.endpoint, *wanted.settings)},
             {"patchprime.fx.owner", m_owner},
-            {"node.group", "patchprime.fx"},
+            {"node.group", std::string(nodeGroup)},
         };
         qCInfo(lcBus, "creating effects node %s", fxName.c_str());
         if (!m_graph->addFilter(fxName, positions, props, processor, keyed)) {

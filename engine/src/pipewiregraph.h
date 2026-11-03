@@ -124,6 +124,9 @@ public:
     bool createObject(const std::string &factory, const std::string &type, std::uint32_t version,
                       const Properties &props);
     bool createNode(const Properties &props);
+    // A plain SPA node with no adapter (props name its factory.name), such
+    // as support.node.driver.
+    bool createSpaNode(const Properties &props);
     bool createLink(std::uint32_t outputNode, std::uint32_t outputPort, std::uint32_t inputNode,
                     std::uint32_t inputPort, bool linger);
     // Asks the server to destroy any object (needs permission on it).

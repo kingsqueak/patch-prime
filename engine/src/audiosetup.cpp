@@ -80,8 +80,8 @@ std::string wirePlumberRules(const DeviceStore &store)
         const bool isMaster = clockDevice != nullptr && key == store.clockDevice();
         std::vector<std::string> props;
         // Automatic: a timer for anything that follows another clock: every
-        // node but the chosen master (Patch Prime's buses clock the graph
-        // otherwise, and while the master is unplugged).
+        // node but the chosen master (Patch Prime's clock node drives the
+        // graph otherwise, and while the master is unplugged).
         const bool follows = !isMaster;
         const bool timer = s.scheduling == Scheduling::Timer ||
                            (s.scheduling == Scheduling::Auto && follows);

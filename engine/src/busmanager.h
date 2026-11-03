@@ -106,11 +106,27 @@ std::vector<std::string> busPositions(const Endpoint &endpoint);
 // lingers after the daemon exits, and applies its volume to its monitor.
 // `owner` tags the bus with the settings it belongs to (see BusManager).
 // Buses have a driver priority above any hardware (ALSA devices use about
-// 1000-2600), so one of them clocks the graph, in both clock modes: a chosen
-// master interface gets more (clockDevicePriority() in audiosetup.h) and
-// wins while it's plugged in; when it's unplugged, the buses take over by
-// themselves, and hand back when it returns.
+// 1000-2600), so none of the hardware clocks the graph unless chosen: a
+// chosen master interface gets more (clockDevicePriority() in audiosetup.h)
+// and wins while it's plugged in. Patch Prime's clock node (below) outranks
+// the buses; they drive only if it's missing.
 constexpr int busDriverPriority = 20000;
+
+// The scheduling group of every node Patch Prime makes (buses, sends,
+// effects, plugin hosts and the clock), so they all share one driver and the
+// clock node is always in the graph it drives.
+constexpr std::string_view nodeGroup = "patchprime";
+
+// Patch Prime's clock: a driver with no ports (support.node.driver) that
+// keeps time when no master interface does (the Internal clock, or the
+// master unplugged). A bus used to drive instead, but a null sink driving
+// the graph runs first in each cycle, so what came into it went out one
+// quantum late: that bus was heard and recorded behind everything else.
+constexpr std::string_view clockNodeName = "patchprime.clock";
+constexpr int clockNodePriority = 25000;
+
+// The clock node's props; `owner` tags it like a bus.
+Properties clockProperties(const std::string &owner = {});
 
 Properties busProperties(const Endpoint &endpoint, const DeviceSettings &settings,
                          const std::string &owner = {});
