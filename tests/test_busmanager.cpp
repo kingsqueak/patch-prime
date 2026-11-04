@@ -94,6 +94,8 @@ private Q_SLOTS:
         QCOMPARE(props["priority.session"], "0");
         QVERIFY(busDriverPriority < clockDevicePriority());
         QCOMPARE(props["node.group"], "patchprime");
+        // Levels are the mixer's: WirePlumber mustn't restore its own.
+        QCOMPARE(props["state.restore-props"], "false");
         // The clock node outranks the buses (so no bus drives the graph and
         // hands its input on a cycle late); a chosen master outranks it.
         auto clock = clockProperties("cafe1234");

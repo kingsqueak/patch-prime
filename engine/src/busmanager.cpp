@@ -85,6 +85,7 @@ Properties sendProperties(const std::string &name, const std::vector<std::string
         {"priority.session", "0"},
         {"priority.driver", "0"},
         {"node.group", std::string(nodeGroup)},
+        {"state.restore-props", "false"},
         {"patchprime.owner", owner},
     };
 }
@@ -274,6 +275,9 @@ Properties busProperties(const Endpoint &endpoint, const DeviceSettings &setting
         {"priority.session", "0"},
         {"priority.driver", std::to_string(busDriverPriority)},
         {"node.group", std::string(nodeGroup)},
+        // The level is the mixer's. WirePlumber restoring its own saved one
+        // would land after ours and the fader would no longer be the truth.
+        {"state.restore-props", "false"},
         {"patchprime.key", endpoint.key},
         {"patchprime.owner", owner},
     };
@@ -863,6 +867,7 @@ void BusManager::reconcile()
             prop(node, "media.class") != busMediaClass(w.endpoint, *w.settings) ||
             prop(node, "priority.driver") != std::to_string(busDriverPriority) ||
             prop(node, "node.group") != nodeGroup ||
+            prop(node, "state.restore-props") != "false" ||
             parseId(prop(node, "audio.channels")) != channels ||
             (w.settings->kind != EndpointKind::Hardware &&
              prop(node, "node.description") != busDescription(w.endpoint, *w.settings));
@@ -945,7 +950,8 @@ void BusManager::reconcile()
         m_pendingBuses.erase(name);
         const auto &sendNode = m_graph->nodes().at(it->second);
         if (parseId(prop(sendNode, "audio.channels")) != s.positions.size() ||
-            prop(sendNode, "node.group") != nodeGroup) {
+            prop(sendNode, "node.group") != nodeGroup ||
+            prop(sendNode, "state.restore-props") != "false") {
             // The sending bus changed shape (mono), or an older version made it.
             m_graph->destroyObject(it->second);
             continue;

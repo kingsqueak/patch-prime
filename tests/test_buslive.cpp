@@ -224,15 +224,14 @@ private Q_SLOTS:
         if (!m_module.isEmpty()) {
             run(QStringLiteral("pactl"), {QStringLiteral("unload-module"), m_module});
         }
-        // Anything the tests' engines left behind (each test has its own
-        // settings file, so its own owner tag). Send nodes, for one, can
-        // outlive a test's BusManager by a reconcile.
-        for (const auto &[id, node] : m_graph.nodes()) {
-            if (m_owners.contains(prop(node, "patchprime.owner"))) {
-                m_graph.destroyObject(id);
-            }
-        }
-        QTest::qWait(200);
+        removeLeftovers();
+    }
+
+    // A test that fails stops short and leaves its lingering buses behind,
+    // where the next one would find them by name.
+    void cleanup()
+    {
+        removeLeftovers();
     }
 
     void busFollowsSettings()
@@ -316,7 +315,7 @@ private Q_SLOTS:
         QProcess player;
         player.start(QStringLiteral("pw-play"),
                      {QStringLiteral("-P"),
-                      QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                      QStringLiteral("{ patchprime.scope = \"test-untouched\" state.restore-props = false }"),
                       QStringLiteral("--target"), QString::fromStdString(m_busName), tone});
         float peak = 0.0F;
         QVERIFY(QTest::qWaitFor(
@@ -444,7 +443,7 @@ private Q_SLOTS:
         QProcess player;
         player.start(QStringLiteral("pw-play"),
                      {QStringLiteral("-P"),
-                      QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                      QStringLiteral("{ patchprime.scope = \"test-untouched\" state.restore-props = false }"),
                       QStringLiteral("--target"), QString::fromStdString(desktopNode), tone});
         float mixPeak = 0.0F;
         QVERIFY(QTest::qWaitFor(
@@ -510,7 +509,7 @@ private Q_SLOTS:
         QVERIFY(writeTone(tone, 5));
         QProcess player;
         player.start(QStringLiteral("pw-play"),
-                     {QStringLiteral("-P"), QStringLiteral(R"({ patchprime.scope = "test-untouched" })"),
+                     {QStringLiteral("-P"), QStringLiteral(R"({ patchprime.scope = "test-untouched" state.restore-props = false })"),
                       QStringLiteral("--target"), QString::fromStdString(mixNode), tone});
         QVERIFY(QTest::qWaitFor([&] { return std::isfinite(loudness.analysis().integrated()) && loudness.analysis().seconds() > 2.0; }, 8000));
         const double integrated = loudness.analysis().integrated();
@@ -572,7 +571,7 @@ private Q_SLOTS:
         QVERIFY(writeTone(tone));
         QProcess player;
         player.start(QStringLiteral("pw-play"),
-                     {QStringLiteral("-P"), QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                     {QStringLiteral("-P"), QStringLiteral("{ patchprime.scope = \"test-untouched\" state.restore-props = false }"),
                       QStringLiteral("--target"), QString::fromStdString(aNode), tone});
         QVERIFY(QTest::qWaitFor([&] { return recordings.takeSeconds() > 2.0; }, 8000));
         player.kill();
@@ -653,7 +652,7 @@ private Q_SLOTS:
         QProcess player;
         player.start(QStringLiteral("pw-play"),
                      {QStringLiteral("-P"),
-                      QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                      QStringLiteral("{ patchprime.scope = \"test-untouched\" state.restore-props = false }"),
                       QStringLiteral("--target"), QString::fromStdString(mixNode), tone});
         QVERIFY(QTest::qWaitFor([&] { return recordings.recordedSeconds()[mixKey] > 2.0; }, 8000));
         player.kill();
@@ -860,7 +859,7 @@ private Q_SLOTS:
         QProcess tonePlayer;
         tonePlayer.start(QStringLiteral("pw-play"),
                          {QStringLiteral("-P"),
-                          QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                          QStringLiteral("{ patchprime.scope = \"test-untouched\" state.restore-props = false }"),
                           QStringLiteral("--target"), QString::fromStdString(feed), tone});
         QVERIFY(QTest::qWaitFor([&] { return recordings.recordedSeconds()[micKey] > 1.5; }, 8000));
         tonePlayer.kill();
@@ -975,7 +974,7 @@ private Q_SLOTS:
         QProcess player;
         player.start(QStringLiteral("pw-play"),
                      {QStringLiteral("-P"),
-                      QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                      QStringLiteral("{ patchprime.scope = \"test-untouched\" state.restore-props = false }"),
                       QStringLiteral("--target"), QString::fromStdString(feed), tone});
         float mixPeak = 0.0F;
         QVERIFY(QTest::qWaitFor(
@@ -998,7 +997,7 @@ private Q_SLOTS:
         buses.takeLevels();
         player.start(QStringLiteral("pw-play"),
                      {QStringLiteral("-P"),
-                      QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                      QStringLiteral("{ patchprime.scope = \"test-untouched\" state.restore-props = false }"),
                       QStringLiteral("--target"), QString::fromStdString(feed), tone});
         mixPeak = 0.0F;
         // Collects for the whole time: the peak is checked afterwards.
@@ -1119,7 +1118,7 @@ private Q_SLOTS:
             QProcess player;
             player.start(QStringLiteral("pw-play"),
                          {QStringLiteral("-P"),
-                          QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                          QStringLiteral("{ patchprime.scope = \"test-untouched\" state.restore-props = false }"),
                           QStringLiteral("--target"), QString::fromStdString(feed), tone});
             QTest::qWait(300);
             buses.takeLevels();
@@ -1323,7 +1322,7 @@ private Q_SLOTS:
             QProcess player;
             player.start(QStringLiteral("pw-play"),
                          {QStringLiteral("-P"),
-                          QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                          QStringLiteral("{ patchprime.scope = \"test-untouched\" state.restore-props = false }"),
                           QStringLiteral("--target"), QString::fromStdString(feed), tone});
             QTest::qWait(300);
             buses.takeLevels();
@@ -1435,7 +1434,7 @@ private Q_SLOTS:
             QProcess player;
             player.start(QStringLiteral("pw-play"),
                          {QStringLiteral("-P"),
-                          QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                          QStringLiteral("{ patchprime.scope = \"test-untouched\" state.restore-props = false }"),
                           QStringLiteral("--target"), QString::fromStdString(feed), tone});
             QTest::qWait(300);
             buses.takeLevels();
@@ -1543,7 +1542,7 @@ private Q_SLOTS:
             QProcess player;
             player.start(QStringLiteral("pw-play"),
                          {QStringLiteral("-P"),
-                          QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                          QStringLiteral("{ patchprime.scope = \"test-untouched\" state.restore-props = false }"),
                           QStringLiteral("--target"), QString::fromStdString(feed), tone});
             QTest::qWait(300);
             buses.takeLevels();
@@ -1671,7 +1670,7 @@ private Q_SLOTS:
             QProcess player;
             player.start(QStringLiteral("pw-play"),
                          {QStringLiteral("-P"),
-                          QStringLiteral("{ patchprime.scope = \"test-untouched\" }"),
+                          QStringLiteral("{ patchprime.scope = \"test-untouched\" state.restore-props = false }"),
                           QStringLiteral("--target"), QString::fromStdString(feed), tone});
             QTest::qWait(300);
             buses.takeLevels();
@@ -1765,7 +1764,7 @@ private Q_SLOTS:
             QProcess player;
             player.start(QStringLiteral("pw-play"),
                          {QStringLiteral("-P"),
-                          QStringLiteral(R"({ patchprime.scope = "test-untouched" application.process.binary = "%1" node.name = "%1" })")
+                          QStringLiteral(R"({ patchprime.scope = "test-untouched" state.restore-props = false application.process.binary = "%1" node.name = "%1" })")
                               .arg(QString::fromStdString(app)),
                           QStringLiteral("--target"), QString::fromStdString(m_sinkName), appTone});
             QVERIFY(QTest::qWaitFor(
@@ -2010,6 +2009,7 @@ private Q_SLOTS:
                      {QStringLiteral("--target"), QString::fromStdString(m_sinkName), QStringLiteral("-P"),
                       QStringLiteral("{ application.name = \"Patch Prime Strip Test\" "
                                      "application.process.binary = \"patchprime-test-strip\" "
+                                     "state.restore-props = false "
                                      "patchprime.scope = \"%1\" }")
                           .arg(QString::fromStdString(scope)),
                       tone});
@@ -2075,7 +2075,7 @@ private Q_SLOTS:
         auto startApp = [&tone, &scope](QProcess &player) {
             player.start(QStringLiteral("pw-play"),
                          {QStringLiteral("--volume=0"), QStringLiteral("-P"),
-                          QStringLiteral("{ application.name = \"Patch Prime Test\" "
+                          QStringLiteral("{ application.name = \"Patch Prime Test\" state.restore-props = false "
                                          "application.process.binary = \"patchprime-test\" "
                                          "patchprime.scope = \"%1\" }")
                               .arg(QString::fromStdString(scope)),
@@ -2145,7 +2145,7 @@ private Q_SLOTS:
         player->start(QStringLiteral("pw-play"),
                       {QStringLiteral("--volume=0"), QStringLiteral("--target"),
                        QString::fromStdString(m_sinkName), QStringLiteral("-P"),
-                       QStringLiteral("{ application.name = \"Patch Prime Test\" "
+                       QStringLiteral("{ application.name = \"Patch Prime Test\" state.restore-props = false "
                                       "application.process.binary = \"patchprime-test\" "
                                       "patchprime.scope = \"%1\" }")
                            .arg(QString::fromStdString(scope)),
@@ -2170,6 +2170,23 @@ private Q_SLOTS:
     }
 
 private:
+    // Anything the tests' engines left behind (each test has its own settings
+    // file, so its own owner tag). Send nodes, for one, can outlive a test's
+    // BusManager by a reconcile.
+    void removeLeftovers()
+    {
+        bool any = false;
+        for (const auto &[id, node] : m_graph.nodes()) {
+            if (m_owners.contains(prop(node, "patchprime.owner"))) {
+                m_graph.destroyObject(id);
+                any = true;
+            }
+        }
+        if (any) {
+            QTest::qWait(200);
+        }
+    }
+
     PipeWireGraph m_graph;
     std::string m_sinkName;
     std::string m_busName;
