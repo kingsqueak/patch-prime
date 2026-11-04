@@ -196,6 +196,14 @@ Cue lets you listen to a strip in your headphones without changing what goes to 
 2. Every strip now has a **C** button. Click it on the strips you want to hear.
 3. While anything is cued, the headphones play only the cued strips. Their own mix comes back when you un-cue everything.
 
+Once a cue output is chosen, two more controls appear beside it:
+
+- **PFL / AFL** decides what you hear.
+  - **PFL** (pre-fader listen, the default) plays a strip before its fader and mute, so you can check a mic that's muted or pulled down without touching the mix.
+  - **AFL** (after-fader listen) plays the strip as it goes into the mix.
+  - On a microphone, PFL includes the strip's effects. On a mix bus, Desktop or an output the effects come after the fader, so PFL plays them without their effects; use AFL to hear those.
+- **Cue level** sets how loud cue plays, without changing the mix. Double-click it for 0 dB. Both are remembered.
+
 Cue is temporary: it isn't saved, and it isn't part of scenes. Set **Cue** to **Off** to turn it off and clear every cue.
 
 ## Effects
@@ -443,6 +451,8 @@ patchprime-ctl mute Mic off              # (push to talk: "off" on press, "on" o
 patchprime-ctl volume "Stream Mix" -6    # set a level in dB
 patchprime-ctl volume Desktop down 3     # nudge it (1 dB without a number)
 patchprime-ctl cue Mic
+patchprime-ctl cue-mode afl
+patchprime-ctl cue-level -6
 patchprime-ctl send Mic "Stream Mix" on
 patchprime-ctl send-level Mic "Stream Mix" up
 patchprime-ctl effect Mic 2 off          # the strip's second effect

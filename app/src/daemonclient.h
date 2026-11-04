@@ -46,6 +46,9 @@ class DaemonClient : public QAbstractListModel
     Q_PROPERTY(int blockSize READ blockSize NOTIFY clockChanged)
     // The hardware output cue plays to (a strip key; empty: cue is off).
     Q_PROPERTY(QString cueOutput READ cueOutput NOTIFY cueOutputChanged)
+    // The cue's level, and before the fader (PFL) or after it (AFL).
+    Q_PROPERTY(double cueLevelDb READ cueLevelDb NOTIFY cueOutputChanged)
+    Q_PROPERTY(bool cuePreFader READ cuePreFader NOTIFY cueOutputChanged)
     // The Mackie Control surface: {id, available, connected, ports: [{id, name}]}.
     Q_PROPERTY(QVariantMap controlSurface READ controlSurface NOTIFY controlSurfaceChanged)
     // MIDI learn: {id, connected} of the controller's port; the mappings
@@ -176,6 +179,8 @@ public:
     [[nodiscard]] QVariantList pluginParams(const QString &type) const;
     Q_INVOKABLE void rescanPlugins();
     [[nodiscard]] QString cueOutput() const { return m_cueOutput; }
+    [[nodiscard]] double cueLevelDb() const { return m_cueLevelDb; }
+    [[nodiscard]] bool cuePreFader() const { return m_cuePreFader; }
     [[nodiscard]] QVariantMap controlSurface() const { return m_controlSurface; }
     // The control surface's MIDI port (an id from controlSurface.ports), or "".
     Q_INVOKABLE void setControlSurface(const QString &id);
@@ -296,6 +301,8 @@ public:
     Q_INVOKABLE void setDeviceSampleRate(const QString &key, int rate);
     Q_INVOKABLE void setDeviceScheduling(const QString &key, const QString &scheduling);
     Q_INVOKABLE void setCueOutput(const QString &key);
+    Q_INVOKABLE void setCueLevel(double db);
+    Q_INVOKABLE void setCuePreFader(bool preFader);
     Q_INVOKABLE void setCue(const QString &key, bool cued);
     Q_INVOKABLE void addEffect(const QString &key, const QString &type);
     Q_INVOKABLE void removeEffect(const QString &key, int index);
@@ -424,6 +431,8 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QVariantMap m_pluginWindows;
     QVariantMap m_pluginWindowErrors;
     QString m_cueOutput;
+    double m_cueLevelDb = 0.0;
+    bool m_cuePreFader = true;
     QVariantMap m_controlSurface;
     mutable QHash<QString, QVariantList> m_pluginParams; // by plugin type
     QVariantMap m_midiController;

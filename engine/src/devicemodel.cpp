@@ -627,6 +627,27 @@ void DeviceModel::setCueOutput(const std::string &key)
     Q_EMIT cueChanged();
 }
 
+void DeviceModel::setCueLevel(double db)
+{
+    db = std::clamp(db, minimumVolumeDb(), maximumVolumeDb());
+    if (db == m_store->cueLevelDb()) {
+        return;
+    }
+    m_store->setCueLevelDb(db);
+    saveLater();
+    Q_EMIT cueChanged();
+}
+
+void DeviceModel::setCuePreFader(bool preFader)
+{
+    if (preFader == m_store->cuePreFader()) {
+        return;
+    }
+    m_store->setCuePreFader(preFader);
+    saveStore();
+    Q_EMIT cueChanged();
+}
+
 void DeviceModel::setCue(int row, bool cued)
 {
     if (row < 0 || row >= rowCount() || m_store->cueOutput().empty()) {

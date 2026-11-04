@@ -616,6 +616,16 @@ QVariant DaemonClient::keySequence(int key) const // NOLINT(readability-convert-
     return QVariant::fromValue(key == 0 ? QKeySequence() : QKeySequence(QKeyCombination::fromCombined(key)));
 }
 
+void DaemonClient::setCueLevel(double db)
+{
+    call(QStringLiteral("SetCueLevel"), {db});
+}
+
+void DaemonClient::setCuePreFader(bool preFader)
+{
+    call(QStringLiteral("SetCuePreFader"), {preFader});
+}
+
 void DaemonClient::setCue(const QString &key, bool cued)
 {
     call(QStringLiteral("SetCue"), {key, cued});
@@ -920,8 +930,13 @@ void DaemonClient::onStateChanged(const QString &state)
         }
     }
 
-    if (const auto cue = root.value(QLatin1String("cueOutput")).toString(); cue != m_cueOutput) {
+    const auto cue = root.value(QLatin1String("cueOutput")).toString();
+    const auto cueLevel = root.value(QLatin1String("cueLevelDb")).toDouble();
+    const auto cuePreFader = root.value(QLatin1String("cuePreFader")).toBool(true);
+    if (cue != m_cueOutput || cueLevel != m_cueLevelDb || cuePreFader != m_cuePreFader) {
         m_cueOutput = cue;
+        m_cueLevelDb = cueLevel;
+        m_cuePreFader = cuePreFader;
         Q_EMIT cueOutputChanged();
     }
 

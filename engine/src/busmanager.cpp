@@ -760,6 +760,8 @@ void BusManager::reconcile()
 
     const auto wanted = wantedBuses();
     const auto sends = wantedSends(wanted);
+    // The cue node is there only while something is cued.
+    const auto *cue = m_devices->cued().empty() ? nullptr : cueTarget(wanted);
 
     std::map<std::string, std::uint32_t> existing;
     for (const auto &[id, node] : m_graph->nodes()) {
@@ -802,7 +804,8 @@ void BusManager::reconcile()
     // is the system default output, hand the default back to its hardware
     // first; otherwise WirePlumber would pick some other device.
     for (const auto &[name, id] : existing) {
-        if (wanted.contains(name) || sends.contains(name) || name == clockNodeName) {
+        if (wanted.contains(name) || sends.contains(name) || name == clockNodeName ||
+            (cue != nullptr && name == cueNodeName)) {
             continue;
         }
         // A bus that is the system default output or input hands the default
@@ -902,6 +905,31 @@ void BusManager::reconcile()
         }
     }
 
+    // The cue node, too; its level follows the setting and its channels the
+    // cue output's.
+    std::optional<std::uint32_t> cueNode;
+    if (cue != nullptr) {
+        const std::string name(cueNodeName);
+        const auto positions = busPositions(cue->second.endpoint);
+        if (const auto it = existing.find(name); it == existing.end()) {
+            if (!m_pendingBuses.contains(name) && mayCreate(name, now) &&
+                m_graph->createNode(
+                    sendProperties(name, positions, "Patch Prime cue", m_owner))) {
+                m_pendingBuses[name] = now;
+            }
+        } else {
+            m_limiter.appeared(name);
+            m_pendingBuses.erase(name);
+            if (parseId(prop(m_graph->nodes().at(it->second), "audio.channels")) !=
+                positions.size()) {
+                m_graph->destroyObject(it->second);
+            } else {
+                cueNode = it->second;
+                applyVolume(it->second, positions.size(), m_devices->store().cueLevelDb(), false);
+            }
+        }
+    }
+
     // Send gain nodes, made and checked like buses.
     std::map<std::string, std::uint32_t> readySends;
     for (const auto &[name, s] : sends) {
@@ -951,7 +979,7 @@ void BusManager::reconcile()
 
     linkSends(ready, fx, stripOuts, wanted, sends, readySends, existingLinks);
     linkKeys(fx, wanted, stripOuts, existingLinks);
-    linkCue(ready, wanted, stripOuts, existingLinks);
+    linkCue(ready, wanted, stripOuts, cueNode, existingLinks);
     linkTaps(ready, wanted, fx, stripOuts, existingLinks);
 
     if ((!m_pendingLinks.empty() || !m_pendingBuses.empty()) && !m_retryTimer.isActive()) {
@@ -1288,22 +1316,29 @@ BusManager::reconcileEffects(const std::map<std::string, std::uint32_t> &ready,
     return up;
 }
 
-void BusManager::linkCue(const std::map<std::string, std::uint32_t> &ready,
-                         const std::map<std::string, Wanted> &wanted,
-                         const std::map<std::string, std::vector<PortRef>> &stripOuts,
-                         const LinkMap &existingLinks)
+const std::pair<const std::string, BusManager::Wanted> *
+BusManager::cueTarget(const std::map<std::string, Wanted> &wanted) const
 {
     const auto &cueKey = m_devices->store().cueOutput();
     const auto cue = std::ranges::find_if(
         wanted, [&cueKey](const auto &entry) { return entry.second.key == cueKey; });
     const bool usable = !cueKey.empty() && cue != wanted.end() && cue->second.hardwareNodeId &&
                         cue->second.settings->kind == EndpointKind::Hardware;
-    const std::optional<std::uint32_t> hardwareNode =
-        usable ? cue->second.hardwareNodeId : std::nullopt;
+    return usable ? &*cue : nullptr;
+}
 
-    // The ports a cue link can come from: every strip's output now, and every
-    // bus's own outputs (a strip's output moves to its effects node when it
-    // gets effects, and an old cue link from the bus must go then too).
+void BusManager::linkCue(const std::map<std::string, std::uint32_t> &ready,
+                         const std::map<std::string, Wanted> &wanted,
+                         const std::map<std::string, std::vector<PortRef>> &stripOuts,
+                         std::optional<std::uint32_t> cueNode, const LinkMap &existingLinks)
+{
+    const auto *cue = cueTarget(wanted);
+    const std::optional<std::uint32_t> hardwareNode =
+        cue != nullptr ? cue->second.hardwareNodeId : std::nullopt;
+
+    // The ports a link into the cue device can come from: every strip's
+    // output now, every bus's own outputs (a strip's output moves to its
+    // effects node when it gets effects), and the cue node.
     std::map<std::uint32_t, std::string> sourceOf; // port -> strip name
     for (const auto &[name, ports] : stripOuts) {
         for (const auto &p : ports) {
@@ -1316,24 +1351,66 @@ void BusManager::linkCue(const std::map<std::string, std::uint32_t> &ready,
         }
     }
 
-    // The links cue wants: each cued strip's output to the cue device.
-    std::set<std::pair<std::uint32_t, std::uint32_t>> desired;
-    if (hardwareNode) {
+    std::set<std::pair<std::uint32_t, std::uint32_t>> desired; // into the cue device
+    std::set<std::pair<std::uint32_t, std::uint32_t>> feeds;   // into the cue node
+    std::vector<PortRef> nodeIn;
+    if (cueNode) {
+        nodeIn = portsOf(*cueNode, "in", false);
+        for (const auto &p : portsOf(*cueNode, "out", true)) {
+            sourceOf[p.portId] = {};
+        }
+    }
+    if (hardwareNode && cueNode) {
         const auto inputs =
             selectPair(portsOf(*hardwareNode, "in", false), cue->second.settings->channelPair);
+        const auto nodeOut = portsOf(*cueNode, "out", true);
+        for (const auto &[out, in] : pairPorts(nodeOut, inputs)) {
+            desired.insert({out.portId, in.portId});
+        }
+        link(nodeOut, inputs, existingLinks);
+
+        const auto feed = [&](const PortRef &out, const PortRef &in) {
+            feeds.insert({out.portId, in.portId});
+            link({out}, {in}, existingLinks);
+        };
         for (const auto &[name, ports] : stripOuts) {
             if (name == cue->first || !m_devices->cued().contains(wanted.at(name).key)) {
                 continue;
             }
-            for (const auto &[out, in] : pairPorts(ports, inputs)) {
-                desired.insert({out.portId, in.portId});
+            if (!m_devices->store().cuePreFader()) {
+                for (const auto &[out, in] : pairPorts(ports, nodeIn)) {
+                    feed(out, in);
+                }
+                continue;
             }
-            link(ports, inputs, existingLinks);
+            // Before the fader: the fader is on the bus's monitor ports and a
+            // bus has no output ahead of it, so cue takes what feeds the bus.
+            for (const auto &[busIn, in] :
+                 pairPorts(portsOf(ready.at(name), "in", false), nodeIn)) {
+                for (const auto &[id, l] : m_graph->links()) {
+                    if (parseId(prop(l, "link.input.port")) == busIn.portId) {
+                        feed(PortRef{.nodeId = parseId(prop(l, "link.output.node")),
+                                     .portId = parseId(prop(l, "link.output.port")),
+                                     .channel = {}},
+                             in);
+                    }
+                }
+            }
         }
     }
 
-    // Links from strips into the cue device (now or before) that cue doesn't
-    // want go, except each device's own strip's path to it.
+    // Links into the cue node that cue no longer wants go (a strip uncued, or
+    // PFL and AFL swapped).
+    for (const auto &p : nodeIn) {
+        for (const auto &[pair, linkId] : existingLinks) {
+            if (pair.second == p.portId && !feeds.contains(pair)) {
+                m_graph->destroyObject(linkId);
+            }
+        }
+    }
+
+    // Links from strips or the cue node into the cue device (now or before)
+    // that cue doesn't want go, except each device's own strip's path to it.
     std::set<std::uint32_t> cleanNodes;
     if (hardwareNode) {
         cleanNodes.insert(*hardwareNode);

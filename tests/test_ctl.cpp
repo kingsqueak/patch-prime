@@ -98,6 +98,14 @@ private Q_SLOTS:
         QCOMPARE(c.method, QStringLiteral("SetCue"));
         QCOMPARE(c.args.at(1).toBool(), false);
 
+        c = only({QStringLiteral("cue-level"), QStringLiteral("-6")});
+        QCOMPARE(c.method, QStringLiteral("SetCueLevel"));
+        QCOMPARE(c.args.at(0).toDouble(), -6.0);
+        c = only({QStringLiteral("cue-mode"), QStringLiteral("AFL")});
+        QCOMPARE(c.method, QStringLiteral("SetCuePreFader"));
+        QCOMPARE(c.args.at(0).toBool(), false);
+        QVERIFY(error({QStringLiteral("cue-mode"), QStringLiteral("both")}).contains(QStringLiteral("pfl|afl")));
+
         c = only({QStringLiteral("send"), QStringLiteral("Mic"), QStringLiteral("stream mix")});
         QCOMPARE(c.method, QStringLiteral("SetSend"));
         QCOMPARE(c.args, (QVariantList{QStringLiteral("in|mic"), QStringLiteral("virtual|stream"), false}));

@@ -1843,23 +1843,47 @@ private Q_SLOTS:
         m_busName = outBus;
         QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, outBus, m_sinkName) == 2; }, 5000));
 
+        // After the fader: from the strip's output, through the cue node.
+        const std::string cueNode(cueNodeName);
+        QVERIFY(store.cuePreFader()); // the default
+        devices.setCuePreFader(false);
         devices.setCueOutput(sinkKey);
         devices.setCue(devices.rowForKey(micKey), true);
-        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, inBus, m_sinkName) == 2; }, 5000));
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return linkCount(m_graph, inBus, cueNode) == 2 &&
+                       linkCount(m_graph, cueNode, m_sinkName) == 2;
+            },
+            5000));
         QCOMPARE(linkCount(m_graph, outBus, m_sinkName), 2); // its own path stays (muted)
+        // Before the fader: from what feeds the bus, and only that.
+        devices.setCuePreFader(true);
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return linkCount(m_graph, mic, cueNode) == 2 &&
+                       linkCount(m_graph, inBus, cueNode) == 0;
+            },
+            5000));
+        devices.setCuePreFader(false);
+        QVERIFY(QTest::qWaitFor(
+            [&] {
+                return linkCount(m_graph, inBus, cueNode) == 2 &&
+                       linkCount(m_graph, mic, cueNode) == 0;
+            },
+            5000));
         // A mix bus cued, then given effects: its cue link moves from the bus
         // to its effects node.
         const auto mixKey =
             devices.createVirtual(QStringLiteral("Cue Mix"), EndpointKind::VirtualSink);
         const auto mixNode = store.find(mixKey.toStdString())->busName;
         devices.setCue(devices.rowForKey(mixKey.toStdString()), true);
-        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, mixNode, m_sinkName) == 2; }, 5000));
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, mixNode, cueNode) == 2; }, 5000));
         devices.addEffect(devices.rowForKey(mixKey.toStdString()), QStringLiteral("gain"));
         const auto mixFx = effectsNodeName(mixNode);
         QVERIFY(QTest::qWaitFor(
             [&] {
-                return linkCount(m_graph, mixFx, m_sinkName) == 2 &&
-                       linkCount(m_graph, mixNode, m_sinkName) == 0;
+                return linkCount(m_graph, mixFx, cueNode) == 2 &&
+                       linkCount(m_graph, mixNode, cueNode) == 0;
             },
             5000));
         devices.forget(devices.rowForKey(mixKey.toStdString()));
@@ -1882,15 +1906,15 @@ private Q_SLOTS:
         devices.removeEffect(devices.rowForKey(micKey), 0);
         devices.removeEffect(devices.rowForKey(sinkKey), 0);
 
-        // Uncued: the cue link goes, the output's own path stays.
+        // Uncued: the cue node goes, the output's own path stays.
         devices.setCue(devices.rowForKey(micKey), false);
-        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, inBus, m_sinkName) == 0; }, 5000));
+        QVERIFY(QTest::qWaitFor([&] { return nodeNamed(m_graph, cueNode) == nullptr; }, 5000));
         QCOMPARE(linkCount(m_graph, outBus, m_sinkName), 2);
         // Cued again, then cue turned off: gone too.
         devices.setCue(devices.rowForKey(micKey), true);
-        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, inBus, m_sinkName) == 2; }, 5000));
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, inBus, cueNode) == 2; }, 5000));
         devices.setCueOutput({});
-        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, inBus, m_sinkName) == 0; }, 5000));
+        QVERIFY(QTest::qWaitFor([&] { return nodeNamed(m_graph, cueNode) == nullptr; }, 5000));
         QCOMPARE(linkCount(m_graph, outBus, m_sinkName), 2);
 
         devices.setEnabled(devices.rowForKey(micKey), false);

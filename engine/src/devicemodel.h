@@ -127,6 +127,9 @@ public:
     // and clear every cued strip), and whether a strip is cued. Cued strips
     // are temporary: not saved, not part of scenes.
     void setCueOutput(const std::string &key);
+    // What cue plays: its level, and before the fader (PFL) or after (AFL).
+    void setCueLevel(double db);
+    void setCuePreFader(bool preFader);
     // Recording settings (see DeviceStore); emit recordingSettingsChanged.
     void setRecordingFormat(const std::string &format);
     void setPlayerTarget(const std::string &key);

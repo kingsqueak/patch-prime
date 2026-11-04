@@ -237,6 +237,8 @@ bool DeviceStore::load()
     m_clock = ClockMode::Internal;
     m_clockDevice.clear();
     m_cueOutput.clear();
+    m_cueLevelDb = 0.0;
+    m_cuePreFader = true;
     m_sampleRate = defaultSampleRate;
     m_blockSize = 0;
     m_recordingFormat = "flac";
@@ -275,6 +277,8 @@ bool DeviceStore::load()
     m_clock = clockModeFromName(root.value(QLatin1String("clock")).toString().toStdString());
     m_clockDevice = root.value(QLatin1String("clockDevice")).toString().toStdString();
     m_cueOutput = root.value(QLatin1String("cueOutput")).toString().toStdString();
+    m_cueLevelDb = root.value(QLatin1String("cueLevelDb")).toDouble(0.0);
+    m_cuePreFader = root.value(QLatin1String("cuePreFader")).toBool(true);
     m_sampleRate = root.value(QLatin1String("sampleRate")).toInt(defaultSampleRate);
     m_blockSize = std::max(0, root.value(QLatin1String("blockSize")).toInt());
     m_recordingFormat =
@@ -338,6 +342,8 @@ bool DeviceStore::save()
         {QStringLiteral("clock"), qs(clockModeName(m_clock))},
         {QStringLiteral("clockDevice"), qs(m_clockDevice)},
         {QStringLiteral("cueOutput"), qs(m_cueOutput)},
+        {QStringLiteral("cueLevelDb"), m_cueLevelDb},
+        {QStringLiteral("cuePreFader"), m_cuePreFader},
         {QStringLiteral("sampleRate"), m_sampleRate},
         {QStringLiteral("blockSize"), m_blockSize},
         {QStringLiteral("recordingFormat"), qs(m_recordingFormat)},

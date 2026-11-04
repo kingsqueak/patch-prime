@@ -290,6 +290,8 @@ QString PatchPrimeService::GetState() const
          QString::fromStdString(pp::clockModeName(m_devices->store().clock()))},
         {QStringLiteral("clockDevice"), QString::fromStdString(m_devices->store().clockDevice())},
         {QStringLiteral("cueOutput"), QString::fromStdString(m_devices->store().cueOutput())},
+        {QStringLiteral("cueLevelDb"), m_devices->store().cueLevelDb()},
+        {QStringLiteral("cuePreFader"), m_devices->store().cuePreFader()},
         {QStringLiteral("clockNow"), clockNow()},
         {QStringLiteral("sampleRate"), m_devices->store().sampleRate()},
         {QStringLiteral("scenes"), QJsonArray::fromStringList(m_scenes->names())},
@@ -838,6 +840,16 @@ void PatchPrimeService::SetPlaybackLoop(bool loop)
 void PatchPrimeService::SetCueOutput(const QString &key)
 {
     m_devices->setCueOutput(key.toStdString());
+}
+
+void PatchPrimeService::SetCueLevel(double db)
+{
+    m_devices->setCueLevel(db);
+}
+
+void PatchPrimeService::SetCuePreFader(bool preFader)
+{
+    m_devices->setCuePreFader(preFader);
 }
 
 void PatchPrimeService::SetCue(const QString &key, bool cued)

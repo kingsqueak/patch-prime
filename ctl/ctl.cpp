@@ -221,6 +221,8 @@ share a label. Switches take on, off or toggle (the default).
   mute <strip> [on|off|toggle]      mute (push to talk: off on press,
                                     on on release)
   cue <strip> [on|off|toggle]       hear it alone on the cue output
+  cue-level <dB>|up|down [dB]       the level of what cue plays
+  cue-mode pfl|afl                  cue before or after the fader
   send <from> <to> [on|off|toggle]  send a strip to a mix bus or output
   send-level <from> <to> <dB>|up|down [dB]
   effect <strip> <n> [on|off|toggle]  turn its n-th effect on or off
@@ -367,6 +369,22 @@ std::expected<Plan, QString> plan(const QStringList &args, const QJsonObject &st
         return Plan{.calls = {{.method = *on ? QStringLiteral("StartTake") : QStringLiteral("StopTake"),
                                .args = {},
                                .returnsError = *on}},
+                    .output = {}};
+    }
+
+    if (command == QLatin1String("cue-level")) {
+        const auto db = level(args, 1, state.value(QLatin1String("cueLevelDb")).toDouble());
+        if (!db) {
+            return fail(db.error());
+        }
+        return Plan{.calls = {{.method = QStringLiteral("SetCueLevel"), .args = {*db}}}, .output = {}};
+    }
+    if (command == QLatin1String("cue-mode")) {
+        const auto mode = args.value(1).toLower();
+        if (mode != QLatin1String("pfl") && mode != QLatin1String("afl")) {
+            return fail(QStringLiteral("usage: patchprime-ctl cue-mode pfl|afl"));
+        }
+        return Plan{.calls = {{.method = QStringLiteral("SetCuePreFader"), .args = {mode == QLatin1String("pfl")}}},
                     .output = {}};
     }
 

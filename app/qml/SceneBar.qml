@@ -107,6 +107,38 @@ RowLayout {
             stages: ["output"]
         }
     }
+    QQC2.ComboBox {
+        Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+        visible: Devices.cueOutput.length > 0
+        enabled: Devices.daemonRunning
+        model: [
+            { value: true, label: qsTr("PFL") },
+            { value: false, label: qsTr("AFL") }
+        ]
+        textRole: "label"
+        valueRole: "value"
+        currentIndex: Devices.cuePreFader ? 0 : 1
+        onActivated: Devices.setCuePreFader(currentValue)
+        Accessible.name: qsTr("Cue before or after the fader")
+        QQC2.ToolTip.text: qsTr("PFL: hear a cued strip before its fader and mute, even when it's pulled down or muted. AFL: hear it as it goes into the mix.")
+        QQC2.ToolTip.visible: hovered
+        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+    }
+    VolumeFader {
+        Layout.preferredWidth: Kirigami.Units.gridUnit * 6
+        visible: Devices.cueOutput.length > 0
+        enabled: Devices.daemonRunning
+        orientation: Qt.Horizontal
+        volumeDb: Devices.cueLevelDb
+        accessibleName: qsTr("Cue level")
+        onRequested: db => Devices.setCueLevel(db)
+    }
+    QQC2.Label {
+        visible: Devices.cueOutput.length > 0
+        text: qsTr("%1 dB").arg(Devices.cueLevelDb.toFixed(1))
+        color: Style.dimText
+        font: Kirigami.Theme.smallFont
+    }
 
     QQC2.Label {
         visible: Devices.currentScene.length > 0

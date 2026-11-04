@@ -92,6 +92,9 @@ private Q_SLOTS:
             QCOMPARE(store.clock(), ClockMode::Internal); // the default
             store.setClock(ClockMode::Hardware);
             store.setClockDevice("phones");
+            QVERIFY(store.cuePreFader()); // PFL unless told otherwise
+            store.setCuePreFader(false);
+            store.setCueLevelDb(-9.5);
             QCOMPARE(store.sampleRate(), 48000); // the default
             store.setSampleRate(96000);
             store.setBlockSize(512);
@@ -121,6 +124,8 @@ private Q_SLOTS:
         QCOMPARE(store.find("phones")->channelPair, 2);
         QCOMPARE(store.clock(), ClockMode::Hardware);
         QCOMPARE(store.clockDevice(), "phones");
+        QCOMPARE(store.cuePreFader(), false);
+        QCOMPARE(store.cueLevelDb(), -9.5);
         QCOMPARE(store.sampleRate(), 96000);
         QCOMPARE(store.blockSize(), 512);
         QCOMPARE(store.find("phones")->sampleRate, 44100);

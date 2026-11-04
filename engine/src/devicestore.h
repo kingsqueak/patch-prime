@@ -190,6 +190,12 @@ public:
     // output's key, or empty for none.
     [[nodiscard]] const std::string &cueOutput() const { return m_cueOutput; }
     void setCueOutput(std::string key) { m_cueOutput = std::move(key); }
+    // The level of what cue plays, and whether cued strips are heard before
+    // their fader and mute (PFL) or as they're mixed (AFL).
+    [[nodiscard]] double cueLevelDb() const { return m_cueLevelDb; }
+    void setCueLevelDb(double db) { m_cueLevelDb = db; }
+    [[nodiscard]] bool cuePreFader() const { return m_cuePreFader; }
+    void setCuePreFader(bool preFader) { m_cuePreFader = preFader; }
     // The mixer's sample rate (Hz) and block size (frames; 0 = PipeWire picks).
     [[nodiscard]] int sampleRate() const { return m_sampleRate; }
     void setSampleRate(int rate) { m_sampleRate = rate; }
@@ -274,6 +280,8 @@ private:
     ClockMode m_clock = ClockMode::Internal;
     std::string m_clockDevice;
     std::string m_cueOutput;
+    double m_cueLevelDb = 0.0;
+    bool m_cuePreFader = true;
     int m_sampleRate = defaultSampleRate;
     int m_blockSize = 0;
     std::string m_recordingFormat = "flac";

@@ -160,7 +160,12 @@ public Q_SLOTS:
     // "" for none; in the state as "cueOutput"), and whether a strip is cued
     // (per device as "cued"). While anything is cued, the cue output plays
     // only the cued strips. Not saved for strips, not part of scenes.
+    // SetCueLevel and SetCuePreFader (state "cueLevelDb", "cuePreFader") are
+    // saved: the level of the cue, and whether strips are heard before their
+    // fader and mute (PFL) or after (AFL).
     void SetCueOutput(const QString &key);
+    void SetCueLevel(double db);
+    void SetCuePreFader(bool preFader);
     void SetCue(const QString &key, bool cued);
     // kind: "sink" (apps play into it; record its monitor, e.g. "Stream Mix"),
     // "source" (apps record from it like a microphone, e.g. "Chat Mic") or

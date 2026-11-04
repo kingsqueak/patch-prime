@@ -128,6 +128,10 @@ constexpr int clockNodePriority = 25000;
 // The clock node's props; `owner` tags it like a bus.
 Properties clockProperties(const std::string &owner = {});
 
+// What cue plays goes through this node (a send-like null sink, there while
+// anything is cued); its volume is the cue level.
+constexpr std::string_view cueNodeName = "patchprime.cue";
+
 Properties busProperties(const Endpoint &endpoint, const DeviceSettings &settings,
                          const std::string &owner = {});
 
@@ -200,8 +204,10 @@ private:
 //   mix bus  sends ──► [virtual sink] ──monitor──► sends
 //   output   sends ──► [bus] ──monitor──links──► hardware sink
 //   send     [bus] ──monitor──► [send node] ──monitor──► [bus]
-//   cue      (any strip's output) ──links──► the cue output's hardware,
-//            while that output's own bus is muted
+//   cue      (any strip) ──links──► [cue node] ──monitor──► the cue output's
+//            hardware, while that output's own bus is muted. After the fader
+//            (AFL) from the strip's output; before it (PFL) from whatever
+//            feeds its bus, since a bus has no output ahead of its fader.
 //   effects  hardware source ──► [fx filter] ──► [bus]           (inputs)
 //            [bus] ──monitor──► [fx filter] ──► hardware, sends  (the rest)
 //            where [fx filter] may be a series: [fx] ──► [plugin] ──► [fx]...
@@ -404,12 +410,16 @@ private:
                       const LinkMap &existingLinks);
     void link(const std::vector<PortRef> &outputs, const std::vector<PortRef> &inputs,
               const LinkMap &existingLinks);
+    // The cue output's strip, when cue can play: it's enabled and online.
+    [[nodiscard]] const std::pair<const std::string, Wanted> *
+    cueTarget(const std::map<std::string, Wanted> &wanted) const;
     // Cue: links each cued strip's output straight to the cue output's
     // hardware (its bus is muted meanwhile, see reconcile()), and removes
     // cue links that no longer apply.
     void linkCue(const std::map<std::string, std::uint32_t> &ready,
                  const std::map<std::string, Wanted> &wanted,
                  const std::map<std::string, std::vector<PortRef>> &stripOuts,
+                 std::optional<std::uint32_t> cueNode,
                  const LinkMap &existingLinks);
     // Feeds each effects node's key input from the strips its duckers
     // listen to (their outputs, summed), and removes other links into it.
