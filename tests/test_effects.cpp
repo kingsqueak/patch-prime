@@ -24,6 +24,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <numbers>
 #include <random>
 #include <vector>
 
@@ -893,6 +894,77 @@ private Q_SLOTS:
         mono.left[0] = mono.right[0] = 1.0F;
         narrow.process(mono.planes.data(), 2, 9600);
         QCOMPARE(mono.left, mono.right);
+    }
+
+    void reverbRingsOutWhenBypassed()
+    {
+        const auto makeChain = [&](double mix, bool on) {
+            auto reverb = makeEffect("reverb");
+            reverb->setParam("mix", mix);
+            reverb->setParam("decay", 0.5);
+            reverb->setParam("predelay", 0.0);
+            reverb->enabled = on;
+            std::vector<std::unique_ptr<Effect>> effects;
+            effects.push_back(std::move(reverb));
+            return std::make_unique<EffectChain>(std::move(effects), rate, 2);
+        };
+        // Runs some blocks; returns the largest sample, and the largest jump
+        // between samples, of the left channel.
+        struct Heard
+        {
+            float peak = 0.0F;
+            float jump = 0.0F;
+        };
+        double phase = 0.0;
+        float last = 0.0F;
+        const auto run = [&](EffectChain &chain, int blocks, float tone) {
+            Heard heard;
+            for (int b = 0; b < blocks; ++b) {
+                Buffers block(480, 0.0F);
+                for (std::size_t i = 0; i < block.left.size(); ++i) {
+                    phase += 2.0 * std::numbers::pi * 440.0 / rate;
+                    block.left[i] = block.right[i] = tone * static_cast<float>(std::sin(phase));
+                }
+                chain.process(block.planes.data(), 480);
+                for (const float v : block.left) {
+                    heard.peak = std::max(heard.peak, std::abs(v));
+                    heard.jump = std::max(heard.jump, std::abs(v - last));
+                    last = v;
+                }
+            }
+            return heard;
+        };
+
+        // A tone fills the room; bypassed in silence, the tail is still there
+        // a quarter of a second later, and it doesn't step when switching.
+        auto chain = makeChain(100.0, true);
+        run(*chain, 100, 0.3F);
+        const float ringing = run(*chain, 10, 0.3F).peak;
+        const float steady = run(*chain, 10, 0.3F).jump;
+        chain->at(0).enabled = false;
+        const Heard switching = run(*chain, 10, 0.3F);
+        QVERIFY2(switching.jump < (steady * 2.0F) + 0.05F, qPrintable(QString::number(switching.jump)));
+        QVERIFY(switching.peak > ringing * 0.5F);
+        run(*chain, 15, 0.0F);
+        const float tail = run(*chain, 10, 0.0F).peak;
+        QVERIFY2(tail > 0.001F, qPrintable(QString::number(tail)));
+
+        // Switched back on, the tail carries on rather than being wiped.
+        chain->at(0).enabled = true;
+        const float kept = run(*chain, 2, 0.0F).peak;
+        QVERIFY2(kept > tail * 0.3F, qPrintable(QString::number(kept)));
+
+        // Once the tail has gone it sleeps: the output is the input, sample
+        // for sample. And so it is when bypassed from the start.
+        const auto isDry = [](EffectChain &bypassed) {
+            Buffers block(480, 0.25F);
+            bypassed.process(block.planes.data(), 480);
+            return std::ranges::all_of(block.left, [](float v) { return v == 0.25F; });
+        };
+        chain->at(0).enabled = false;
+        run(*chain, 500, 0.0F); // 5 s
+        QVERIFY(isDry(*chain));
+        QVERIFY(isDry(*makeChain(50.0, false)));
     }
 
     void reverbStaysBounded()

@@ -882,6 +882,11 @@ QString PatchPrimeService::CreateVirtual(const QString &name, const QString &kin
     return m_devices->createVirtual(trimmed, type);
 }
 
+QString PatchPrimeService::CreateReverbBus(const QString &name)
+{
+    return m_devices->createReverbBus(name);
+}
+
 void PatchPrimeService::SetAppTarget(const QString &appKey, const QString &nodeName)
 {
     if (!m_apps->setTarget(appKey.toStdString(), nodeName.toStdString()) && calledFromDBus()) {

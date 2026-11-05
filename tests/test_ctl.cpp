@@ -106,6 +106,12 @@ private Q_SLOTS:
         QCOMPARE(c.args.at(0).toBool(), false);
         QVERIFY(error({QStringLiteral("cue-mode"), QStringLiteral("both")}).contains(QStringLiteral("pfl|afl")));
 
+        c = only({QStringLiteral("reverb-bus")});
+        QCOMPARE(c.method, QStringLiteral("CreateReverbBus"));
+        QCOMPARE(c.args.at(0).toString(), QString());
+        c = only({QStringLiteral("reverb-bus"), QStringLiteral("Big"), QStringLiteral("Hall")});
+        QCOMPARE(c.args.at(0).toString(), QStringLiteral("Big Hall"));
+
         c = only({QStringLiteral("send"), QStringLiteral("Mic"), QStringLiteral("stream mix")});
         QCOMPARE(c.method, QStringLiteral("SetSend"));
         QCOMPARE(c.args, (QVariantList{QStringLiteral("in|mic"), QStringLiteral("virtual|stream"), false}));

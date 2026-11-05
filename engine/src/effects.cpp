@@ -382,6 +382,13 @@ void EffectChain::process(float *const *channels, int frames, const float *key,
     for (std::size_t e = 0; e < m_effects.size(); ++e) {
         Effect &effect = *m_effects[e];
         effect.setKey(key);
+        if (effect.ringsOut()) {
+            effect.process(channels, m_channels, frames);
+            if (measure) {
+                measureAt(m_points[e + 1], levels, frames, rmsStep, m_groups);
+            }
+            continue;
+        }
         float &mix = m_slots[e].mix;
         const float target = effect.enabled.load(std::memory_order_relaxed) ? 1.0F : 0.0F;
         if (mix == 0.0F && target == 0.0F) {

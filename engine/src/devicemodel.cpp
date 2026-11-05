@@ -1082,6 +1082,55 @@ QString DeviceModel::createVirtual(const QString &name, EndpointKind kind)
     return qs(key);
 }
 
+QString DeviceModel::createReverbBus(const QString &name)
+{
+    const auto base = name.trimmed().isEmpty() ? QStringLiteral("Reverb") : name.trimmed();
+    const auto labelUsed = [this](const QString &label) {
+        for (int row = 0; row < rowCount(); ++row) {
+            if (data(index(row), LabelRole).toString().compare(label, Qt::CaseInsensitive) == 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+    auto label = base;
+    for (int n = 2; labelUsed(label); ++n) {
+        label = QStringLiteral("%1 %2").arg(base).arg(n);
+    }
+
+    // Where the mix goes today, or failing that every output there is.
+    std::vector<std::string> inUse;
+    std::vector<std::string> outputs;
+    for (const auto &row : m_rows) {
+        const auto *saved = m_store->find(row.endpoint.key);
+        if (saved == nullptr || !saved->enabled) {
+            continue;
+        }
+        if (stageOfRow(row) == Stage::Output) {
+            outputs.push_back(row.endpoint.key);
+        }
+        for (const auto &to : saved->sends) {
+            const int at = rowForKey(to);
+            if (at >= 0 && stageOfRow(m_rows[static_cast<std::size_t>(at)]) == Stage::Output &&
+                std::ranges::find(inUse, to) == inUse.end()) {
+                inUse.push_back(to);
+            }
+        }
+    }
+
+    const auto key = createVirtual(label, EndpointKind::VirtualSink);
+    EffectSettings reverb{.type = "reverb", .enabled = true, .params = {}, .key = {}, .state = {}};
+    for (const auto &p : paramsFor(reverb.type, m_pluginCatalog)) {
+        reverb.params[p.name] = p.initial;
+    }
+    reverb.params["mix"] = 100.0;
+    setEffects(rowForKey(key.toStdString()), {std::move(reverb)});
+    for (const auto &to : inUse.empty() ? outputs : inUse) {
+        setSend(rowForKey(key.toStdString()), qs(to), true);
+    }
+    return key;
+}
+
 void DeviceModel::upsertNode(const GraphObject &node, const GraphObject *device)
 {
     // Our own nodes (buses, virtual devices: tagged with patchprime.key): a

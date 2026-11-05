@@ -15,12 +15,21 @@ Kirigami.ScrollablePage {
 
     header: EngineMessage {}
 
-    actions: Kirigami.Action {
-        text: qsTr("Add Virtual Device…")
-        icon.name: "list-add"
-        enabled: Devices.daemonRunning
-        onTriggered: addDialog.open()
-    }
+    actions: [
+        Kirigami.Action {
+            text: qsTr("Add Reverb Bus")
+            icon.name: "list-add"
+            tooltip: qsTr("A mix bus with a reverb, sent to your outputs. Send strips to it for reverb.")
+            enabled: Devices.daemonRunning
+            onTriggered: Devices.createReverbBus()
+        },
+        Kirigami.Action {
+            text: qsTr("Add Virtual Device…")
+            icon.name: "list-add"
+            enabled: Devices.daemonRunning
+            onTriggered: addDialog.open()
+        }
+    ]
 
     Kirigami.PromptDialog {
         id: addDialog

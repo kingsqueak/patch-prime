@@ -177,6 +177,10 @@ public:
     void setDeviceScheduling(int row, Scheduling scheduling);
     // Makes a new virtual device, enabled, and returns its key.
     QString createVirtual(const QString &name, EndpointKind kind);
+    // Makes a mix bus with a fully wet reverb on it, sent to the outputs that
+    // strips send to (every output when none do yet), and returns its key.
+    // An empty name means "Reverb"; a name already in use gets a number.
+    QString createReverbBus(const QString &name);
 
     // The fader's bottom: at or below this the bus is silent.
     static constexpr double minimumVolumeDb() { return -60.0; }

@@ -172,6 +172,9 @@ public Q_SLOTS:
     // "input" (apps play into it, and it's routed like an input, e.g. "Desktop").
     // Returns the new device's key. Rename with SetLabel, delete with Forget.
     QString CreateVirtual(const QString &name, const QString &kind);
+    // A mix bus with a fully wet reverb, sent to the outputs in use; strips
+    // get reverb by sending to it. An empty name means "Reverb". Returns its key.
+    QString CreateReverbBus(const QString &name);
     // Sends an app's streams to a node (a strip's busName, say), or to the
     // system default when nodeName is empty. Remembered for the app.
     void SetAppTarget(const QString &appKey, const QString &nodeName);

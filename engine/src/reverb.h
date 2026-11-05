@@ -24,6 +24,10 @@ namespace pp {
 // a little mix; on a reverb bus that strips send to, mix 100 %.
 //
 // Size and pre-delay glide when changed, so moving them doesn't click.
+//
+// Bypassed, it stops taking in sound but rings out over the dry signal (what
+// is already in the pre-delay still goes in); once the tail has died away it
+// sleeps and costs nothing. Switched back on, a tail still ringing carries on.
 class ReverbEffect : public Effect
 {
 public:
@@ -35,10 +39,15 @@ public:
     void prepare(double sampleRate, int channels) override;
     void process(float *const *channels, int channelCount, int frames) noexcept override;
     void setParam(const std::string &name, double value) override;
-    void resume() noexcept override;
+    [[nodiscard]] bool ringsOut() const noexcept override { return true; }
 
 private:
     static constexpr int blockFrames = 32;
+    // Bypassed, the tail counts as gone below this (-100 dBFS) ...
+    static constexpr float quietLevel = 1e-5F;
+    // ... for this long: more than the longest pre-delay, so a tail that
+    // hasn't started yet isn't taken for silence.
+    static constexpr double quietSeconds = 0.5;
 
     // A delay line read at a fractional position (linear interpolation).
     struct Line
@@ -57,6 +66,7 @@ private:
     };
 
     void updateBlock() noexcept;
+    void clear() noexcept;
 
     std::atomic<float> m_size{50.0F};
     std::atomic<float> m_decay{2.0F};
@@ -81,6 +91,11 @@ private:
     float m_mixNow = 0.25F;                     // smoothed, so changes don't step
     float m_widthNow = 1.0F;
     float m_smooth = 1.0F;                      // per sample, ~10 ms
+    float m_onNow = 1.0F;                       // 1 = on, 0 = bypassed, ramping
+    float m_onStep = 1.0F;                      // per sample, over the chain's crossfade time
+    int m_quietFrames = 0;                      // bypassed: how long the tail has been silent
+    int m_sleepFrames = 0;                      // after that many, stop
+    bool m_asleep = false;                      // bypassed and the tail has gone
     float m_damp = 0.5F;                        // one-pole coefficient
     double m_phase = 0.0;                       // modulation of line 0
     double m_phase2 = 0.0;                      // of line 4, a bit slower

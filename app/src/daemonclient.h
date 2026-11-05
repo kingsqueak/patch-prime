@@ -282,6 +282,7 @@ public:
                                   double db);
     // kind: "sink", "source" or "input"
     Q_INVOKABLE void createVirtual(const QString &name, const QString &kind);
+    Q_INVOKABLE void createReverbBus();
     // nodeName: a target's name; empty for the system default.
     Q_INVOKABLE void setAppTarget(const QString &appKey, const QString &nodeName);
     // App strips: a running app's own level and mute; hidden ones are left

@@ -88,11 +88,17 @@ void ReverbEffect::prepare(double sampleRate, int /*channels*/)
     m_smooth = static_cast<float>(1.0 - std::exp(-1.0 / (0.01 * sampleRate)));
     m_mixNow = m_mix.load() / 100.0F;
     m_widthNow = m_width.load() / 100.0F;
-    resume();
+    const bool on = enabled.load();
+    m_onNow = on ? 1.0F : 0.0F;
+    m_onStep = static_cast<float>(1.0 / std::max(1.0, EffectChain::crossfadeSeconds * sampleRate));
+    m_quietFrames = 0;
+    m_sleepFrames = static_cast<int>(quietSeconds * sampleRate);
+    m_asleep = !on;
+    clear();
     updateBlock();
 }
 
-void ReverbEffect::resume() noexcept
+void ReverbEffect::clear() noexcept
 {
     for (auto &line : m_lines) {
         std::ranges::fill(line.buffer, 0.0F);
@@ -148,7 +154,17 @@ void ReverbEffect::process(float *const *channels, int channelCount, int frames)
     if (count == 0) {
         return;
     }
+    const bool on = enabled.load(std::memory_order_relaxed);
+    if (m_asleep) {
+        if (!on) {
+            return; // the dry signal, untouched
+        }
+        m_asleep = false;
+        m_quietFrames = 0;
+    }
     const std::span<float *const> planes(channels, count);
+    const float onTarget = on ? 1.0F : 0.0F;
+    float peak = 0.0F;
     const auto mixTarget = m_mix.load(std::memory_order_relaxed) / 100.0F;
     const auto widthTarget = m_width.load(std::memory_order_relaxed) / 100.0F;
     const float inScale = 1.0F / static_cast<float>(count);
@@ -160,7 +176,9 @@ void ReverbEffect::process(float *const *channels, int channelCount, int frames)
             for (float *plane : planes) {
                 in += plane[i]; // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
             }
-            m_pre.push(in * inScale);
+            m_onNow = onTarget > m_onNow ? std::min(onTarget, m_onNow + m_onStep)
+                                         : std::max(onTarget, m_onNow - m_onStep);
+            m_pre.push(in * inScale * m_onNow);
             m_scale += (m_scaleTarget - m_scale) * m_sampleGlide;
             m_preSamples += (m_preTarget - m_preSamples) * m_sampleGlide;
             m_mixNow += (mixTarget - m_mixNow) * m_smooth;
@@ -212,6 +230,7 @@ void ReverbEffect::process(float *const *channels, int channelCount, int frames)
             const float side = (left - right) * 0.5F * m_widthNow;
             left = mid + side;
             right = mid - side;
+            peak = std::max({peak, std::abs(left), std::abs(right)});
 
             for (std::size_t c = 0; c < count; ++c) {
                 float wet = 0.5F * (left + right); // one channel: both sides
@@ -220,8 +239,18 @@ void ReverbEffect::process(float *const *channels, int channelCount, int frames)
                 }
                 // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
                 float &sample = planes[c][i];
-                sample += (wet - sample) * m_mixNow;
+                // On: dry and wet by the mix. Bypassed: all the dry, and the tail.
+                sample = (sample * (1.0F - (m_mixNow * m_onNow))) + (wet * m_mixNow);
             }
+        }
+    }
+    if (on || m_onNow > 0.0F || peak >= quietLevel) {
+        m_quietFrames = 0;
+    } else {
+        m_quietFrames += frames;
+        if (m_quietFrames >= m_sleepFrames) {
+            clear();
+            m_asleep = true;
         }
     }
     // Damping filters out of denormals once the tail is gone.

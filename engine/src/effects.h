@@ -52,6 +52,11 @@ public:
     // Realtime, instead of process() while it's fully bypassed: a block went
     // by without it (a plugin still has its parameter changes to deliver).
     virtual void bypassed(int /*frames*/) noexcept {}
+    // True for an effect that takes care of its own bypass, to let what it
+    // holds ring out (a reverb's tail): the chain keeps calling process(),
+    // which reads `enabled` itself, passes the dry signal when it's off and
+    // doesn't crossfade. resume() and bypassed() aren't called for it.
+    [[nodiscard]] virtual bool ringsOut() const noexcept { return false; }
 
     // Main thread: the effect's meters since the last call (gain reduction
     // per band, say) into out; returns how many it wrote. Most have none.
@@ -151,7 +156,8 @@ struct EffectLevels
 
 // Effects in order. Each one's bypass crossfades between its dry input and
 // its output over crossfadeSeconds, so switching never clicks; a fully
-// bypassed effect isn't processed at all. The level is measured before the
+// bypassed effect isn't processed at all (except one that rings out, see
+// Effect::ringsOut, which does this itself). The level is measured before the
 // first effect and after each one (see takeLevels()).
 class EffectChain
 {

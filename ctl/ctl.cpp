@@ -223,6 +223,7 @@ share a label. Switches take on, off or toggle (the default).
   cue <strip> [on|off|toggle]       hear it alone on the cue output
   cue-level <dB>|up|down [dB]       the level of what cue plays
   cue-mode pfl|afl                  cue before or after the fader
+  reverb-bus [name]                 add a mix bus with a reverb on it
   send <from> <to> [on|off|toggle]  send a strip to a mix bus or output
   send-level <from> <to> <dB>|up|down [dB]
   effect <strip> <n> [on|off|toggle]  turn its n-th effect on or off
@@ -385,6 +386,10 @@ std::expected<Plan, QString> plan(const QStringList &args, const QJsonObject &st
             return fail(QStringLiteral("usage: patchprime-ctl cue-mode pfl|afl"));
         }
         return Plan{.calls = {{.method = QStringLiteral("SetCuePreFader"), .args = {mode == QLatin1String("pfl")}}},
+                    .output = {}};
+    }
+    if (command == QLatin1String("reverb-bus")) {
+        return Plan{.calls = {{.method = QStringLiteral("CreateReverbBus"), .args = {args.mid(1).join(QLatin1Char(' '))}}},
                     .output = {}};
     }
 

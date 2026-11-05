@@ -765,6 +765,11 @@ void DaemonClient::createVirtual(const QString &name, const QString &kind)
     call(QStringLiteral("CreateVirtual"), {name, kind});
 }
 
+void DaemonClient::createReverbBus()
+{
+    call(QStringLiteral("CreateReverbBus"), {QString()});
+}
+
 QString DaemonClient::labelFor(const QString &key) const
 {
     for (const auto &row : m_rows) {

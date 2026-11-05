@@ -88,8 +88,10 @@ The mixer scrolls sideways when there are more strips than fit. The window opens
 On the **Devices** page, **Add Virtual Device…** makes one of three kinds:
 
 - **Input**: apps play into it, and you route it like an input. Example: "Desktop", carrying all system sound to several outputs at once.
-- **Mix bus**: inputs and apps mix into it, it goes to outputs, and apps can record it. Example: "Stream Mix" for OBS, or a "Reverb" bus.
+- **Mix bus**: inputs and apps mix into it, it goes to outputs, and apps can record it. Example: "Stream Mix" for OBS.
 - **Virtual microphone**: apps record from it like a mic. Example: "Chat Mic" for Discord.
+
+**Add Reverb Bus** makes a mix bus with a reverb already on it; see [Recipes](#recipes).
 
 Virtual devices show in other apps under readable names such as `patchprime.stream-mix`. Delete one with the **✕** next to it on the Devices page.
 
@@ -300,6 +302,8 @@ An algorithmic reverb.
 
 As an insert on one strip, keep the mix low. For several strips, use a reverb bus; see [Recipes](#recipes).
 
+Bypassing a reverb stops new sound going in, and what's already in the room rings out over the dry signal instead of being cut off.
+
 ### Delay (line up outputs)
 
 Delays the strip by up to one second. Use it on a fast output to line it up with a slower one, such as Bluetooth headphones or an HDMI TV.
@@ -453,6 +457,7 @@ patchprime-ctl volume Desktop down 3     # nudge it (1 dB without a number)
 patchprime-ctl cue Mic
 patchprime-ctl cue-mode afl
 patchprime-ctl cue-level -6
+patchprime-ctl reverb-bus                # add a mix bus with a reverb on it
 patchprime-ctl send Mic "Stream Mix" on
 patchprime-ctl send-level Mic "Stream Mix" up
 patchprime-ctl effect Mic 2 off          # the strip's second effect
@@ -519,10 +524,10 @@ Add a **Ducker** to the music or Desktop strip and set its **Key** to your mic.
 
 **A shared reverb**
 
-1. Make a mix bus called "Reverb".
-2. Add **Reverb** to it with **Mix** at 100 %.
-3. Send the Reverb bus to your outputs.
-4. Send any strip to Reverb. Each strip's send level sets how much reverb it gets.
+1. On the **Devices** page, click **Add Reverb Bus**. You get a mix bus called "Reverb" with **Reverb** on it at 100 % **Mix**, sent to the outputs your strips use (or to every output, if none are in use yet).
+2. Send any strip to Reverb. Each strip's send level sets how much reverb it gets.
+
+A mix bus can't feed another mix bus, so this reverb doesn't reach Stream Mix. For reverb on your stream, add a Reverb to Stream Mix itself, with a low mix.
 
 **Check your stream's loudness**
 

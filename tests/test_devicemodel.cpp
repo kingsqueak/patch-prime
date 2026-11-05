@@ -331,6 +331,46 @@ private Q_SLOTS:
         QVERIFY(!role(model, 0, DeviceModel::BusDefaultRole).toBool());
     }
 
+    void reverbBus()
+    {
+        DeviceStore store(m_path);
+        DeviceModel model(&store);
+        model.upsertNode(sourceNode(11, "mic"), nullptr);
+        model.upsertNode(sinkNode(10, "phones", nullptr), nullptr);
+        model.upsertNode(sinkNode(12, "speakers", nullptr), nullptr);
+        for (const auto *key : {"Audio/Source|mic", "Audio/Sink|phones", "Audio/Sink|speakers"}) {
+            model.setEnabled(model.rowForKey(key), true);
+        }
+        const QStringList everyOutput{QStringLiteral("Audio/Sink|phones"), QStringLiteral("Audio/Sink|speakers")};
+        const auto sendsOf = [&](const QString &key) {
+            auto sends = role(model, model.rowForKey(key.toStdString()), DeviceModel::SendsRole).toStringList();
+            sends.sort();
+            return sends;
+        };
+
+        // Nothing is routed yet: every output. Fully wet, and nothing sent to it.
+        const auto first = model.createReverbBus({});
+        QCOMPARE(role(model, model.rowForKey(first.toStdString()), DeviceModel::LabelRole).toString(),
+                 QStringLiteral("Reverb"));
+        QCOMPARE(role(model, model.rowForKey(first.toStdString()), DeviceModel::StageRole).toString(),
+                 QString::fromStdString(stageName(Stage::Bus)));
+        const auto *bus = store.find(first.toStdString());
+        QVERIFY(bus != nullptr);
+        QCOMPARE(bus->effects.size(), 1U);
+        QCOMPARE(bus->effects[0].type, "reverb");
+        QCOMPARE(bus->effects[0].params.at("mix"), 100.0);
+        QCOMPARE(bus->effects[0].params.at("decay"), 2.0);
+        QCOMPARE(sendsOf(first), everyOutput);
+        QVERIFY(sendsOf(QStringLiteral("Audio/Source|mic")).isEmpty());
+
+        // A name in use gets a number; only the outputs in use are sent to.
+        model.setSend(model.rowForKey(first.toStdString()), QStringLiteral("Audio/Sink|speakers"), false);
+        const auto second = model.createReverbBus({});
+        QCOMPARE(role(model, model.rowForKey(second.toStdString()), DeviceModel::LabelRole).toString(),
+                 QStringLiteral("Reverb 2"));
+        QCOMPARE(sendsOf(second), QStringList{QStringLiteral("Audio/Sink|phones")});
+    }
+
     void virtualDevices()
     {
         DeviceStore store(m_path);
