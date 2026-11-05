@@ -371,6 +371,7 @@ int main(int argc, char *argv[])
         plugin.takeParamChanges(sayParam); // ones the plugin reports itself
         checkLatency(false);
         if (plugin.wantsRestart()) {
+            sendState(); // what it holds now is what it starts again with
             QCoreApplication::exit(3); // the engine starts it again
         }
     });

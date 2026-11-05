@@ -14,6 +14,10 @@
 #include <lv2/state/state.h>
 #include <lv2/units/units.h>
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -155,6 +159,28 @@ int logPrintf(LV2_Log_Handle handle, LV2_URID type, const char *format, ...) // 
     const int n = logVprintf(handle, type, format, args); // NOLINT(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     va_end(args); // NOLINT(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     return n;
+}
+
+// What was saved, one state per channel (see Lv2Effect::saveState); none
+// when nothing was. A plain state stands for every channel.
+std::vector<std::string> channelStates(const std::string &saved)
+{
+    if (saved.empty()) {
+        return {};
+    }
+    if (saved.front() != '{') {
+        return {saved};
+    }
+    std::vector<std::string> states;
+    const auto channels = QJsonDocument::fromJson(QByteArray::fromStdString(saved))
+                              .object()
+                              .value(QLatin1String("channels"))
+                              .toArray();
+    states.reserve(static_cast<std::size_t>(channels.size()));
+    for (const auto &channel : channels) {
+        states.push_back(channel.toString().toStdString());
+    }
+    return states;
 }
 
 } // namespace
@@ -511,6 +537,7 @@ void Lv2Effect::prepare(double sampleRate, int channels)
     // A mono plugin on a stereo strip: one per channel.
     const bool perChannel = m_audioIn.size() == 1 && m_audioOut.size() == 1 && channels > 1;
     const int count = perChannel ? channels : 1;
+    const auto saved = channelStates(m_initialState);
     for (int n = 0; n < count; ++n) {
         Instance inst;
         inst.instance = lilv_plugin_instantiate(m_plugin, sampleRate, features.data());
@@ -559,9 +586,12 @@ void Lv2Effect::prepare(double sampleRate, int channels)
         }
         // Its own state from before (a file it had loaded, say); its ports
         // come from the parameters.
-        if (!m_initialState.empty() && hasState()) {
+        if (!saved.empty() && hasState()) {
+            // (Fewer than there are channels now: the first is as good as any.)
+            const auto which = static_cast<std::size_t>(n);
+            const auto &text = which < saved.size() ? saved[which] : saved.front();
             if (LilvState *state = lilv_state_new_from_string(m_world.world(), m_world.mapFeature(),
-                                                              m_initialState.c_str())) {
+                                                              text.c_str())) {
                 lilv_state_restore(
                     state, inst.instance,
                     [](const char * /*symbol*/, void * /*data*/, const void * /*value*/,
@@ -817,10 +847,29 @@ std::string Lv2Effect::saveState() const
     if (m_instances.empty() || !hasState()) {
         return {};
     }
+    std::vector<std::string> states;
+    states.reserve(m_instances.size());
+    for (const auto &instance : m_instances) {
+        states.push_back(stateOf(instance));
+    }
+    if (std::ranges::all_of(states, [&](const auto &s) { return s == states.front(); })) {
+        return states.front();
+    }
+    QJsonArray channels;
+    for (const auto &s : states) {
+        channels.append(QString::fromStdString(s));
+    }
+    return QJsonDocument(QJsonObject{{QStringLiteral("channels"), channels}})
+        .toJson(QJsonDocument::Compact)
+        .toStdString();
+}
+
+std::string Lv2Effect::stateOf(const Instance &instance) const
+{
     const auto features = m_world.features(&m_optionsFeature);
     // Only the plugin's own state: no port values (those are the parameters).
     LilvState *state = lilv_state_new_from_instance(
-        m_plugin, m_instances.front().instance, m_world.mapFeature(), nullptr, nullptr, nullptr,
+        m_plugin, instance.instance, m_world.mapFeature(), nullptr, nullptr, nullptr,
         nullptr,
         [](const char * /*symbol*/, void * /*data*/, std::uint32_t *size,
            std::uint32_t *type) -> const void * {

@@ -329,6 +329,7 @@ void PluginRunner::finished(const std::string &node, int exitCode, QProcess::Exi
     if (host.process == nullptr) {
         return; // readOutput gave up on it
     }
+    const bool windowWasOpen = host.windowOpen;
     host.windowOpen = false;
     host.ready = false;
     host.process->disconnect();
@@ -343,6 +344,14 @@ void PluginRunner::finished(const std::string &node, int exitCode, QProcess::Exi
         host.error = host.reported.empty() ? "the plugin couldn't be loaded" : host.reported;
         qCWarning(lcRunner, "plugin node %s: %s", node.c_str(), host.error.c_str());
         Q_EMIT changed();
+        return;
+    }
+    if (status == QProcess::NormalExit && exitCode == 3) {
+        // It asked to be started afresh: its window comes back with it.
+        if (windowWasOpen) {
+            host.windowWanted = true;
+        }
+        crashed(node, host, "it asked to be restarted");
         return;
     }
     crashed(node, host, "exit " + std::to_string(exitCode));

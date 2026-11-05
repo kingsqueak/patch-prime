@@ -519,6 +519,8 @@ void ClapEffect::prepare(double sampleRate, int channels)
     if (!m_error.empty() || m_instances.empty()) {
         return;
     }
+    m_sampleRate = sampleRate;
+    m_channels = channels;
     std::uint32_t mainIn = 0;
     std::uint32_t mainOut = 0;
     for (const auto &l : m_inLayout) {
@@ -544,6 +546,7 @@ void ClapEffect::prepare(double sampleRate, int channels)
     for (auto &inst : m_instances) {
         loadState(inst->plugin);
     }
+    m_initialState.clear(); // once: a restart keeps what it has
     readPorts(m_instances.front()->plugin);
     if (!m_error.empty()) {
         return;
@@ -625,7 +628,9 @@ void ClapEffect::prepare(double sampleRate, int channels)
 
 void ClapEffect::process(float *const *channels, int channelCount, int frames) noexcept
 {
-    if (!m_error.empty() || m_instances.empty() || frames <= 0 || stoppedHere()) {
+    // (stoppedHere first: while it's stopped the main thread may be setting
+    // everything up again, m_error included.)
+    if (stoppedHere() || !m_error.empty() || m_instances.empty() || frames <= 0) {
         return;
     }
     t_audioThread = true;
@@ -723,7 +728,7 @@ void ClapEffect::bypassed(int /*frames*/) noexcept
     // Not processing, so its parameter changes (from the engine, or its own
     // editor) go through flush, which is allowed here: the audio thread,
     // while it's active, and not during process.
-    if (!m_error.empty() || m_instances.empty() || stoppedHere()) {
+    if (stoppedHere() || !m_error.empty() || m_instances.empty()) {
         return;
     }
     t_audioThread = true;
@@ -755,8 +760,8 @@ bool ClapEffect::stoppedHere() noexcept
     if (!m_stopRequested.load(std::memory_order_acquire)) {
         return false;
     }
-    // Asked to stop (the host is closing): stop processing here, on the
-    // audio thread, as CLAP wants, once.
+    // Asked to stop (the host is closing, or the plugin is being restarted):
+    // stop processing here, on the audio thread, as CLAP wants, once.
     if (!m_stopped.load(std::memory_order_relaxed)) {
         for (auto &instance : m_instances) {
             if (instance->processing) {
@@ -780,6 +785,36 @@ void ClapEffect::mainThreadTick()
     if (ClapWindow *window = m_window.load()) {
         window->tick();
     }
+    restartIfAsked();
+}
+
+void ClapEffect::restartIfAsked()
+{
+    if (!m_restartWanted.load()) {
+        return;
+    }
+    if (!m_stopRequested.load(std::memory_order_acquire)) {
+        m_stopRequested.store(true, std::memory_order_release);
+        return;
+    }
+    if (!m_stopped.load(std::memory_order_acquire)) {
+        return; // the audio thread hasn't been by yet
+    }
+    // Stopped: the audio thread leaves it all alone from here on.
+    m_restartWanted.store(false);
+    for (auto &instance : m_instances) {
+        if (instance->active) {
+            instance->plugin->deactivate(instance->plugin);
+            instance->active = false;
+        }
+    }
+    prepare(m_sampleRate, m_channels);
+    if (!m_error.empty()) {
+        m_restartFailed = true;
+        return;
+    }
+    m_stopped.store(false, std::memory_order_relaxed);
+    m_stopRequested.store(false, std::memory_order_release);
 }
 
 void ClapEffect::setParam(const std::string &name, double value)
@@ -855,13 +890,10 @@ ClapEffect &ClapEffect::of(const clap_host_t *host)
     return *static_cast<Instance *>(host->host_data)->effect;
 }
 
-void ClapEffect::requestRestart(const clap_host_t * /*host*/)
+void ClapEffect::requestRestart(const clap_host_t *host)
 {
-    // It would need the audio stopped, which isn't ours to do; it carries on
-    // as it is. (Not reported from the audio thread, where nothing may block.)
-    if (!t_audioThread) {
-        std::println(stderr, "patchprime-pluginhost: the plugin asked to be restarted (ignored)");
-    }
+    // Any thread: only a flag, picked up by the main thread's tick.
+    of(host).m_restartWanted.store(true);
 }
 
 void ClapEffect::requestProcess(const clap_host_t * /*host*/) {} // processing, or flushed when bypassed

@@ -5,9 +5,14 @@
 // a "crash" switch that kills its process, and a "halve" switch that halves
 // its output for good (a trim kept only in its state). Halve turns itself
 // off again through an output event, as a plugin's own editor would change
-// a parameter, to test that the engine hears about such changes.
+// a parameter, to test that the engine hears about such changes. A "restart"
+// switch asks the host to restart it, and it halves its trim when that
+// happens. Its window is an empty X11 child that moves the gain to 0.5 when
+// shown, as a user would.
 
 #include <clap/clap.h>
+
+#include <X11/Xlib.h>
 
 #include <signal.h>
 #include <stdbool.h>
@@ -18,7 +23,7 @@
 
 #define TEST_GAIN_ID "com.github.kingsqueak.patch-prime.tests.gain"
 
-enum { PARAM_GAIN = 1, PARAM_CRASH = 2, PARAM_HALVE = 3 };
+enum { PARAM_GAIN = 1, PARAM_CRASH = 2, PARAM_HALVE = 3, PARAM_RESTART = 4 };
 
 typedef struct {
     clap_plugin_t plugin;
@@ -28,6 +33,12 @@ typedef struct {
     double halve;
     float trim;
     bool reportHalve; // tell the host halve went back to 0
+    double restart;
+    bool restartAsked; // since the switch went on
+    bool restarted;    // and it has been done
+    bool reportGain;   // tell the host what its window did
+    Display *display;
+    Window window;
 } TestGain;
 
 static const char *const features[] = {CLAP_PLUGIN_FEATURE_AUDIO_EFFECT, CLAP_PLUGIN_FEATURE_UTILITY,
@@ -51,7 +62,7 @@ static const clap_plugin_descriptor_t descriptor = {
 static uint32_t params_count(const clap_plugin_t *plugin)
 {
     (void)plugin;
-    return 3;
+    return 4;
 }
 
 static bool params_get_info(const clap_plugin_t *plugin, uint32_t index, clap_param_info_t *info)
@@ -69,6 +80,12 @@ static bool params_get_info(const clap_plugin_t *plugin, uint32_t index, clap_pa
     case 1:
         info->id = PARAM_CRASH;
         strcpy(info->name, "Crash");
+        info->flags |= CLAP_PARAM_IS_STEPPED;
+        info->max_value = 1.0;
+        return true;
+    case 3:
+        info->id = PARAM_RESTART;
+        strcpy(info->name, "Restart");
         info->flags |= CLAP_PARAM_IS_STEPPED;
         info->max_value = 1.0;
         return true;
@@ -92,6 +109,8 @@ static double *param(TestGain *self, clap_id id)
         return &self->crash;
     case PARAM_HALVE:
         return &self->halve;
+    case PARAM_RESTART:
+        return &self->restart;
     default:
         return NULL;
     }
@@ -124,29 +143,44 @@ static void apply_events(TestGain *self, const clap_input_events_t *in)
         self->halve = 0.0;
         self->reportHalve = true;
     }
+    if (self->restart > 0.5 && !self->restartAsked) {
+        self->restartAsked = true;
+        self->host->request_restart(self->host); // allowed on the audio thread
+    } else if (self->restart <= 0.5) {
+        self->restartAsked = false;
+        self->restarted = false;
+    }
 }
 
-static void report(TestGain *self, const clap_output_events_t *out)
+static bool report_param(const clap_output_events_t *out, clap_id id, double value)
 {
-    if (!self->reportHalve || out == NULL) {
-        return;
-    }
     const clap_event_param_value_t event = {
         .header = {.size = sizeof(event),
                    .time = 0,
                    .space_id = CLAP_CORE_EVENT_SPACE_ID,
                    .type = CLAP_EVENT_PARAM_VALUE,
                    .flags = 0},
-        .param_id = PARAM_HALVE,
+        .param_id = id,
         .cookie = NULL,
         .note_id = -1,
         .port_index = -1,
         .channel = -1,
         .key = -1,
-        .value = 0.0,
+        .value = value,
     };
-    if (out->try_push(out, &event.header)) {
+    return out->try_push(out, &event.header);
+}
+
+static void report(TestGain *self, const clap_output_events_t *out)
+{
+    if (out == NULL) {
+        return;
+    }
+    if (self->reportHalve && report_param(out, PARAM_HALVE, 0.0)) {
         self->reportHalve = false;
+    }
+    if (self->reportGain && report_param(out, PARAM_GAIN, 0.5)) {
+        self->reportGain = false;
     }
 }
 
@@ -234,6 +268,134 @@ static bool state_load(const clap_plugin_t *plugin, const clap_istream_t *stream
 
 static const clap_plugin_state_t state = {.save = state_save, .load = state_load};
 
+// --- its window
+
+static bool gui_is_api_supported(const clap_plugin_t *plugin, const char *api, bool floating)
+{
+    (void)plugin;
+    return strcmp(api, CLAP_WINDOW_API_X11) == 0 && !floating;
+}
+
+static bool gui_get_preferred_api(const clap_plugin_t *plugin, const char **api, bool *floating)
+{
+    (void)plugin;
+    *api = CLAP_WINDOW_API_X11;
+    *floating = false;
+    return true;
+}
+
+static bool gui_create(const clap_plugin_t *plugin, const char *api, bool floating)
+{
+    TestGain *self = plugin->plugin_data;
+    self->display = gui_is_api_supported(plugin, api, floating) ? XOpenDisplay(NULL) : NULL;
+    return self->display != NULL;
+}
+
+static void gui_destroy(const clap_plugin_t *plugin)
+{
+    TestGain *self = plugin->plugin_data;
+    if (self->window != 0) {
+        XDestroyWindow(self->display, self->window);
+        self->window = 0;
+    }
+    XCloseDisplay(self->display);
+    self->display = NULL;
+}
+
+static bool gui_set_scale(const clap_plugin_t *plugin, double scale)
+{
+    (void)plugin;
+    (void)scale;
+    return false;
+}
+
+static bool gui_get_size(const clap_plugin_t *plugin, uint32_t *width, uint32_t *height)
+{
+    (void)plugin;
+    *width = 200;
+    *height = 100;
+    return true;
+}
+
+static bool gui_can_resize(const clap_plugin_t *plugin)
+{
+    (void)plugin;
+    return false;
+}
+
+static bool gui_get_resize_hints(const clap_plugin_t *plugin, clap_gui_resize_hints_t *hints)
+{
+    (void)plugin;
+    (void)hints;
+    return false;
+}
+
+static bool gui_adjust_size(const clap_plugin_t *plugin, uint32_t *width, uint32_t *height)
+{
+    return gui_get_size(plugin, width, height);
+}
+
+static bool gui_set_size(const clap_plugin_t *plugin, uint32_t width, uint32_t height)
+{
+    (void)plugin;
+    (void)width;
+    (void)height;
+    return false;
+}
+
+static bool gui_set_parent(const clap_plugin_t *plugin, const clap_window_t *window)
+{
+    TestGain *self = plugin->plugin_data;
+    self->window = XCreateSimpleWindow(self->display, window->x11, 0, 0, 200, 100, 0, 0, 0);
+    XMapWindow(self->display, self->window);
+    XFlush(self->display);
+    return true;
+}
+
+static bool gui_set_transient(const clap_plugin_t *plugin, const clap_window_t *window)
+{
+    (void)plugin;
+    (void)window;
+    return false;
+}
+
+static void gui_suggest_title(const clap_plugin_t *plugin, const char *title)
+{
+    (void)plugin;
+    (void)title;
+}
+
+static bool gui_show(const clap_plugin_t *plugin)
+{
+    TestGain *self = plugin->plugin_data;
+    self->reportGain = true; // on the next block
+    return true;
+}
+
+static bool gui_hide(const clap_plugin_t *plugin)
+{
+    (void)plugin;
+    return true;
+}
+
+static const clap_plugin_gui_t gui = {
+    .is_api_supported = gui_is_api_supported,
+    .get_preferred_api = gui_get_preferred_api,
+    .create = gui_create,
+    .destroy = gui_destroy,
+    .set_scale = gui_set_scale,
+    .get_size = gui_get_size,
+    .can_resize = gui_can_resize,
+    .get_resize_hints = gui_get_resize_hints,
+    .adjust_size = gui_adjust_size,
+    .set_size = gui_set_size,
+    .set_parent = gui_set_parent,
+    .set_transient = gui_set_transient,
+    .suggest_title = gui_suggest_title,
+    .show = gui_show,
+    .hide = gui_hide,
+};
+
 // --- the plugin
 
 static bool plugin_init(const clap_plugin_t *plugin)
@@ -249,10 +411,14 @@ static void plugin_destroy(const clap_plugin_t *plugin)
 
 static bool plugin_activate(const clap_plugin_t *plugin, double rate, uint32_t min, uint32_t max)
 {
-    (void)plugin;
     (void)rate;
     (void)min;
     (void)max;
+    TestGain *self = plugin->plugin_data;
+    if (self->restartAsked && !self->restarted) {
+        self->restarted = true;
+        self->trim *= 0.5f; // the sign that it really happened
+    }
     return true;
 }
 
@@ -305,6 +471,9 @@ static const void *plugin_get_extension(const clap_plugin_t *plugin, const char 
     }
     if (strcmp(id, CLAP_EXT_STATE) == 0) {
         return &state;
+    }
+    if (strcmp(id, CLAP_EXT_GUI) == 0) {
+        return &gui;
     }
     return NULL;
 }

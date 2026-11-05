@@ -137,7 +137,7 @@ public:
     // Sets a control input from the UI; returns its symbol, or "" when the
     // port isn't a control input.
     std::string setControl(std::uint32_t index, float value);
-    // Events from the UI to an atom input (instance 0), delivered before the
+    // Events from the UI to an atom input (every instance), delivered before the
     // next block; false when the port isn't one, or there's no room.
     bool sendAtom(std::uint32_t index, std::span<const std::uint8_t> atom);
     // Events the plugin wrote to its atom outputs since the last call, as
@@ -147,7 +147,10 @@ public:
 
     // The plugin's own state (state:interface), apart from its ports: what
     // a UI may have changed (a loaded file, say). Saving runs alongside the
-    // audio; restoring happens in prepare(), before the plugin starts.
+    // audio; restoring happens in prepare(), before the plugin starts. A
+    // mono plugin running once per channel may hold something different in
+    // each (what it learned from that channel): then it's a JSON object,
+    // {"channels": [state, ...]}, and otherwise lilv's text for them all.
     [[nodiscard]] bool hasState() const;
     [[nodiscard]] std::string saveState() const override;
     void setInitialState(std::string state) override { m_initialState = std::move(state); }
@@ -188,6 +191,7 @@ private:
         std::vector<float *> clearEach;
     };
     void free();
+    [[nodiscard]] std::string stateOf(const Instance &instance) const;
 
     Lv2World &m_world;
     const LilvPlugin *m_plugin;

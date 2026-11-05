@@ -47,13 +47,22 @@ set_target_properties(patchprime-testgain PROPERTIES
     PREFIX ""
     OUTPUT_NAME testgain
     LIBRARY_OUTPUT_DIRECTORY ${PATCHPRIME_TEST_LV2}/patchprime-test.lv2)
+# Its window (and the CLAP one's), for the plugin window test.
+pkg_check_modules(X11 REQUIRED IMPORTED_TARGET x11)
+add_library(patchprime-testgain-ui MODULE lv2/testgain_ui.c)
+target_link_libraries(patchprime-testgain-ui PRIVATE PkgConfig::Lilv PkgConfig::X11)
+set_target_properties(patchprime-testgain-ui PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME testgain_ui
+    LIBRARY_OUTPUT_DIRECTORY ${PATCHPRIME_TEST_LV2}/patchprime-test.lv2)
 set(TEST_GAIN_BINARY testgain${CMAKE_SHARED_MODULE_SUFFIX})
+set(TEST_GAIN_UI_BINARY testgain_ui${CMAKE_SHARED_MODULE_SUFFIX})
 configure_file(lv2/manifest.ttl.in ${PATCHPRIME_TEST_LV2}/patchprime-test.lv2/manifest.ttl @ONLY)
 configure_file(lv2/testgain.ttl ${PATCHPRIME_TEST_LV2}/patchprime-test.lv2/testgain.ttl COPYONLY)
 
 # The same as a CLAP plugin, alone in its search path.
 add_library(patchprime-testgain-clap MODULE clap/testgain.c)
-target_link_libraries(patchprime-testgain-clap PRIVATE patchprime-clap)
+target_link_libraries(patchprime-testgain-clap PRIVATE patchprime-clap PkgConfig::X11)
 set(PATCHPRIME_TEST_CLAP ${CMAKE_CURRENT_BINARY_DIR}/clap)
 set_target_properties(patchprime-testgain-clap PROPERTIES
     PREFIX ""
@@ -75,7 +84,7 @@ set(PATCHPRIME_TEST_PLUGIN_ENV
     "LV2_PATH=${PATCHPRIME_TEST_LV2};PATCHPRIME_CLAP_PATH=${PATCHPRIME_TEST_CLAP};PATCHPRIME_VST3_PATH=${PATCHPRIME_TEST_VST3}")
 
 patchprime_add_test(test_plugins test_plugins.cpp)
-add_dependencies(test_plugins patchprime-testgain patchprime-testgain-clap patchprime-testgain-vst3
+add_dependencies(test_plugins patchprime-testgain patchprime-testgain-ui patchprime-testgain-clap patchprime-testgain-vst3
                  patchprime-pluginhost)
 set_tests_properties(test_plugins PROPERTIES ENVIRONMENT "${PATCHPRIME_TEST_PLUGIN_ENV}")
 
@@ -89,7 +98,7 @@ set_tests_properties(test_pipewiregraph PROPERTIES LABELS "pipewire" SKIP_RETURN
 
 # Creates a null sink, enables it, and checks its bus, links, volume and meter.
 patchprime_add_test(test_buslive test_buslive.cpp)
-add_dependencies(test_buslive patchprime-testgain patchprime-testgain-clap patchprime-testgain-vst3
+add_dependencies(test_buslive patchprime-testgain patchprime-testgain-ui patchprime-testgain-clap patchprime-testgain-vst3
                  patchprime-pluginhost)
 set_tests_properties(test_buslive PROPERTIES LABELS "pipewire" SKIP_RETURN_CODE 77
     ENVIRONMENT "${PATCHPRIME_TEST_PLUGIN_ENV}")

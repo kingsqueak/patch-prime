@@ -5,6 +5,7 @@
 @prefix foaf: <http://xmlns.com/foaf/0.1/> .
 @prefix lv2: <http://lv2plug.in/ns/lv2core#> .
 @prefix state: <http://lv2plug.in/ns/ext/state#> .
+@prefix ui: <http://lv2plug.in/ns/extensions/ui#> .
 @prefix units: <http://lv2plug.in/ns/extensions/units#> .
 @prefix urid: <http://lv2plug.in/ns/ext/urid#> .
 
@@ -14,6 +15,7 @@
     doap:maintainer [ foaf:name "Patch Prime tests" ] ;
     lv2:optionalFeature lv2:hardRTCapable , urid:map ;
     lv2:extensionData state:interface ;
+    ui:ui <https://github.com/kingsqueak/patch-prime/tests/gain#ui> ;
     lv2:port [
         a lv2:InputPort , lv2:ControlPort ;
         lv2:index 0 ;
@@ -60,4 +62,17 @@
         lv2:portProperty lv2:reportsLatency , lv2:integer ;
         lv2:minimum 0 ;
         lv2:maximum 1024
+    ] , [
+        a lv2:InputPort , lv2:ControlPort ;
+        lv2:index 6 ;
+        lv2:symbol "halveFirst" ;
+        lv2:name "Halve First" ;
+        lv2:default 0 ;
+        lv2:minimum 0 ;
+        lv2:maximum 1 ;
+        lv2:portProperty lv2:toggled
     ] .
+
+<https://github.com/kingsqueak/patch-prime/tests/gain#ui>
+    a ui:X11UI ;
+    lv2:extensionData ui:idleInterface .

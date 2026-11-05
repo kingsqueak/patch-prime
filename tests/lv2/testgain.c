@@ -21,11 +21,15 @@
 
 #define TEST_GAIN_URI "https://github.com/kingsqueak/patch-prime/tests/gain"
 
-enum { PORT_GAIN = 0, PORT_CRASH = 1, PORT_IN = 2, PORT_OUT = 3, PORT_HALVE = 4, PORT_LATENCY = 5 };
+enum { PORT_GAIN = 0, PORT_CRASH = 1, PORT_IN = 2, PORT_OUT = 3, PORT_HALVE = 4, PORT_LATENCY = 5, PORT_HALVE_FIRST = 6 };
 
 // What it reports as its latency (it doesn't really delay: the tests only
 // look at what reaches the engine).
 #define TEST_GAIN_LATENCY 64.0f
+
+// A switch that halves only the first instance's trim: two channels of a
+// mono plugin that end up with different states.
+static int g_instances = 0;
 
 typedef struct {
     const float *gain;
@@ -34,6 +38,8 @@ typedef struct {
     float *out;
     const float *halve;
     float *latency;
+    const float *halveFirst;
+    int index; // the how-manieth instance in this process
     float trim;
     LV2_URID trimKey;
     LV2_URID floatType;
@@ -52,6 +58,7 @@ static LV2_Handle instantiate(const LV2_Descriptor *descriptor, double rate, con
     printf("testgain: hello"); // no line end, on purpose
     fflush(stdout);
     self->trim = 1.0f;
+    self->index = g_instances++;
     for (int i = 0; features != NULL && features[i] != NULL; ++i) {
         if (strcmp(features[i]->URI, LV2_URID__map) == 0) {
             const LV2_URID_Map *map = (const LV2_URID_Map *)features[i]->data;
@@ -84,6 +91,9 @@ static void connect_port(LV2_Handle instance, uint32_t port, void *data)
     case PORT_LATENCY:
         self->latency = (float *)data;
         break;
+    case PORT_HALVE_FIRST:
+        self->halveFirst = (const float *)data;
+        break;
     default:
         break;
     }
@@ -95,7 +105,7 @@ static void run(LV2_Handle instance, uint32_t frames)
     if (*self->crash > 0.5f) {
         raise(SIGKILL);
     }
-    if (*self->halve > 0.5f) {
+    if (*self->halve > 0.5f || (*self->halveFirst > 0.5f && self->index == 0)) {
         self->trim = 0.5f;
     }
     if (self->latency != NULL) {
@@ -109,6 +119,7 @@ static void run(LV2_Handle instance, uint32_t frames)
 
 static void cleanup(LV2_Handle instance)
 {
+    --g_instances;
     free(instance);
 }
 

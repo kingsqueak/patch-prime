@@ -164,8 +164,8 @@ private Q_SLOTS:
         QCOMPARE(gain->audioIn, 1);
         QCOMPARE(gain->audioOut, 1);
         QCOMPARE(gain->problem, "");
-        QCOMPARE(gain->params.size(), 3U);
-        QVERIFY(!gain->hasUi);
+        QCOMPARE(gain->params.size(), 4U);
+        QVERIFY(gain->hasUi);
         QCOMPARE(gain->params[0].name, "gain");
         QCOMPARE(gain->params[0].maximum, 4.0);
         QCOMPARE(gain->params[0].initial, 1.0);
@@ -179,9 +179,9 @@ private Q_SLOTS:
         QCOMPARE(clap->audioIn, 1);
         QCOMPARE(clap->audioOut, 1);
         QCOMPARE(clap->problem, "");
-        QVERIFY(!clap->hasUi);
+        QVERIFY(clap->hasUi);
         QVERIFY(clap->binary.ends_with("testgain.clap"));
-        QCOMPARE(clap->params.size(), 3U);
+        QCOMPARE(clap->params.size(), 4U);
         QCOMPARE(clap->params[0].name, "1");
         QCOMPARE(clap->params[0].label, "Gain");
         QCOMPARE(clap->params[0].maximum, 4.0);

@@ -72,6 +72,9 @@ public:
     openWindow(const std::string &title, std::function<void(const std::string &, double)> onParam) override;
     void takeParamChanges(const std::function<void(const std::string &, double)> &fn) override;
     void mainThreadTick() override;
+    // Only when a restart it asked for failed (the plugin couldn't be
+    // activated again): started afresh by the engine.
+    [[nodiscard]] bool wantsRestart() const override { return m_restartFailed; }
     // What the plugin's latency extension says, while it's active.
     [[nodiscard]] int latency() const override;
     void stopProcessingSoon() override { m_stopRequested.store(true, std::memory_order_release); }
@@ -123,6 +126,7 @@ private:
     // Realtime: whether processing has been stopped (it stops it, the first time).
     bool stoppedHere() noexcept;
     static void destroyInstance(Instance &instance);
+    void restartIfAsked();
     void readPorts(const clap_plugin_t *plugin);
     void loadState(const clap_plugin_t *plugin) const;
 
@@ -154,6 +158,14 @@ private:
     std::atomic<bool> m_stateDirty{false};
     std::atomic<bool> m_stopRequested{false};
     std::atomic<bool> m_stopped{false};
+    // A restart it asked for (from any thread): done by mainThreadTick, in
+    // place, so its window and the audio around it stay up. The audio thread
+    // stops processing it first (the same way as stopProcessingSoon) and
+    // passes the sound through meanwhile.
+    std::atomic<bool> m_restartWanted{false};
+    bool m_restartFailed = false;
+    double m_sampleRate = 48000.0;
+    int m_channels = 0;
     std::thread::id m_mainThread;
     // The open editor, and what the plugin asked of it from any thread.
     std::atomic<ClapWindow *> m_window{nullptr};
