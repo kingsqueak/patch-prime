@@ -44,13 +44,14 @@ Kirigami.Dialog {
 
     Connections {
         target: Devices
-        // Opened before the devices arrived.
+        // Opened before the devices arrived (visible, not opened: they can
+        // arrive during its opening animation).
         function onRowsInserted() {
-            if (wizard.opened && wizard.outputs.length === 0)
+            if (wizard.visible && wizard.outputs.length === 0)
                 wizard.refresh();
         }
         function onModelReset() {
-            if (wizard.opened && wizard.outputs.length === 0)
+            if (wizard.visible && wizard.outputs.length === 0)
                 wizard.refresh();
         }
     }

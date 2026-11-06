@@ -55,12 +55,30 @@ Kirigami.ApplicationWindow {
         saved.mini = on;
         if (on) {
             miniWindow.open();
-            hide();
         } else {
             show();
             raise();
             requestActivate();
-            miniWindow.hide();
+        }
+        swap.tries = 0;
+        swap.start();
+    }
+    // The window going away waits until the other one has the focus. Hidden any
+    // sooner, the window manager gives the focus to another app, then refuses
+    // it to ours as focus stealing, and the new window opens behind that app.
+    Timer {
+        id: swap
+        property int tries: 0
+        interval: 30
+        repeat: true
+        onTriggered: {
+            if (!(saved.mini ? miniWindow.active : root.active) && ++tries < 15)
+                return;
+            stop();
+            if (saved.mini)
+                root.hide();
+            else
+                miniWindow.hide();
         }
     }
     onVisibleChanged: {
