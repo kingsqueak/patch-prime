@@ -19,8 +19,13 @@ QQC2.ToolButton {
     property string tip
     property string letter // shown instead of the icon when set
     property color onColor: Style.toggleOn
+    // For screen readers, naming the strip: "Mute Mic1".
+    property string accessibleName
 
     signal requested(bool on)
+
+    Accessible.name: accessibleName.length > 0 ? accessibleName : text
+    Accessible.description: tip
 
     implicitWidth: Style.controlHeight
     implicitHeight: Style.controlHeight
@@ -61,6 +66,9 @@ QQC2.ToolButton {
             radius: Style.toggleRadius
             color: button.checked ? button.onColor : button.hovered ? Style.toggleHover : Style.toggleOff
             opacity: button.enabled ? 1 : 0.5
+            // Where the keyboard is.
+            border.color: Kirigami.Theme.focusColor
+            border.width: button.visualFocus ? 2 : 0
         }
     }
 

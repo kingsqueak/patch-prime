@@ -74,3 +74,21 @@ Loudness for publishing (Phase 9f): `LoudnessMeter` (`engine/src/loudnessmeter.{
 ## Presets
 
 Presets (Phase 9d): `PresetStore` (`engine/src/presets.{h,cpp}`, `~/.config/patchprime/presets.json`: `chains` {name: effects JSON}, `effects` {type: {name: effect}}; effect presets drop bypass and ducker key). `DeviceModel::setEffects` (replaces a chain, keeps effect mappings/hotkeys where the type at that index is unchanged) and `loadEffectPreset` (params + state, same type only). D-Bus `Save/Load/DeleteChainPreset`, `Save/Load/DeleteEffectPreset`; state `chainPresets`, `effectPresets`. Saves (scenes too) go through `PatchPrimeService::afterPluginStates`: with plugin windows open, `requestPluginStates` and capture 400 ms later. GUI `PresetButton.qml` in the effects window's header (chains) and on each effect card.
+
+## Translations
+
+Translations (Phase 9m): `translations/patchprime_<lang>.ts`, built into the app and tray by `qt_add_translations` (top-level `CMakeLists.txt`, resource prefix `/i18n`), loaded for `QLocale()` by `pp::loadTranslations` (`translations/loadtranslations.h`) along with Qt's own `qtbase_*`, if installed. Add a language: a new `TS_FILES` entry, then `cmake --build <dir> --target update_translations` (run it too after changing any text; without it new strings stay English). Try one with `LANGUAGE=de`. German, Spanish and French are machine drafts (Grok), checked for placeholders and accelerators, not read by native speakers. Never build a sentence from translated fragments: give each case a whole string.
+
+The engine's own words reach the GUI in English. `app/src/effectstrings.{h,cpp}` lists the effect names, parameters, options and voice chain names in the "Effects" context; `DaemonClient` translates `effectTypes` as they arrive and QML can call `Devices.effectWords()`. `test_effectstrings` fails when the engine has a word the list lacks. Still English: what the daemon writes itself (errors, MIDI and hotkey descriptions, OSD text), `patchprime-ctl`, and the user guide.
+
+## Accessibility and keyboard
+
+Accessibility (Phase 9m): every control has a name that says which strip it's on (`StripToggle.accessibleName`, `VolumeFader.accessibleName`). `PATCHPRIME_A11Y_DUMP=<file>` (with `PATCHPRIME_SCREENSHOT`) lists what a screen reader finds, unnamed controls marked `NO NAME`; the remaining ones are read-only text. Keyboard: `VolumeFader` takes arrows (1 dB), Page Up/Down (6 dB), Home (0 dB), End (off); Enter on a strip's fader types a level; `ChannelStrip` takes M and C from whatever has focus on it (text fields eat them first); `MixerPage` scrolls the focused control into view. Custom controls show focus with `Kirigami.Theme.focusColor` on `visualFocus`. Not tested with a real screen reader. The EQ and multiband graphs are mouse-only; their tables and parameter rows do the same from the keyboard.
+
+## Setup wizard
+
+Setup wizard (Phase 9m): `SetupWizard.qml` collects answers and changes nothing until Finish, which is one D-Bus call, `ApplyQuickSetup(mic, output, desktopName, streamName)`, → `DeviceModel::applyQuickSetup` (only adds; reuses strips of that kind and label, so it can be run twice) and the default input and output. Names come from the GUI so they're in the user's language. The mic is never sent to the output. It offers itself once (`[Setup] wizardSeen` in patchprime.conf) 1.5 s after connecting, if nothing's in the mixer; Help → Setup Wizard… runs it any time. `PATCHPRIME_PAGE=wizard<n>` opens step n.
+
+## Mini window
+
+Mini window (Phase 9m): `MiniWindow.qml`, a window of its own rather than a state of the main one (Kirigami's page stack and menu bar don't shrink to a strip's width), with one `MiniRow.qml` per strip and running app. `Main.setMini` swaps the two (Ctrl+M is one toggle in Main: Qt treats a second Ctrl+M in the mini window as ambiguous, even with Main hidden); anything else that shows the main window (a second start, the tray) ends mini mode through `onVisibleChanged`. `Main` starts `visible: false` and shows itself from `Component.onCompleted`, so it doesn't flash when mini was in use. `[MainWindow] mini` and `[MiniWindow] height, onTop` in patchprime.conf; the height follows the rows until the user resizes it. `PATCHPRIME_PAGE=mini` shows both, saving the mini one as `<file>-2.png`.

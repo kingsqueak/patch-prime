@@ -39,6 +39,11 @@ QQC2.ApplicationWindow {
     function slug(heading) {
         return heading.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").replace(/\s/g, "-");
     }
+    Shortcut {
+        sequences: [StandardKey.Close, "Esc"]
+        onActivated: guide.close()
+    }
+
     function show() {
         if (!visible) {
             width = Kirigami.Units.gridUnit * 44;

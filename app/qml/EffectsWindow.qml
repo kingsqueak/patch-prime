@@ -45,6 +45,10 @@ QQC2.ApplicationWindow {
     }
 
     title: qsTr("Effects: %1").arg(panel.label)
+    Shortcut {
+        sequences: [StandardKey.Close]
+        onActivated: panel.close()
+    }
     // The effects' input and output levels cost CPU: only while they're seen.
     onVisibleChanged: Devices.watchEffectLevels(panel.key, visible)
     Component.onDestruction: {

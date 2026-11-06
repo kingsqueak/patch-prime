@@ -331,6 +331,56 @@ private Q_SLOTS:
         QVERIFY(!role(model, 0, DeviceModel::BusDefaultRole).toBool());
     }
 
+    void quickSetup()
+    {
+        DeviceStore store(m_path);
+        DeviceModel model(&store);
+        model.upsertNode(sourceNode(11, "mic"), nullptr);
+        model.upsertNode(sinkNode(10, "phones", nullptr), nullptr);
+        const QString mic = QStringLiteral("Audio/Source|mic");
+        const QString phones = QStringLiteral("Audio/Sink|phones");
+        const auto sendsOf = [&](const QString &key) {
+            auto sends = role(model, model.rowForKey(key.toStdString()), DeviceModel::SendsRole).toStringList();
+            sends.sort();
+            return sends;
+        };
+        const auto isOn = [&](const QString &key) {
+            const auto *saved = store.find(key.toStdString());
+            return saved != nullptr && saved->enabled;
+        };
+
+        // Nothing asked for but the devices: both in, nothing routed.
+        auto [desktop, stream] = model.applyQuickSetup({.mic = mic, .output = phones, .desktop = {}, .stream = {}});
+        QVERIFY(desktop.isEmpty() && stream.isEmpty());
+        QVERIFY(isOn(mic) && isOn(phones));
+        QVERIFY(sendsOf(mic).isEmpty());
+
+        // Everything: the desktop to the phones, mic and desktop to the
+        // stream, and the mic still not in the phones.
+        std::tie(desktop, stream) = model.applyQuickSetup(
+            {.mic = mic, .output = phones, .desktop = QStringLiteral("Desktop"), .stream = QStringLiteral("Stream Mix")});
+        QCOMPARE(role(model, model.rowForKey(desktop.toStdString()), DeviceModel::StageRole).toString(),
+                 QString::fromStdString(stageName(Stage::Input)));
+        QCOMPARE(role(model, model.rowForKey(stream.toStdString()), DeviceModel::StageRole).toString(),
+                 QString::fromStdString(stageName(Stage::Bus)));
+        QCOMPARE(sendsOf(mic), QStringList{stream});
+        auto expected = QStringList{phones, stream};
+        expected.sort();
+        QCOMPARE(sendsOf(desktop), expected);
+
+        // Again: the same strips, none added.
+        const int rows = model.rowCount();
+        const auto again = model.applyQuickSetup(
+            {.mic = mic, .output = phones, .desktop = QStringLiteral("desktop"), .stream = QStringLiteral("STREAM MIX")});
+        QCOMPARE(again.first, desktop);
+        QCOMPARE(again.second, stream);
+        QCOMPARE(model.rowCount(), rows);
+
+        // No such device, nothing chosen: no harm done.
+        model.applyQuickSetup({.mic = QStringLiteral("nothing"), .output = {}, .desktop = {}, .stream = {}});
+        QCOMPARE(model.rowCount(), rows);
+    }
+
     void reverbBus()
     {
         DeviceStore store(m_path);

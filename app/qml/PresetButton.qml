@@ -65,7 +65,7 @@ QQC2.ToolButton {
 
             delegate: QQC2.MenuItem {
                 required property string modelData
-                text: modelData
+                text: Devices.effectWords(modelData)
                 icon.name: "document-open"
                 onTriggered: button.load(modelData)
             }
@@ -85,7 +85,7 @@ QQC2.ToolButton {
 
                 delegate: QQC2.MenuItem {
                     required property string modelData
-                    text: modelData
+                    text: Devices.effectWords(modelData)
                     onTriggered: button.remove(modelData)
                 }
 
@@ -105,7 +105,7 @@ QQC2.ToolButton {
 
             delegate: QQC2.MenuItem {
                 required property string modelData
-                text: modelData
+                text: Devices.effectWords(modelData)
                 onTriggered: button.loadStarter(modelData)
             }
 

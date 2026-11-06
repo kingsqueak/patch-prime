@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.kingsqueak.patchprime.engine
 
@@ -15,11 +16,18 @@ Kirigami.Page {
     signal openApps()
     signal openRecordings()
     signal openSoundboard()
+    signal openMini()
 
     title: qsTr("Mixer")
     header: EngineMessage {}
 
     actions: [
+        Kirigami.Action {
+            text: qsTr("Mini")
+            icon.name: "view-restore"
+            tooltip: qsTr("Collapse to a small window of levels and mutes (Ctrl+M)")
+            onTriggered: page.openMini()
+        },
         Kirigami.Action {
             text: qsTr("Soundboard")
             icon.name: "media-playlist-play"
@@ -108,6 +116,26 @@ Kirigami.Page {
         boundsBehavior: Flickable.StopAtBounds
         clip: true
         QQC2.ScrollBar.horizontal: scroller
+
+        // Tabbing to a strip that's off to the side scrolls it into view.
+        Connections {
+            target: page.Window.window
+            function onActiveFocusItemChanged() {
+                const item = page.Window.activeFocusItem;
+                let inConsole = false;
+                for (let i = item; i; i = i.parent)
+                    inConsole = inConsole || i === consoleRow;
+                if (!inConsole)
+                    return;
+                const left = item.mapToItem(consoleRow, 0, 0).x;
+                const right = left + item.width;
+                if (left < console_.contentX)
+                    console_.contentX = Math.max(0, left - Style.gap);
+                else if (right > console_.contentX + console_.width)
+                    console_.contentX = Math.min(console_.contentWidth - console_.width,
+                                                 right - console_.width + Style.gap);
+            }
+        }
 
         RowLayout {
             id: consoleRow

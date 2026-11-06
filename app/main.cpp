@@ -4,6 +4,9 @@
 #include "daemonclient.h"
 #include "windowservice.h"
 
+#include "../translations/loadtranslations.h"
+
+#include <QAccessible>
 #include <QDBusConnection>
 #include <QFile>
 #include <QGuiApplication>
@@ -11,8 +14,36 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QTextStream>
 #include <QTimer>
 #include <qqml.h>
+
+namespace {
+
+// Developer aid: what a screen reader finds, one control a line, the ones
+// with no name first marked "NO NAME". See PATCHPRIME_A11Y_DUMP below.
+void dumpAccessible(QAccessibleInterface *node, QTextStream &out, int depth = 0)
+{
+    if (node == nullptr || depth > 60) {
+        return;
+    }
+    const auto role = node->role();
+    const bool control = role == QAccessible::Button || role == QAccessible::CheckBox ||
+                         role == QAccessible::RadioButton || role == QAccessible::Slider ||
+                         role == QAccessible::ComboBox || role == QAccessible::EditableText ||
+                         role == QAccessible::SpinBox || role == QAccessible::Dial ||
+                         role == QAccessible::Link || role == QAccessible::ButtonMenu;
+    if (control && !node->state().invisible) {
+        const auto name = node->text(QAccessible::Name);
+        out << (name.isEmpty() ? "NO NAME " : "        ") << int(role) << ' ' << name << ' '
+            << (node->object() != nullptr ? node->object()->metaObject()->className() : "") << '\n';
+    }
+    for (int i = 0; i < node->childCount(); ++i) {
+        dumpAccessible(node->child(i), out, depth + 1);
+    }
+}
+
+} // namespace
 
 int main(int argc, char *argv[])
 {
@@ -24,6 +55,12 @@ int main(int argc, char *argv[])
     QGuiApplication::setOrganizationDomain(QStringLiteral("kingsqueak.org"));
     QGuiApplication::setDesktopFileName(QStringLiteral("org.kingsqueak.patchprime"));
     QGuiApplication::setApplicationVersion(QStringLiteral(PATCHPRIME_VERSION));
+
+    pp::loadTranslations(app);
+    const auto accessibleDump = qEnvironmentVariable("PATCHPRIME_A11Y_DUMP");
+    if (!accessibleDump.isEmpty()) {
+        QAccessible::setActive(true);
+    }
 
     // One window: a second start brings the first forward (screenshots,
     // a developer aid, may run alongside).
@@ -79,12 +116,20 @@ int main(int argc, char *argv[])
     // apps, about, guide: the user guide's window, saved as <file>-2.png);
     // PATCHPRIME_EFFECTS=<strip label> opens that strip's effects;
     // PATCHPRIME_WINDOW_SIZE=<w>x<h> sizes the window (see above).
+    // LANGUAGE=de shows another language; PATCHPRIME_A11Y_DUMP=<file> lists
+    // the controls a screen reader would find, every window's.
     if (const auto shot = qEnvironmentVariable("PATCHPRIME_SCREENSHOT"); !shot.isEmpty()) {
         // PATCHPRIME_SCREENSHOT_DELAY=<ms> waits longer (meters settle).
         const int delay = qEnvironmentVariableIsSet("PATCHPRIME_SCREENSHOT_DELAY")
                               ? qEnvironmentVariableIntValue("PATCHPRIME_SCREENSHOT_DELAY")
                               : 2000;
-        QTimer::singleShot(delay, &app, [&engine, shot] {
+        QTimer::singleShot(delay, &app, [&engine, shot, accessibleDump] {
+            if (QFile file(accessibleDump); !accessibleDump.isEmpty() && file.open(QIODevice::WriteOnly)) {
+                QTextStream out(&file);
+                for (auto *open : QGuiApplication::topLevelWindows()) {
+                    dumpAccessible(QAccessible::queryAccessibleInterface(open), out);
+                }
+            }
             const auto roots = engine.rootObjects();
             auto *window = roots.isEmpty() ? nullptr : qobject_cast<QQuickWindow *>(roots.first());
             bool saved = window != nullptr && window->grabWindow().save(shot);

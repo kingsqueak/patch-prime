@@ -25,7 +25,8 @@ ColumnLayout {
     readonly property var shortNames: ({
         eq: qsTr("EQ"), multiband: qsTr("Multiband"), gate: qsTr("Gate"), ducker: qsTr("Ducker"),
         denoise: qsTr("Denoise"), leveler: qsTr("Leveler"), limiter: qsTr("Limiter"),
-        reverb: qsTr("Reverb"), delay: qsTr("Delay"), gain: qsTr("Gain")
+        reverb: qsTr("Reverb"), delay: qsTr("Delay"), gain: qsTr("Gain"),
+        compressor: qsTr("Compressor"), deesser: qsTr("De-esser"), expander: qsTr("Expander")
     })
     readonly property int shown: effects.length <= Style.insertSlots ? effects.length
                                                                        : Style.insertSlots - 1
@@ -65,6 +66,8 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.preferredHeight: Style.slotHeight
         hoverEnabled: true
+        focusPolicy: Qt.TabFocus
+        Accessible.description: QQC2.ToolTip.text
         onClicked: inserts.open()
 
         contentItem: QQC2.Label {
@@ -79,8 +82,9 @@ ColumnLayout {
         background: Rectangle {
             radius: Style.slotRadius
             color: slot.lit ? Style.slotOn : slot.hovered ? Style.toggleHover : Style.slotOff
-            border.color: slot.placeholder ? Style.stripBorder : "transparent"
-            border.width: 1
+            border.color: slot.visualFocus ? Kirigami.Theme.focusColor
+                        : slot.placeholder ? Style.stripBorder : "transparent"
+            border.width: slot.visualFocus ? 2 : 1
 
             Rectangle {
                 visible: slot.lit && slot.reduction > 0.01
@@ -106,6 +110,7 @@ ColumnLayout {
             readonly property var effect: inserts.effects[index]
 
             text: inserts.shortNames[effect.type] || effect.type
+            Accessible.name: qsTr("Effect %1 on %2").arg(text).arg(inserts.label)
             lit: effect.enabled
             reduction: {
                 const db = EffectMeters.gainReduction(effect.type,
@@ -122,6 +127,7 @@ ColumnLayout {
     Slot {
         visible: inserts.effects.length > Style.insertSlots
         text: qsTr("+%1 more").arg(inserts.effects.length - inserts.shown)
+        Accessible.name: qsTr("%1 more effects on %2").arg(inserts.effects.length - inserts.shown).arg(inserts.label)
         placeholder: true
         QQC2.ToolTip.text: qsTr("Click to see all the effects")
     }
@@ -130,6 +136,7 @@ ColumnLayout {
     Slot {
         visible: inserts.effects.length === 0
         text: qsTr("+ Effects")
+        Accessible.name: qsTr("Add effects to %1").arg(inserts.label)
         placeholder: true
         enabled: Devices.daemonRunning
         QQC2.ToolTip.text: qsTr("Add effects to %1: EQ, compressor, gate, reverb…").arg(inserts.label)

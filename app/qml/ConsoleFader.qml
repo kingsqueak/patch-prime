@@ -126,8 +126,9 @@ VolumeFader {
         height: Style.faderCapHeight
         radius: 3
         color: fader.pressed ? Qt.darker(Kirigami.Theme.backgroundColor, 1.08) : Kirigami.Theme.backgroundColor
-        border.color: fader.hovered || fader.pressed ? Kirigami.Theme.highlightColor : Style.faderCapBorder
-        border.width: 1
+        border.color: fader.visualFocus ? Kirigami.Theme.focusColor
+                    : fader.hovered || fader.pressed ? Kirigami.Theme.highlightColor : Style.faderCapBorder
+        border.width: fader.visualFocus ? 2 : 1
 
         // The line across the cap marks the level.
         Rectangle {

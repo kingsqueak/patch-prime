@@ -887,6 +887,21 @@ QString PatchPrimeService::CreateReverbBus(const QString &name)
     return m_devices->createReverbBus(name);
 }
 
+void PatchPrimeService::ApplyQuickSetup(const QString &mic, const QString &output, const QString &desktopName,
+                                        const QString &streamName)
+{
+    const auto [desktop, stream] = m_devices->applyQuickSetup(
+        {.mic = mic, .output = output, .desktop = desktopName, .stream = streamName});
+    if (rowFor(mic) >= 0) {
+        SetDefaultInput(mic, true);
+    }
+    if (!desktop.isEmpty()) {
+        SetDefaultOutput(desktop, true);
+    } else if (rowFor(output) >= 0) {
+        SetDefaultOutput(output, true);
+    }
+}
+
 void PatchPrimeService::SetAppTarget(const QString &appKey, const QString &nodeName)
 {
     if (!m_apps->setTarget(appKey.toStdString(), nodeName.toStdString()) && calledFromDBus()) {

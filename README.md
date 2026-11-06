@@ -27,6 +27,9 @@ A virtual audio mixer and router for KDE Plasma, built on PipeWire. Think of it 
 - **Global hotkeys.** Keys that work in every app: mute or push-to-talk on your mic, duck the music while held, nudge levels, load scenes, toggle cues, sends, effects and recording. They're KDE global shortcuts, so they work on X11 and Wayland and show in System Settings.
 - **Tray icon and on-screen messages.** The microphone's mute state in the system tray (middle-click to mute, scroll for its level, scenes in its menu), and Plasma's on-screen messages when a hotkey or MIDI button changes something.
 - **Scripting and Stream Deck.** `patchprime-ctl` mutes, sets levels and sends, toggles cues, effects and recording, and loads scenes from a terminal, a script or a Stream Deck button (`patchprime-ctl mute Mic`).
+- **Mini window.** Collapse the mixer to one strip's width: a stack of names, mutes and small sliders that can stay on top of your other windows.
+- **Setup wizard.** On first start it asks which mic and headphones you use and whether you stream, and sets up the strips and defaults.
+- **Languages and keyboard.** German, Spanish and French (machine drafts: corrections welcome), named controls for screen readers, and keyboard control of faders and mutes.
 - **Metering.** Peak, RMS and peak hold on every strip, short-term loudness (LUFS) on mix buses and outputs, and gain-reduction meters in the effects.
 - **Pro-audio friendly.** Choose the sample rate and block size, use one hardware interface as the master clock or let Patch Prime keep time, pick stereo pairs on multichannel cards, and have hot-plugged devices recovered automatically.
 - **Runs in the background.** The engine (`patchprimed`) is a systemd user service. Your routing keeps working with the window closed and comes back after a reboot.
@@ -48,7 +51,7 @@ Version 0.15: under active development and in daily use on the author's machine.
 Build dependencies on Ubuntu 26.04:
 
 ```sh
-sudo apt install cmake ninja-build g++ qt6-base-dev qt6-declarative-dev \
+sudo apt install cmake ninja-build g++ qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-l10n-tools \
     libpipewire-0.3-dev libspa-0.2-dev libsndfile1-dev liblilv-dev lv2-dev libx11-dev libasound2-dev libkf6statusnotifieritem-dev libkirigami-dev kirigami-addons-dev qml6-module-org-kde-kquickcontrols
 ```
 

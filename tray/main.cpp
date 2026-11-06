@@ -3,6 +3,8 @@
 
 #include "tray.h"
 
+#include "../translations/loadtranslations.h"
+
 #include <QApplication>
 #include <QDBusConnection>
 
@@ -18,6 +20,7 @@ int main(int argc, char *argv[])
         QApplication::setOrganizationDomain(QStringLiteral("kingsqueak.org"));
         QApplication::setDesktopFileName(QStringLiteral("org.kingsqueak.patchprime"));
         QApplication::setQuitOnLastWindowClosed(false);
+        pp::loadTranslations(app);
         // One tray icon: a second start (autostart and the app both) leaves.
         if (!QDBusConnection::sessionBus().registerService(QStringLiteral("org.kingsqueak.PatchPrime.Tray"))) {
             return 0;

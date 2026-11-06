@@ -218,6 +218,7 @@ QQC2.Control {
                 letter: qsTr("M", "mute button")
                 onColor: Style.muteOn
                 text: qsTr("Mute")
+                accessibleName: qsTr("Mute %1").arg(strip.label)
                 on: strip.muted
                 enabled: Devices.daemonRunning && strip.known
                 onRequested: on => Devices.setAppMuted(strip.appKey, on)

@@ -54,6 +54,18 @@ add_subdirectory(probe)
 if(PATCHPRIME_BUILD_APP)
     add_subdirectory(app)
     add_subdirectory(tray)
+
+    # Translations (translations/*.ts), built into the programs. After
+    # changing the text: cmake --build <dir> --target update_translations
+    find_package(Qt6 6.10 REQUIRED COMPONENTS LinguistTools)
+    set(PATCHPRIME_TRANSLATED patchprime)
+    if(TARGET patchprime-tray)
+        list(APPEND PATCHPRIME_TRANSLATED patchprime-tray)
+    endif()
+    qt_add_translations(TARGETS ${PATCHPRIME_TRANSLATED}
+        TS_FILES translations/patchprime_de.ts translations/patchprime_es.ts translations/patchprime_fr.ts
+        RESOURCE_PREFIX /i18n
+        LUPDATE_OPTIONS -no-obsolete -locations none)
 endif()
 
 if(PATCHPRIME_BUILD_TESTS)

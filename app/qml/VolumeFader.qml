@@ -24,6 +24,39 @@ QQC2.Slider {
     // Half-dB steps, rounded here: a stepSize makes Breeze draw ticks.
     onMoved: requested(Math.round(value * 2) / 2)
     Accessible.name: accessibleName
+    Accessible.description: qsTr("%1 dB").arg(volumeDb.toFixed(1))
+
+    // The keyboard: 1 dB by arrow, 6 by page, Home for 0 dB, End for off.
+    function nudge(db) {
+        requested(Math.min(to, Math.max(from, volumeDb + db)));
+    }
+    Keys.onPressed: event => {
+        switch (event.key) {
+        case Qt.Key_Up:
+        case Qt.Key_Right:
+            nudge(1);
+            break;
+        case Qt.Key_Down:
+        case Qt.Key_Left:
+            nudge(-1);
+            break;
+        case Qt.Key_PageUp:
+            nudge(6);
+            break;
+        case Qt.Key_PageDown:
+            nudge(-6);
+            break;
+        case Qt.Key_Home:
+            requested(0);
+            break;
+        case Qt.Key_End:
+            requested(from);
+            break;
+        default:
+            return;
+        }
+        event.accepted = true;
+    }
 
     // Follow the daemon, except while the user is dragging. Assigned here
     // rather than with a Binding: a Binding that switched off while pressed

@@ -38,6 +38,10 @@ The engine runs in the background, so closing the window changes nothing: your r
 
 ## First setup
 
+The first time you open Patch Prime with nothing in the mixer, the **setup wizard** offers to do this for you. It asks which microphone and which headphones or speakers you use, whether desktop sound should go through the mixer, and whether you stream or record, then makes those strips and sets the system's defaults. It doesn't send your mic to your headphones, so you won't hear yourself. Run it again any time with **Help → Setup Wizard…**: it only adds what's missing.
+
+To do it by hand:
+
 1. Open **Patch Prime** from the application menu.
 2. Click **Devices** (top right). You'll see every input and output on your system.
 3. Tick the devices you want in the mixer. Each ticked device gets a strip.
@@ -80,7 +84,9 @@ The mixer scrolls sideways when there are more strips than fit. The window opens
 ### Menus and shortcuts
 
 - **File → Quit** (Ctrl+Q) closes the window. The engine keeps running, so your audio doesn't stop.
-- **View** switches pages: **Mixer** (Ctrl+1), **Apps** (Ctrl+2), **Routing** (Ctrl+3), **Devices** (Ctrl+4), **Recordings** (Ctrl+5).
+- **View** switches pages: **Mixer** (Ctrl+1), **Apps** (Ctrl+2), **Routing** (Ctrl+3), **Devices** (Ctrl+4), **Recordings** (Ctrl+5), **Soundboard** (Ctrl+6).
+- **View → Mini Window** (Ctrl+M, or **Mini** at the top right) collapses the mixer to a narrow window: every level in a stack, each with its name, a mute and a slider, inputs first, then apps, mix buses and outputs. The button at its top left (or Ctrl+M) brings the full mixer back, and the pin keeps it above other windows. Patch Prime opens the way you left it.
+- **In the mixer, from the keyboard:** Tab moves between controls. On a fader, the arrow keys change the level by 1 dB, Page Up and Page Down by 6 dB, Home sets 0 dB, End turns it right down, and Enter lets you type a level. Anywhere on a strip, **M** mutes it and **C** cues it. Ctrl+W closes an effects window or this guide.
 - **Help → Patch Prime User Guide** (F1) opens this guide in a window of its own, built into the app so it works offline; **User Guide Online** opens it on GitHub; **Report a Bug…** opens the issue tracker; **About Patch Prime** shows the version and license.
 
 ## Mix buses and virtual devices

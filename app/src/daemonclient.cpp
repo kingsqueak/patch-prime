@@ -3,6 +3,8 @@
 
 #include "daemonclient.h"
 
+#include "effectstrings.h"
+
 #include "eq.h"
 
 #include <QCoreApplication>
@@ -649,6 +651,37 @@ QVariantList DaemonClient::pluginParams(const QString &type) const
     return params;
 }
 
+QVariantList DaemonClient::translatedEffectTypes(const QVariantList &types)
+{
+    const auto label = QStringLiteral("label");
+    const auto params = QStringLiteral("params");
+    const auto options = QStringLiteral("options");
+    QVariantList result;
+    for (const auto &t : types) {
+        auto type = t.toMap();
+        type[label] = effectText(type.value(label).toString());
+        QVariantList translatedParams;
+        for (const auto &p : type.value(params).toList()) {
+            auto param = p.toMap();
+            param[label] = effectText(param.value(label).toString());
+            QVariantList translatedOptions;
+            for (const auto &o : param.value(options).toList()) {
+                translatedOptions.append(effectText(o.toString()));
+            }
+            param[options] = translatedOptions;
+            translatedParams.append(param);
+        }
+        type[params] = translatedParams;
+        result.append(type);
+    }
+    return result;
+}
+
+QString DaemonClient::effectWords(const QString &text)
+{
+    return effectText(text);
+}
+
 QVariantMap DaemonClient::effectInfo(const QString &type) const
 {
     if (const auto at = m_pluginIndex.find(type); at != m_pluginIndex.end()) {
@@ -763,6 +796,34 @@ void DaemonClient::setSend(const QString &inputKey, const QString &destinationKe
 void DaemonClient::createVirtual(const QString &name, const QString &kind)
 {
     call(QStringLiteral("CreateVirtual"), {name, kind});
+}
+
+QVariantList DaemonClient::hardwareDevices(const QString &direction) const
+{
+    QVariantList devices;
+    for (const auto &row : m_rows) {
+        if (row.value(QStringLiteral("kind")).toString() == QLatin1String("hardware") &&
+            row.value(QStringLiteral("direction")).toString() == direction &&
+            row.value(QStringLiteral("online")).toBool()) {
+            devices.append(QVariantMap{{QStringLiteral("key"), row.value(QStringLiteral("key"))},
+                                       {QStringLiteral("label"), row.value(QStringLiteral("label"))},
+                                       {QStringLiteral("isDefault"), row.value(QStringLiteral("isDefault"))}});
+        }
+    }
+    return devices;
+}
+
+bool DaemonClient::hasStrips() const
+{
+    return std::ranges::any_of(m_rows, [](const QVariantMap &row) {
+        return row.value(QStringLiteral("isEnabled")).toBool();
+    });
+}
+
+void DaemonClient::applyQuickSetup(const QString &mic, const QString &output, const QString &desktopName,
+                                   const QString &streamName)
+{
+    call(QStringLiteral("ApplyQuickSetup"), {mic, output, desktopName, streamName});
 }
 
 void DaemonClient::createReverbBus()
@@ -1014,8 +1075,9 @@ void DaemonClient::onStateChanged(const QString &state)
     }
 
     if (const auto types = root.value(QLatin1String("effectTypes")).toArray().toVariantList();
-        types != m_effectTypes) {
-        m_effectTypes = types;
+        types != m_sentEffectTypes) {
+        m_sentEffectTypes = types;
+        m_effectTypes = translatedEffectTypes(types);
         Q_EMIT effectTypesChanged();
     }
 

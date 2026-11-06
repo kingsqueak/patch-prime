@@ -508,6 +508,7 @@ Kirigami.ScrollablePage {
                     spacing: Kirigami.Units.largeSpacing
 
                     QQC2.CheckBox {
+                        Accessible.name: qsTr("Use %1").arg(row.model.label)
                         checked: row.isEnabled
                         onToggled: Devices.setEnabled(row.key, checked)
                         QQC2.ToolTip.text: qsTr("Use this device in Patch Prime")

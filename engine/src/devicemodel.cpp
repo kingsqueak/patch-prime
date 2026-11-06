@@ -1082,6 +1082,51 @@ QString DeviceModel::createVirtual(const QString &name, EndpointKind kind)
     return qs(key);
 }
 
+QString DeviceModel::virtualNamed(const QString &label, EndpointKind kind)
+{
+    const auto trimmed = label.trimmed();
+    for (const auto &row : m_rows) {
+        const auto *saved = m_store->find(row.endpoint.key);
+        if (saved != nullptr && saved->kind == kind &&
+            qs(saved->label).compare(trimmed, Qt::CaseInsensitive) == 0) {
+            setEnabled(rowForKey(row.endpoint.key), true);
+            return qs(row.endpoint.key);
+        }
+    }
+    return createVirtual(trimmed, kind);
+}
+
+std::pair<QString, QString> DeviceModel::applyQuickSetup(const QuickSetup &setup)
+{
+    const auto rowOf = [this](const QString &key) { return rowForKey(key.toStdString()); };
+    for (const auto &key : {setup.mic, setup.output}) {
+        if (!key.isEmpty() && rowOf(key) >= 0) {
+            setEnabled(rowOf(key), true);
+        }
+    }
+    const bool haveMic = !setup.mic.isEmpty() && rowOf(setup.mic) >= 0;
+    const bool haveOutput = !setup.output.isEmpty() && rowOf(setup.output) >= 0;
+
+    QString desktop;
+    if (!setup.desktop.trimmed().isEmpty()) {
+        desktop = virtualNamed(setup.desktop, EndpointKind::VirtualInput);
+        if (haveOutput) {
+            setSend(rowOf(desktop), setup.output, true);
+        }
+    }
+    QString stream;
+    if (!setup.stream.trimmed().isEmpty()) {
+        stream = virtualNamed(setup.stream, EndpointKind::VirtualSink);
+        if (haveMic) {
+            setSend(rowOf(setup.mic), stream, true);
+        }
+        if (!desktop.isEmpty()) {
+            setSend(rowOf(desktop), stream, true);
+        }
+    }
+    return {desktop, stream};
+}
+
 QString DeviceModel::createReverbBus(const QString &name)
 {
     const auto base = name.trimmed().isEmpty() ? QStringLiteral("Reverb") : name.trimmed();

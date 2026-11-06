@@ -175,6 +175,8 @@ public:
     // An effect type's name and parameters: a built-in's (from effectTypes)
     // or a plugin's; {type, label, params} either way.
     [[nodiscard]] Q_INVOKABLE QVariantMap effectInfo(const QString &type) const;
+    // A built-in voice chain's name (or other engine word) in the user's language.
+    [[nodiscard]] Q_INVOKABLE static QString effectWords(const QString &text);
     // A plugin's parameters (asked of the daemon once, then kept).
     [[nodiscard]] QVariantList pluginParams(const QString &type) const;
     Q_INVOKABLE void rescanPlugins();
@@ -283,6 +285,13 @@ public:
     // kind: "sink", "source" or "input"
     Q_INVOKABLE void createVirtual(const QString &name, const QString &kind);
     Q_INVOKABLE void createReverbBus();
+    // For the first-run wizard: the hardware there is, "input" or "output"
+    // ([{key, label, isDefault}], online only); whether any strip is in the
+    // mixer yet; and the wizard's choices (see the daemon's ApplyQuickSetup).
+    [[nodiscard]] Q_INVOKABLE QVariantList hardwareDevices(const QString &direction) const;
+    [[nodiscard]] Q_INVOKABLE bool hasStrips() const;
+    Q_INVOKABLE void applyQuickSetup(const QString &mic, const QString &output, const QString &desktopName,
+                                     const QString &streamName);
     // nodeName: a target's name; empty for the system default.
     Q_INVOKABLE void setAppTarget(const QString &appKey, const QString &nodeName);
     // App strips: a running app's own level and mute; hidden ones are left
@@ -420,6 +429,8 @@ private: // NOLINT(readability-redundant-access-specifiers): ends the Q_SLOTS se
     QString m_currentScene;
     int m_sampleRate = 0;
     int m_blockSize = 0;
+    [[nodiscard]] static QVariantList translatedEffectTypes(const QVariantList &types);
+    QVariantList m_sentEffectTypes; // as the daemon sent them
     QVariantList m_effectTypes;
     QVariantList m_plugins;
     QHash<QString, int> m_pluginIndex; // type -> position in m_plugins

@@ -74,6 +74,19 @@ QQC2.Control {
     padding: Style.stripPadding
     topPadding: Style.stripPadding + Style.stageBarHeight
 
+    // With the keyboard anywhere on the strip: M mutes it, C cues it.
+    Keys.onPressed: event => {
+        if (event.modifiers !== Qt.NoModifier || !Devices.daemonRunning)
+            return;
+        if (event.key === Qt.Key_M) {
+            Devices.setMuted(key, !muted);
+            event.accepted = true;
+        } else if (event.key === Qt.Key_C && Devices.cueOutput.length > 0 && Devices.cueOutput !== key) {
+            Devices.setCue(key, !cued);
+            event.accepted = true;
+        }
+    }
+
     // A card in the View colors (lighter than the window in a light theme,
     // darker in a dark one), with the stage's color along the top.
     Kirigami.Theme.colorSet: Kirigami.Theme.View
@@ -227,6 +240,7 @@ QQC2.Control {
                 volumeDb: strip.volumeDb
                 enabled: Devices.daemonRunning
                 onRequested: db => Devices.setVolume(strip.key, db)
+                Keys.onReturnPressed: readout.startEditing()
                 onPressedChanged: readout.dragging = pressed
                 onValueChanged: readout.draggedDb = value
 
@@ -268,6 +282,7 @@ QQC2.Control {
                 letter: qsTr("M", "mute button")
                 onColor: Style.muteOn
                 text: qsTr("Mute")
+                accessibleName: qsTr("Mute %1").arg(strip.label)
                 on: strip.muted
                 enabled: Devices.daemonRunning
                 onRequested: on => Devices.setMuted(strip.key, on)
@@ -289,6 +304,7 @@ QQC2.Control {
                 letter: qsTr("C", "cue button")
                 onColor: Style.cueOn
                 text: qsTr("Cue")
+                accessibleName: qsTr("Cue %1").arg(strip.label)
                 tip: qsTr("Cue: hear this strip on %1 without changing the mix. While anything is cued, %1 plays only the cued strips.").arg(Devices.labelFor(Devices.cueOutput))
                 on: strip.cued
                 enabled: Devices.daemonRunning
@@ -309,6 +325,7 @@ QQC2.Control {
                 visible: strip.isInput
                 icon.name: "audio-input-microphone"
                 text: qsTr("Mono")
+                accessibleName: qsTr("Mono %1").arg(strip.label)
                 tip: qsTr("Mono: mix all of this input's channels into one, heard in both ears. For a microphone on one input of a stereo interface.")
                 on: strip.mono
                 enabled: Devices.daemonRunning
@@ -318,12 +335,11 @@ QQC2.Control {
             StripToggle {
                 // Default output for what apps play into; default input
                 // (microphone) for what they record from.
-                readonly property string what: strip.canBeDefault ? qsTr("output") : qsTr("input (microphone)")
-                readonly property string verb: strip.canBeDefault ? qsTr("play through") : qsTr("record")
-
                 visible: strip.canBeDefault || strip.canBeDefaultInput
                 icon.name: strip.busIsDefault ? "starred-symbolic" : "non-starred-symbolic"
                 text: qsTr("Default")
+                accessibleName: strip.canBeDefault ? qsTr("%1 is the system default output").arg(strip.label)
+                                                   : qsTr("%1 is the system default microphone").arg(strip.label)
                 // A virtual device has no hardware to bypass to, so it stays
                 // the default until another strip takes over.
                 checkable: !(strip.ownVirtual && strip.busIsDefault)
@@ -332,10 +348,13 @@ QQC2.Control {
                 onRequested: on => strip.canBeDefault ? Devices.setDefaultOutput(strip.key, on)
                                                       : Devices.setDefaultInput(strip.key, on)
                 tip: strip.busIsDefault && strip.ownVirtual
-                     ? qsTr("The system default %1. Make another strip the default to change that.").arg(what)
+                     ? (strip.canBeDefault ? qsTr("The system default output. Make another strip the default to change that.")
+                                           : qsTr("The system default microphone. Make another strip the default to change that."))
                      : strip.busIsDefault
-                     ? qsTr("The system default %1: apps %2 this strip. Click to use the device directly instead.").arg(what).arg(verb)
-                     : qsTr("Make this the system default %1, so apps %2 this strip.").arg(what).arg(verb)
+                     ? (strip.canBeDefault ? qsTr("The system default output: apps play through this strip. Click to use the device directly instead.")
+                                           : qsTr("The system default microphone: apps record this strip. Click to use the device directly instead."))
+                     : (strip.canBeDefault ? qsTr("Make this the system default output, so apps play through this strip.")
+                                           : qsTr("Make this the system default microphone, so apps record this strip."))
             }
         }
 

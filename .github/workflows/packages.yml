@@ -37,7 +37,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build pkg-config git ca-certificates file dpkg-dev \
-            qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools libpipewire-0.3-dev libsndfile1-dev liblilv-dev lv2-dev libx11-dev libasound2-dev libkf6statusnotifieritem-dev
+            qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools qt6-tools-dev qt6-l10n-tools libpipewire-0.3-dev libsndfile1-dev liblilv-dev lv2-dev libx11-dev libasound2-dev libkf6statusnotifieritem-dev
 
       - uses: actions/checkout@v4
 
@@ -88,7 +88,7 @@ jobs:
       - name: Install build dependencies
         run: >
           dnf install -y gcc-c++ cmake ninja-build pkgconf-pkg-config git rpm-build
-          qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel pipewire-devel libsndfile-devel lilv-devel lv2-devel libX11-devel alsa-lib-devel kf6-kstatusnotifieritem-devel
+          qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel qt6-qttools-devel pipewire-devel libsndfile-devel lilv-devel lv2-devel libX11-devel alsa-lib-devel kf6-kstatusnotifieritem-devel
 
       - uses: actions/checkout@v4
 
@@ -132,7 +132,7 @@ jobs:
       - name: Install build dependencies
         run: >
           pacman -Syu --noconfirm --needed base-devel git cmake ninja
-          qt6-base qt6-declarative pipewire wireplumber libsndfile lilv lv2 libx11 alsa-lib kirigami kdeclarative kstatusnotifieritem qqc2-desktop-style
+          qt6-base qt6-declarative qt6-tools pipewire wireplumber libsndfile lilv lv2 libx11 alsa-lib kirigami kdeclarative kstatusnotifieritem qqc2-desktop-style
 
       - uses: actions/checkout@v4
 

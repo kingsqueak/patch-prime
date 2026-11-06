@@ -7,6 +7,7 @@ import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.kingsqueak.patchprime.engine
 
 Kirigami.ApplicationWindow {
     id: root
@@ -22,6 +23,9 @@ Kirigami.ApplicationWindow {
     readonly property string repository: "https://github.com/kingsqueak/patch-prime"
 
     title: Qt.application.displayName // alone: Qt adds it only to other titles
+    // Shown from Component.onCompleted: it stays hidden if the mini window
+    // was in use.
+    visible: false
     width: Kirigami.Units.gridUnit * 52
     height: Kirigami.Units.gridUnit * 34
 
@@ -33,6 +37,7 @@ Kirigami.ApplicationWindow {
         category: "MainWindow"
         property int width: 0
         property int height: 0
+        property bool mini: false // the mini window instead of this one
     }
     property bool sizeRestored: false
     function rememberSize() {
@@ -43,6 +48,30 @@ Kirigami.ApplicationWindow {
     }
     onWidthChanged: rememberSize()
     onHeightChanged: rememberSize()
+
+    // Between this window and the mini one. Anything that shows this window
+    // (a second start, the tray) ends the mini window too.
+    function setMini(on) {
+        saved.mini = on;
+        if (on) {
+            miniWindow.open();
+            hide();
+        } else {
+            show();
+            raise();
+            requestActivate();
+            miniWindow.hide();
+        }
+    }
+    onVisibleChanged: {
+        if (visible && miniWindow.visible && startPage !== "mini")
+            setMini(false);
+    }
+
+    MiniWindow {
+        id: miniWindow
+        onExpand: root.setMini(false)
+    }
 
     // One page at a time, full width, with a back button. Side-by-side
     // columns put the wide mixer under the page next to it.
@@ -71,6 +100,17 @@ Kirigami.ApplicationWindow {
         QQC2.Menu {
             title: qsTr("&View")
 
+            QQC2.MenuItem {
+                text: qsTr("Mini &Window")
+                icon.name: "view-restore"
+                action: QQC2.Action {
+                    shortcut: "Ctrl+M"
+                    // Qt counts it even while this window is hidden, so it
+                    // has to work both ways.
+                    onTriggered: root.setMini(!saved.mini)
+                }
+            }
+            QQC2.MenuSeparator {}
             QQC2.MenuItem {
                 text: qsTr("&Mixer")
                 icon.name: "view-media-equalizer"
@@ -137,6 +177,12 @@ Kirigami.ApplicationWindow {
                 icon.name: "internet-services"
                 onTriggered: Qt.openUrlExternally(root.repository + "/blob/main/docs/HELP.md")
             }
+            QQC2.MenuItem {
+                text: qsTr("&Setup Wizard…")
+                icon.name: "tools-wizard"
+                enabled: Devices.connected
+                onTriggered: wizard.start(0)
+            }
             QQC2.MenuSeparator {}
             QQC2.MenuItem {
                 text: qsTr("&Report a Bug…")
@@ -159,12 +205,37 @@ Kirigami.ApplicationWindow {
         markdown: root.guideText
     }
 
+    SetupWizard {
+        id: wizard
+    }
+
+    // The first time, with nothing in the mixer: the wizard offers itself.
+    // It waits a moment for the state. Anyone who already has strips, or has
+    // been through it once, doesn't see it.
+    Settings {
+        id: firstRun
+        category: "Setup"
+        property bool wizardSeen: false
+    }
+    Timer {
+        interval: 1500
+        running: Devices.connected && !firstRun.wizardSeen && root.startPage.length === 0
+        onTriggered: {
+            firstRun.wizardSeen = true;
+            if (!Devices.hasStrips()) {
+                root.setMini(false);
+                wizard.start(0);
+            }
+        }
+    }
+
     pageStack.initialPage: MixerPage {
         onOpenDevices: root.open(devicesPage)
         onOpenRouting: root.open(routingPage)
         onOpenApps: root.open(appsPage)
         onOpenRecordings: root.open(recordingsPage)
         onOpenSoundboard: root.open(soundboardPage)
+        onOpenMini: root.setMini(true)
     }
 
     Component {
@@ -251,7 +322,12 @@ Kirigami.ApplicationWindow {
             height = Math.min(Math.max(saved.height, minimumHeight), Screen.desktopAvailableHeight);
         }
         sizeRestored = true;
-        if (startPage === "devices")
+        visible = startPage.length > 0 || !saved.mini;
+        if (startPage.length === 0 && saved.mini)
+            miniWindow.open();
+        if (startPage === "mini")
+            miniWindow.open();
+        else if (startPage === "devices")
             open(devicesPage);
         else if (startPage === "routing")
             open(routingPage);
@@ -265,5 +341,7 @@ Kirigami.ApplicationWindow {
             open(aboutPage);
         else if (startPage === "guide")
             userGuide.show();
+        else if (startPage.startsWith("wizard")) // wizard, or wizard2 at that step
+            wizard.start(Number(startPage.slice(6)));
     }
 }

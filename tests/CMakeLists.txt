@@ -13,6 +13,8 @@ function(patchprime_add_test name)
 endfunction()
 
 patchprime_add_test(test_defaultnodename test_defaultnodename.cpp)
+patchprime_add_test(test_effectstrings test_effectstrings.cpp ${PROJECT_SOURCE_DIR}/app/src/effectstrings.cpp)
+target_include_directories(test_effectstrings PRIVATE ${PROJECT_SOURCE_DIR}/app/src)
 patchprime_add_test(test_endpoint test_endpoint.cpp)
 patchprime_add_test(test_devicestore test_devicestore.cpp)
 patchprime_add_test(test_devicemodel test_devicemodel.cpp)

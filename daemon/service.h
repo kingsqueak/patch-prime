@@ -175,6 +175,13 @@ public Q_SLOTS:
     // A mix bus with a fully wet reverb, sent to the outputs in use; strips
     // get reverb by sending to it. An empty name means "Reverb". Returns its key.
     QString CreateReverbBus(const QString &name);
+    // The first-run wizard: the mic and output (keys) in the mixer and made
+    // the system's defaults, through the mixer. desktopName, if any, is a
+    // routed input for desktop sound, which then takes the default output;
+    // streamName, if any, a mix bus for the mic and the desktop. Either key
+    // may be empty. See DeviceModel::applyQuickSetup.
+    void ApplyQuickSetup(const QString &mic, const QString &output, const QString &desktopName,
+                         const QString &streamName);
     // Sends an app's streams to a node (a strip's busName, say), or to the
     // system default when nodeName is empty. Remembered for the app.
     void SetAppTarget(const QString &appKey, const QString &nodeName);

@@ -177,6 +177,21 @@ public:
     void setDeviceScheduling(int row, Scheduling scheduling);
     // Makes a new virtual device, enabled, and returns its key.
     QString createVirtual(const QString &name, EndpointKind kind);
+    // The first-run wizard's choices, applied: the mic and the output in the
+    // mixer, and if named, a routed input for desktop sound to the output
+    // and a mix bus the mic and the desktop go to, for a streaming app to
+    // capture. Strips already there under those names are used again;
+    // nothing else changes, so it's safe to run twice. The mic isn't sent
+    // to the output: that would put you in your own headphones. Empty keys
+    // and names are left out. Returns the keys of the desktop strip and the
+    // bus (empty when not asked for).
+    struct QuickSetup {
+        QString mic;
+        QString output;
+        QString desktop;
+        QString stream;
+    };
+    std::pair<QString, QString> applyQuickSetup(const QuickSetup &setup);
     // Makes a mix bus with a fully wet reverb on it, sent to the outputs that
     // strips send to (every output when none do yet), and returns its key.
     // An empty name means "Reverb"; a name already in use gets a number.
@@ -232,6 +247,8 @@ private:
     [[nodiscard]] int findReattachCandidate(const Endpoint &live) const;
     [[nodiscard]] bool isDefault(const Row &row) const;
     [[nodiscard]] Stage stageOfRow(const Row &row) const;
+    // The strip of a kind with this label (any case), or a new one.
+    [[nodiscard]] QString virtualNamed(const QString &label, EndpointKind kind);
     void insertSorted(Row row);
     void replaceRow(int index, Row row);
     void removeRowAt(int index);
