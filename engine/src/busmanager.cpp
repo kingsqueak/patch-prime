@@ -289,6 +289,7 @@ Properties clockProperties(const std::string &owner)
         {"factory.name", "support.node.driver"},
         {"node.name", std::string(clockNodeName)},
         {"node.description", "Patch Prime clock"},
+        {"node.autoconnect", "false"},
         {"node.group", std::string(nodeGroup)},
         {"priority.driver", std::to_string(clockNodePriority)},
         {"object.linger", "true"},
@@ -582,7 +583,8 @@ BusManager::Latency BusManager::latency(const std::string &key) const
     }
     const int rate = m_devices->store().sampleRate();
     for (const auto &[node, at] : m_plugins) {
-        if (at.first == key && rate > 0) {
+        // (One that's down is bypassed, so it adds nothing just now.)
+        if (at.first == key && rate > 0 && m_runner->isUp(node)) {
             if (const int samples = m_runner->latency(node); samples > 0) {
                 out.effects[at.second] = samples / static_cast<double>(rate);
             }

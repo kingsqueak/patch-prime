@@ -48,11 +48,10 @@ QQC2.ApplicationWindow {
     function rememberHeight() {
         saved.height = Math.abs(height - fitHeight) > 1 ? height : 0;
     }
-    onVisibleChanged: {
-        if (!visible)
+    onHeightChanged: {
+        if (visible)
             rememberHeight();
     }
-    onClosing: rememberHeight()
 
     function open() {
         if (saved.height > 0)
@@ -175,6 +174,8 @@ QQC2.ApplicationWindow {
             Item { Layout.fillWidth: true }
 
             QQC2.ToolButton {
+                // Wayland leaves stacking to the compositor.
+                visible: Qt.platform.pluginName !== "wayland"
                 icon.name: "window-pin"
                 text: qsTr("Keep on Top")
                 display: QQC2.AbstractButton.IconOnly
@@ -226,20 +227,11 @@ QQC2.ApplicationWindow {
                 Repeater {
                     model: mini.appKeys
 
-                    delegate: MiniRow {
+                    delegate: AppCompactRow {
                         required property string modelData
-                        readonly property var app: Devices.apps.find(a => a.key === modelData) || ({})
-                        readonly property bool known: app.volumeDb !== undefined && app.volumeDb !== null
-                        readonly property var levels: (Devices.appLevels[modelData] || {}).levels || []
 
                         Layout.fillWidth: true
-                        label: app.name || modelData
-                        muted: app.muted === true
-                        volumeDb: known ? app.volumeDb : 0
-                        level: levels.length > 0 ? Math.max(...levels) : 0
-                        usable: Devices.daemonRunning && known
-                        onRequestedVolume: db => Devices.setAppVolume(modelData, db)
-                        onRequestedMute: on => Devices.setAppMuted(modelData, on)
+                        appKey: modelData
                     }
                 }
             }

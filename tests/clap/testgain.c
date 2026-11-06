@@ -87,7 +87,7 @@ static bool params_get_info(const clap_plugin_t *plugin, uint32_t index, clap_pa
         info->id = PARAM_RESTART;
         strcpy(info->name, "Restart");
         info->flags |= CLAP_PARAM_IS_STEPPED;
-        info->max_value = 1.0;
+        info->max_value = 2.0; // 2: asks again and again, and never settles
         return true;
     case 2:
         info->id = PARAM_HALVE;
@@ -143,7 +143,7 @@ static void apply_events(TestGain *self, const clap_input_events_t *in)
         self->halve = 0.0;
         self->reportHalve = true;
     }
-    if (self->restart > 0.5 && !self->restartAsked) {
+    if (self->restart > 1.5 || (self->restart > 0.5 && !self->restartAsked)) {
         self->restartAsked = true;
         self->host->request_restart(self->host); // allowed on the audio thread
     } else if (self->restart <= 0.5) {

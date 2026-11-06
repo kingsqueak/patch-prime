@@ -7,7 +7,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kingsqueak.patchprime.engine
 
-// One level in the mini window: the name and mute on a line, then a slim
+// One level in a compact list (the mini window, the collapsed Apps): the name and mute on a line, then a slim
 // meter and a level slider. `requestedVolume` and `requestedMute` ask for a
 // change; the owner passes them on, and the values come back from the daemon.
 ColumnLayout {
@@ -18,6 +18,7 @@ ColumnLayout {
     property real volumeDb: 0
     property real level: 0 // the louder channel, 0..1 of the meter
     property bool usable: true
+    property string iconName // an app's, in front of its name
 
     signal requestedVolume(real db)
     signal requestedMute(bool on)
@@ -27,6 +28,15 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
         spacing: Style.gap
+
+        Kirigami.Icon {
+            visible: row.iconName.length > 0
+            implicitWidth: Kirigami.Units.iconSizes.small
+            implicitHeight: Kirigami.Units.iconSizes.small
+            source: row.iconName
+            fallback: "application-x-executable"
+            opacity: row.muted ? 0.4 : 1
+        }
 
         QQC2.Label {
             Layout.fillWidth: true

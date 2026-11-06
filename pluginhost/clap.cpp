@@ -802,6 +802,13 @@ void ClapEffect::restartIfAsked()
     }
     // Stopped: the audio thread leaves it all alone from here on.
     m_restartWanted.store(false);
+    const auto now = std::chrono::steady_clock::now();
+    m_restartsInARow = now - m_lastRestart < std::chrono::seconds(1) ? m_restartsInARow + 1 : 1;
+    m_lastRestart = now;
+    if (m_restartsInARow > restartBurst) {
+        m_restartFailed = true;
+        return;
+    }
     for (auto &instance : m_instances) {
         if (instance->active) {
             instance->plugin->deactivate(instance->plugin);

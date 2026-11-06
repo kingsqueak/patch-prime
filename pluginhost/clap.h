@@ -10,6 +10,7 @@
 #include <clap/clap.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -164,6 +165,11 @@ private:
     // passes the sound through meanwhile.
     std::atomic<bool> m_restartWanted{false};
     bool m_restartFailed = false;
+    // Restarts in a row less than a second apart: past restartBurst, it's
+    // handed to the engine, whose crash limit stops a plugin that never settles.
+    static constexpr int restartBurst = 3;
+    int m_restartsInARow = 0;
+    std::chrono::steady_clock::time_point m_lastRestart;
     double m_sampleRate = 48000.0;
     int m_channels = 0;
     std::thread::id m_mainThread;

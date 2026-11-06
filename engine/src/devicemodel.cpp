@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <cmath>
 #include <tuple>
 #include <utility>
 
@@ -295,7 +296,7 @@ void DeviceModel::setEnabled(int row, bool enabled)
 
 void DeviceModel::setVolume(int row, double volumeDb)
 {
-    if (row < 0 || row >= rowCount()) {
+    if (row < 0 || row >= rowCount() || !std::isfinite(volumeDb)) {
         return;
     }
     volumeDb = std::clamp(volumeDb, minimumVolumeDb(), maximumVolumeDb());
@@ -629,6 +630,9 @@ void DeviceModel::setCueOutput(const std::string &key)
 
 void DeviceModel::setCueLevel(double db)
 {
+    if (!std::isfinite(db)) {
+        return;
+    }
     db = std::clamp(db, minimumVolumeDb(), maximumVolumeDb());
     if (db == m_store->cueLevelDb()) {
         return;
@@ -725,7 +729,7 @@ void DeviceModel::setDeviceScheduling(int row, Scheduling scheduling)
 
 void DeviceModel::setSendLevel(int row, const QString &destinationKey, double db)
 {
-    if (row < 0 || row >= rowCount()) {
+    if (row < 0 || row >= rowCount() || !std::isfinite(db)) {
         return;
     }
     const auto &r = m_rows[static_cast<std::size_t>(row)];

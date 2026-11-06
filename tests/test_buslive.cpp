@@ -1497,6 +1497,12 @@ private Q_SLOTS:
         const float louder = peakWhilePlaying(1200);
         QVERIFY2(louder > 0.012F && louder < 0.035F, qPrintable(QString::number(louder)));
 
+        // One that never stops asking is given up on, like one that crashes,
+        // and the strip goes on without it.
+        devices.setEffectParam(micRow(), 0, QStringLiteral("4"), 2.0);
+        QVERIFY(QTest::qWaitFor([&] { return !buses.pluginErrors().empty(); }, 20000));
+        QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, mic, inBus) == 2; }, 5000));
+
         devices.removeEffect(micRow(), 0);
         QVERIFY(QTest::qWaitFor(
             [&] { return linkCount(m_graph, mic, inBus) == 2 && nodeNamed(m_graph, plug) == nullptr; },

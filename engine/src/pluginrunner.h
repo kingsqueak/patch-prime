@@ -91,6 +91,8 @@ public:
     // The plugin's latency (samples at its rate) as its host last reported
     // it, whether or not it's on; 0 until it has.
     [[nodiscard]] int latency(const std::string &node) const;
+    // Whether its host is running with its node up (else the strip goes round it).
+    [[nodiscard]] bool isUp(const std::string &node) const;
     // The plugin's input and output levels, measured while metering is on.
     void setMetering(const std::string &node, bool on);
     std::optional<EffectLevels> takeLevels(const std::string &node);

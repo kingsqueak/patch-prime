@@ -76,7 +76,7 @@ QQC2.Control {
 
     // With the keyboard anywhere on the strip: M mutes it, C cues it.
     Keys.onPressed: event => {
-        if (event.modifiers !== Qt.NoModifier || !Devices.daemonRunning)
+        if (event.modifiers !== Qt.NoModifier || event.isAutoRepeat || !Devices.daemonRunning)
             return;
         if (event.key === Qt.Key_M) {
             Devices.setMuted(key, !muted);

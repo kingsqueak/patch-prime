@@ -137,6 +137,12 @@ int PluginRunner::latency(const std::string &node) const
     return it == m_hosts.end() ? 0 : it->second->latency;
 }
 
+bool PluginRunner::isUp(const std::string &node) const
+{
+    const auto it = m_hosts.find(node);
+    return it != m_hosts.end() && it->second->ready;
+}
+
 void PluginRunner::setMetering(const std::string &node, bool on)
 {
     const auto it = m_hosts.find(node);

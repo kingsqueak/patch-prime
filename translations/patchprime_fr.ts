@@ -7,23 +7,6 @@
         <source>Hide from the Mixer</source>
         <translation>Cacher du mixage</translation>
     </message>
-    <message>
-        <source>M</source>
-        <comment>mute button</comment>
-        <translation>M</translation>
-    </message>
-    <message>
-        <source>Mute %1</source>
-        <translation>Muet %1</translation>
-    </message>
-    <message>
-        <source>Level for %1</source>
-        <translation>Niveau de %1</translation>
-    </message>
-    <message>
-        <source>%1 dB (double-click for 0 dB)</source>
-        <translation>%1 dB (double-clic pour 0 dB)</translation>
-    </message>
 </context>
 <context>
     <name>AppStrip</name>
