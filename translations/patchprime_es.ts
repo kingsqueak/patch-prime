@@ -1611,6 +1611,10 @@
         <translation>Guía del &amp;usuario de Patch Prime</translation>
     </message>
     <message>
+        <source>&amp;Keyboard Shortcuts</source>
+        <translation>A&amp;tajos de teclado</translation>
+    </message>
+    <message>
         <source>User Guide &amp;Online</source>
         <translation>Guía del usuario en &amp;línea</translation>
     </message>
@@ -2720,6 +2724,50 @@ Este programa se distribuye con la esperanza de que sea útil, pero SIN NINGUNA 
     <message>
         <source>User Guide</source>
         <translation>Guía del usuario</translation>
+    </message>
+    <message>
+        <source>Search the guide…</source>
+        <translation>Buscar en la guía…</translation>
+    </message>
+    <message>
+        <source>Search the user guide</source>
+        <translation>Buscar en la guía de usuario</translation>
+    </message>
+    <message>
+        <source>User guide index</source>
+        <translation>Índice de la guía de usuario</translation>
+    </message>
+    <message>
+        <source>Contents</source>
+        <translation>Contenido</translation>
+    </message>
+    <message>
+        <source>Search results</source>
+        <translation>Resultados de la búsqueda</translation>
+    </message>
+    <message>
+        <source>No matches</source>
+        <translation>Sin resultados</translation>
+    </message>
+    <message>
+        <source>Try a shorter or a more common word.</source>
+        <translation>Pruebe con una palabra más corta o más común.</translation>
+    </message>
+    <message>
+        <source>Back</source>
+        <translation>Atrás</translation>
+    </message>
+    <message>
+        <source>Forward</source>
+        <translation>Adelante</translation>
+    </message>
+    <message>
+        <source>Previous Topic</source>
+        <translation>Tema anterior</translation>
+    </message>
+    <message>
+        <source>Next Topic</source>
+        <translation>Tema siguiente</translation>
     </message>
     <message>
         <source>The user guide isn&apos;t available in this build.</source>

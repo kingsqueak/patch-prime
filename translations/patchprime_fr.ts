@@ -1611,6 +1611,10 @@
         <translation>Guide d&apos;&amp;utilisation de Patch Prime</translation>
     </message>
     <message>
+        <source>&amp;Keyboard Shortcuts</source>
+        <translation>Raccourcis &amp;clavier</translation>
+    </message>
+    <message>
         <source>User Guide &amp;Online</source>
         <translation>Guide d&apos;utilisation &amp;en ligne</translation>
     </message>
@@ -2720,6 +2724,50 @@ Ce programme est distribué dans l&apos;espoir qu&apos;il sera utile, mais SANS 
     <message>
         <source>User Guide</source>
         <translation>Guide d&apos;utilisation</translation>
+    </message>
+    <message>
+        <source>Search the guide…</source>
+        <translation>Rechercher dans le guide…</translation>
+    </message>
+    <message>
+        <source>Search the user guide</source>
+        <translation>Rechercher dans le guide d&apos;utilisation</translation>
+    </message>
+    <message>
+        <source>User guide index</source>
+        <translation>Index du guide d&apos;utilisation</translation>
+    </message>
+    <message>
+        <source>Contents</source>
+        <translation>Sommaire</translation>
+    </message>
+    <message>
+        <source>Search results</source>
+        <translation>Résultats de la recherche</translation>
+    </message>
+    <message>
+        <source>No matches</source>
+        <translation>Aucun résultat</translation>
+    </message>
+    <message>
+        <source>Try a shorter or a more common word.</source>
+        <translation>Essayez un mot plus court ou plus courant.</translation>
+    </message>
+    <message>
+        <source>Back</source>
+        <translation>Précédent</translation>
+    </message>
+    <message>
+        <source>Forward</source>
+        <translation>Suivant</translation>
+    </message>
+    <message>
+        <source>Previous Topic</source>
+        <translation>Sujet précédent</translation>
+    </message>
+    <message>
+        <source>Next Topic</source>
+        <translation>Sujet suivant</translation>
     </message>
     <message>
         <source>The user guide isn&apos;t available in this build.</source>

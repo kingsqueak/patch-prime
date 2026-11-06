@@ -1611,6 +1611,10 @@
         <translation>Patch Prime &amp;Benutzerhandbuch</translation>
     </message>
     <message>
+        <source>&amp;Keyboard Shortcuts</source>
+        <translation>&amp;Tastenkürzel</translation>
+    </message>
+    <message>
         <source>User Guide &amp;Online</source>
         <translation>Benutzerhandbuch &amp;online</translation>
     </message>
@@ -2720,6 +2724,50 @@ Die Veröffentlichung dieses Programms erfolgt in der Hoffnung, dass es Ihnen vo
     <message>
         <source>User Guide</source>
         <translation>Benutzerhandbuch</translation>
+    </message>
+    <message>
+        <source>Search the guide…</source>
+        <translation>Handbuch durchsuchen…</translation>
+    </message>
+    <message>
+        <source>Search the user guide</source>
+        <translation>Das Benutzerhandbuch durchsuchen</translation>
+    </message>
+    <message>
+        <source>User guide index</source>
+        <translation>Inhaltsverzeichnis des Benutzerhandbuchs</translation>
+    </message>
+    <message>
+        <source>Contents</source>
+        <translation>Inhalt</translation>
+    </message>
+    <message>
+        <source>Search results</source>
+        <translation>Suchergebnisse</translation>
+    </message>
+    <message>
+        <source>No matches</source>
+        <translation>Keine Treffer</translation>
+    </message>
+    <message>
+        <source>Try a shorter or a more common word.</source>
+        <translation>Versuchen Sie ein kürzeres oder gebräuchlicheres Wort.</translation>
+    </message>
+    <message>
+        <source>Back</source>
+        <translation>Zurück</translation>
+    </message>
+    <message>
+        <source>Forward</source>
+        <translation>Vorwärts</translation>
+    </message>
+    <message>
+        <source>Previous Topic</source>
+        <translation>Vorheriges Thema</translation>
+    </message>
+    <message>
+        <source>Next Topic</source>
+        <translation>Nächstes Thema</translation>
     </message>
     <message>
         <source>The user guide isn&apos;t available in this build.</source>

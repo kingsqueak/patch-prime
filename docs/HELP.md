@@ -2,29 +2,85 @@
 
 Patch Prime turns your computer's audio into a small mixing console. This guide covers everything in the app, from the first setup to effects and troubleshooting.
 
-- [The idea in one minute](#the-idea-in-one-minute)
-- [First setup](#first-setup)
-- [The mixer](#the-mixer)
-- [Mix buses and virtual devices](#mix-buses-and-virtual-devices)
-- [Routing](#routing)
-- [Apps](#apps)
-- [Scenes](#scenes)
-- [Recording and playback](#recording-and-playback)
-- [Soundboard](#soundboard)
-- [Cue (headphones)](#cue-headphones)
-- [Effects](#effects)
-- [Meters](#meters)
-- [Audio engine settings](#audio-engine-settings)
-- [Control surface (Mackie Control)](#control-surface-mackie-control)
-- [MIDI controllers (MIDI Learn)](#midi-controllers-midi-learn)
-- [Global hotkeys](#global-hotkeys)
-- [Scripts and Stream Deck (patchprime-ctl)](#scripts-and-stream-deck-patchprime-ctl)
-- [Tray icon and on-screen messages](#tray-icon-and-on-screen-messages)
-- [Unplugging and plugging in devices](#unplugging-and-plugging-in-devices)
-- [Recipes](#recipes)
-- [Troubleshooting](#troubleshooting)
+- **[Getting started](#getting-started)**
+  - [The idea in one minute](#the-idea-in-one-minute)
+  - [First setup](#first-setup)
+  - [Finding your way around](#finding-your-way-around)
+- **[Mixing](#mixing)**
+  - [A channel strip](#a-channel-strip)
+  - [Mix buses and virtual devices](#mix-buses-and-virtual-devices)
+  - [Routing](#routing)
+  - [Scenes](#scenes)
+  - [Mini window](#mini-window)
+- **[Apps](#apps)**
+  - [App routes](#app-routes)
+  - [App strips](#app-strips)
+- **[Monitoring and meters](#monitoring-and-meters)**
+  - [Cue (headphones)](#cue-headphones)
+  - [Meters](#meters)
+  - [Loudness for publishing](#loudness-for-publishing)
+  - [Effect meters](#effect-meters)
+- **[Effects](#effects)**
+  - [Working with effects](#working-with-effects)
+  - [Parametric EQ](#parametric-eq)
+  - [Compressor](#compressor)
+  - [De-esser](#de-esser)
+  - [Expander](#expander)
+  - [Multiband compressor](#multiband-compressor)
+  - [Noise gate](#noise-gate)
+  - [Noise suppression](#noise-suppression)
+  - [Ducker](#ducker)
+  - [Broadcast leveler](#broadcast-leveler)
+  - [Safety limiter](#safety-limiter)
+  - [Reverb](#reverb)
+  - [Delay (line up outputs)](#delay-line-up-outputs)
+  - [Gain](#gain)
+  - [Presets](#presets)
+  - [Plugins (LV2, CLAP and VST3)](#plugins-lv2-clap-and-vst3)
+- **[Recording and playback](#recording-and-playback)**
+  - [Recording a strip](#recording-a-strip)
+  - [Recordings list and player](#recordings-list-and-player)
+  - [Multitrack takes](#multitrack-takes)
+  - [Setting up a mic's effects on a recording](#setting-up-a-mics-effects-on-a-recording)
+- **[Soundboard](#soundboard)**
+  - [Using the soundboard](#using-the-soundboard)
+- **[Hardware and remote control](#hardware-and-remote-control)**
+  - [Control surface (Mackie Control)](#control-surface-mackie-control)
+  - [MIDI controllers (MIDI Learn)](#midi-controllers-midi-learn)
+  - [Global hotkeys](#global-hotkeys)
+  - [Scripts and Stream Deck (patchprime-ctl)](#scripts-and-stream-deck-patchprime-ctl)
+  - [Tray icon and on-screen messages](#tray-icon-and-on-screen-messages)
+- **[Engine and devices](#engine-and-devices)**
+  - [Audio engine settings](#audio-engine-settings)
+  - [Unplugging and plugging in devices](#unplugging-and-plugging-in-devices)
+  - [Where your settings are](#where-your-settings-are)
+- **[Recipes](#recipes)**
+  - [Stream your mic and desktop sound, hear them in headphones](#stream-your-mic-and-desktop-sound-hear-them-in-headphones)
+  - [Clean up a microphone](#clean-up-a-microphone)
+  - [Music that dips while you talk](#music-that-dips-while-you-talk)
+  - [A shared reverb](#a-shared-reverb)
+  - [Check your stream's loudness](#check-your-streams-loudness)
+- **[Troubleshooting](#troubleshooting)**
+  - [No sound from a strip](#no-sound-from-a-strip)
+  - [I hear myself late, or twice](#i-hear-myself-late-or-twice)
+  - [The window says the engine isn't running](#the-window-says-the-engine-isnt-running)
+  - [An app doesn't show my virtual devices by name](#an-app-doesnt-show-my-virtual-devices-by-name)
+  - [An app ignores the route I chose](#an-app-ignores-the-route-i-chose)
+  - [The other interfaces glitch when I unplug my master interface](#the-other-interfaces-glitch-when-i-unplug-my-master-interface)
+  - [I want everything Patch Prime made gone from PipeWire](#i-want-everything-patch-prime-made-gone-from-pipewire)
+- **[Reference](#reference)**
+  - [Keyboard shortcuts](#keyboard-shortcuts)
+  - [Languages](#languages)
+  - [Accessibility](#accessibility)
+  - [Glossary](#glossary)
 
-## The idea in one minute
+## Getting started
+
+How Patch Prime thinks about sound, how to set it up, and where everything is.
+
+### The idea in one minute
+
+<!-- keywords: overview, concept, inputs, buses, outputs, stages -->
 
 Patch Prime works in three stages, left to right, like a console:
 
@@ -36,7 +92,9 @@ A strip sends its sound to strips in a later stage: an input to a mix bus or an 
 
 The engine runs in the background, so closing the window changes nothing: your routing keeps working, and it all comes back after a reboot.
 
-## First setup
+### First setup
+
+<!-- keywords: wizard, install, begin, start, default device -->
 
 The first time you open Patch Prime with nothing in the mixer, the **setup wizard** offers to do this for you. It asks which microphone and which headphones or speakers you use, whether desktop sound should go through the mixer, and whether you stream or record, then makes those strips and sets the system's defaults. It doesn't send your mic to your headphones, so you won't hear yourself. Run it again any time with **Help → Setup Wizard…**: it only adds what's missing.
 
@@ -50,9 +108,36 @@ To do it by hand:
 
 If you want apps to play through Patch Prime by default, click the **star** (Default) on the output or virtual input you want them to use. For your microphone, click the star on its input strip; apps then record your mic *with* its effects.
 
-## The mixer
+### Finding your way around
+
+<!-- keywords: menu, pages, navigation, help, search, index, f1 -->
+
+The menus and the buttons at the top right of the mixer go to the same pages:
+
+| Page | Keys | What it's for |
+|---|---|---|
+| **Mixer** | Ctrl+1 | Every strip: levels, mutes, sends, effects. See [A channel strip](#a-channel-strip). |
+| **Apps** | Ctrl+2 | Where each application plays or records. See [App routes](#app-routes). |
+| **Routing** | Ctrl+3 | Every send at once, as a grid. See [Routing](#routing). |
+| **Devices** | Ctrl+4 | Which devices are in the mixer, virtual devices, the audio engine, controllers, hotkeys. |
+| **Recordings** | Ctrl+5 | Your recordings, the player, the loudness meter. See [Recording a strip](#recording-a-strip). |
+| **Soundboard** | Ctrl+6 | Sounds to play on cue. See [Soundboard](#soundboard). |
+
+Above the strips, the top row of the mixer has **Scene**, to save and load the whole mix (see [Scenes](#scenes)), and **Cue**, to choose your headphones for cue (see [Cue (headphones)](#cue-headphones)).
+
+- **File → Quit** (Ctrl+Q) closes the window. The engine keeps running, so your audio doesn't stop.
+- **View → Mini Window** (Ctrl+M) collapses the mixer to a narrow stack of levels. See [Mini window](#mini-window).
+- **Help → Patch Prime User Guide** (F1) opens this guide in a window of its own, built into the app so it works offline. **User Guide Online** opens it on GitHub, **Keyboard Shortcuts** goes straight to [that list](#keyboard-shortcuts), **Setup Wizard…** runs the [setup wizard](#first-setup), **Report a Bug…** opens the issue tracker, and **About Patch Prime** shows the version and license.
+
+In this guide's window, the index on the left lists the topics by what they're about, and the search box above it looks through everything as you type. Ctrl+F jumps to the search box.
+
+## Mixing
+
+Levels, sends and mixes: the strips themselves, the buses they feed, and saving the result.
 
 ### A channel strip
+
+<!-- keywords: fader, mute, insert, send, star, default, mono, level, volume, record, label -->
 
 From top to bottom:
 
@@ -76,20 +161,9 @@ On a hardware **input**, effects run *before* the fader, as on a console, so app
 
 The mixer scrolls sideways when there are more strips than fit. The window opens at the size you last left it (made smaller if it wouldn't fit on the screen).
 
-### The top row
+### Mix buses and virtual devices
 
-- **Scene**: save and load the whole mix. See [Scenes](#scenes).
-- **Cue**: choose your headphones for cue. See [Cue](#cue-headphones).
-
-### Menus and shortcuts
-
-- **File → Quit** (Ctrl+Q) closes the window. The engine keeps running, so your audio doesn't stop.
-- **View** switches pages: **Mixer** (Ctrl+1), **Apps** (Ctrl+2), **Routing** (Ctrl+3), **Devices** (Ctrl+4), **Recordings** (Ctrl+5), **Soundboard** (Ctrl+6).
-- **View → Mini Window** (Ctrl+M, or **Mini** at the top right) collapses the mixer to a narrow window: every level in a stack, each with its name, a mute and a slider, inputs first, then apps, mix buses and outputs. The button at its top left (or Ctrl+M) brings the full mixer back, and the pin keeps it above other windows (on X11; under Wayland use a KWin window rule, or right-click its title bar → More Actions → Keep Above Others). Closing it closes Patch Prime's window as usual (the engine keeps running), and Patch Prime opens the way you left it.
-- **In the mixer, from the keyboard:** Tab moves between controls. On a fader, the arrow keys change the level by 1 dB, Page Up and Page Down by 6 dB, Home sets 0 dB, End turns it right down, and Enter lets you type a level. Anywhere on a strip, **M** mutes it and **C** cues it. Ctrl+W closes an effects window or this guide.
-- **Help → Patch Prime User Guide** (F1) opens this guide in a window of its own, built into the app so it works offline; **User Guide Online** opens it on GitHub; **Report a Bug…** opens the issue tracker; **About Patch Prime** shows the version and license.
-
-## Mix buses and virtual devices
+<!-- keywords: virtual input, virtual microphone, sink, source, obs, discord, chat mic, desktop, add device -->
 
 On the **Devices** page, **Add Virtual Device…** makes one of three kinds:
 
@@ -101,7 +175,9 @@ On the **Devices** page, **Add Virtual Device…** makes one of three kinds:
 
 Virtual devices show in other apps under readable names such as `patchprime.stream-mix`. Delete one with the **✕** next to it on the Devices page.
 
-## Routing
+### Routing
+
+<!-- keywords: matrix, grid, send, patch, connect -->
 
 The **Routing** page shows every send at once. Rows are the strips that send (inputs, then mix buses); columns are the ones that receive (mix buses, then outputs).
 
@@ -109,30 +185,9 @@ The **Routing** page shows every send at once. Rows are the strips that send (in
 - Under a lit send: a slider for that send's level, and the level in dB (click it to type one).
 - Sends only go to a later stage, so a mix bus row only has buttons under outputs.
 
-## Apps
+### Scenes
 
-The **Apps** page lists applications that play or record sound, running or not.
-
-- Pick where each app plays to (or records from): a strip, or "System default".
-- The choice is remembered and applied whenever the app starts.
-- Apps that aren't running have a **✕** to forget them.
-- If an app chooses its own device in its settings (Audacity's device setting, for example), that choice wins and is remembered as its route.
-- The eye button shows or hides a playback app's strip in the mixer.
-
-### App strips
-
-Every running app that plays sound gets a strip in the mixer, under **Apps**, between the inputs and the mix buses:
-
-- **The fader and M** set the app's own volume and mute. It's the same volume Plasma's volume applet shows for that app, so the two always agree, and it's remembered for the app the next time it plays.
-- **The meter** shows what the app plays, after its volume.
-- **The button under the icon** is where it plays, as on the Apps page.
-- An app with several streams (a browser with two tabs playing) moves them all together.
-
-Strips come and go as apps start and stop playing. To leave an app out of the mixer (system sounds, say), right-click its strip and choose **Hide from the Mixer**. Show it again from the Apps page.
-
-With many apps playing, click the **APPS** heading to fold them into one column: each app becomes a compact row (icon, name, **M**, a meter and a level slider). Click it again for full strips. Patch Prime remembers which you chose.
-
-## Scenes
+<!-- keywords: snapshot, save, load, recall, presets, whole mix -->
 
 A scene is the whole mix saved under a name:
 
@@ -147,56 +202,55 @@ Devices, labels and engine settings are not part of scenes.
 - **Load** sets the mix to the chosen scene, without restarting anything.
 - **✕** deletes the chosen scene. The mix stays as it is.
 
-## Recording and playback
+### Mini window
 
-Inputs, mix buses (Stream Mix, for example) and routed inputs (Desktop) can be recorded to a file. Press **Record** at the bottom of the strip, and press it again to stop. Several strips can record at once.
+<!-- keywords: compact, small, narrow, collapse, always on top, keep above -->
 
-- **What's recorded** on a mix bus or Desktop is what the strip sends on, after its effects and its fader: what the rest of the mix hears from it, and what OBS would capture. On a hardware **input** (a microphone) you choose, with **Inputs raw** or **Inputs processed** in the Recordings panel or on the Recordings page: raw is the sound as the device sends it, before the strip's effects and fader (the default; for processing later, or for setting up the effects on it, below); processed is after its effects and fader, as the mix hears it. The choice applies at once, also to a recording already running. A mono input records in mono (the same sound in both channels).
-- **Where:** files go to `~/Music/Patch Prime`, named after the strip and the time, for example `Stream Mix 2026-10-31 11-42-07.flac`.
-- **Format:** choose it in the Recordings panel or on the Recordings page. **FLAC** is lossless at about half the size of WAV. **WAV** is uncompressed. **MP3** is small and plays everywhere, but only up to 48 kHz: at a higher mixer rate an MP3 recording stops at once with a message. FLAC and WAV are 24-bit. The format applies to the next recording.
-- **In time:** some effects make the sound a little late: noise suppression by 10 ms, the safety limiter by about 1.6 ms, and plugins by what they report. A recording taken after a strip's effects leaves that much off its start (and adds as much silence at the end), so it lines up with real time, with raw recordings, and with the other tracks of a take. The amount is the strip's latency when the recording starts. A strip's latency is shown in its effects window. Only a strip's own effects count: a mix bus's recording isn't moved for the effects of the strips feeding it.
-- Recording runs in the engine, so it carries on with the window closed. It stops if you change the mixer's sample rate or the audio server restarts; what was recorded until then is kept.
+Ctrl+M, **View → Mini Window** or the **Mini** button at the top right collapses the mixer to a narrow window: every level in a stack, each with its name, a mute, a small meter and a slider. Inputs come first, then apps, mix buses and outputs.
 
-The **Recordings panel**, to the right of the outputs in the mixer, has the player at the top (play/pause, loop, stop, position, **Play into**), the recording format and the folder button, and the files below it in a scrolling list. The **Recordings** page (View menu, Ctrl+5, or the Recordings button above the mixer) has the same with more room. Both list the files newest first, with their length, size and date.
+- **The button at its top left** (or Ctrl+M) brings the full mixer back.
+- **The pin** keeps it above other windows, on X11. Wayland doesn't let an app do that, so there the pin is hidden: use a KWin window rule, or right-click its title bar and choose **More Actions → Keep Above Others**.
+- **Its height** follows the number of rows until you resize it.
+- **Closing it** closes Patch Prime's window as usual, and the engine keeps running. Patch Prime opens the way you left it.
 
-- **Play** (or double-click a file) plays it through the player. **Play into** chooses the strip it plays into: an input, a mix bus, Desktop or a hardware output. Play into Stream Mix to let your stream hear it, or into your headphones' output to listen alone.
-- The player bar has play/pause, **loop** (play the file over and over), stop and a position slider (drag it to jump).
+## Apps
 
-### Multitrack takes
+Patch Prime sees every application that plays or records sound, and can place each one in the mix.
 
-A take records several strips at once, each to its own file, all starting on the same sample, so they line up as tracks in Audacity, Reaper or Ardour. Record your mic, a guest and the stream mix together, then fix the levels or the edit afterwards.
+### App routes
 
-1. Turn on **Multitrack** in the Recordings panel (or on the Recordings page). The strips' **Record** buttons now read **Arm**.
-2. Click **Arm** on each strip you want in the take. An armed strip's button is outlined in red and its dot blinks. Strips stay armed until you disarm them.
-3. Press **Record Take**. Every armed strip records; its button shows the time. Press **Stop Take** (or any recording strip's button) to stop them all.
+<!-- keywords: application, program, browser, default device, target, assign, per app -->
 
-- **Where:** each take gets a folder, `Take 2026-11-02 14-30-00`, in the recordings folder, with one file per strip named after it: `Mic.flac`, `Stream Mix.flac`. The recordings list shows them as, for example, "Mic.flac (take 2026-11-02 14-30-00)". Moving a take's last file to the trash removes its folder.
-- **Mono inputs** are recorded as mono files; stereo strips as stereo.
-- **Inputs raw** or **Inputs processed** applies to takes too: raw records hardware inputs before their effects, processed after their effects and fader. Mix buses and Desktop are always recorded as mixed.
-- With Multitrack off, the Record buttons record their strip on its own again, as before.
-- **Record Take** can also be started from the tray menu, a hotkey or a MIDI button (right-click **Record Take**), or `patchprime-ctl take`.
+The **Apps** page lists applications that play or record sound, running or not.
 
-### Setting up a mic's effects on a recording
+- Pick where each app plays to (or records from): a strip, or "System default".
+- The choice is remembered and applied whenever the app starts.
+- Apps that aren't running have a **✕** to forget them.
+- If an app chooses its own device in its settings (Audacity's device setting, for example), that choice wins and is remembered as its route.
+- The eye button shows or hides a playback app's strip in the mixer.
 
-You can't really hear your own voice while you talk, so tuning a gate or a compressor live is guesswork. Instead:
+### App strips
 
-1. With **Inputs raw** chosen (the default), press **Record** on the mic's strip and talk for half a minute the way you normally do, then stop. This records the mic before its effects.
-2. On the Recordings page, choose the mic in **Play into** (it reads "MAMic1 (instead of the device)", for example), turn on **loop**, and play the recording.
-3. While it plays, the mic's strip hears the recording *instead of* the microphone: the device is cut off, and the strip's status line reads **▶ Playback**. The recording goes through the strip's whole effects chain, its fader and its sends, exactly as your voice would.
-4. Open the strip's effects and adjust them while you listen (cue the strip, or listen on the output it's sent to). Stop the player when you're done: the microphone is connected again at once.
-- **Move to Trash** puts a file in the desktop's trash, from which you can still restore it.
-- **Open Folder** opens the recordings folder in the file manager.
+<!-- keywords: volume per application, hide, compact, folded, browser tab -->
 
-## Soundboard
+Every running app that plays sound gets a strip in the mixer, under **Apps**, between the inputs and the mix buses:
 
-The soundboard plays sound files on cue (an intro, applause, a stinger) into one strip: a mix bus such as Stream Mix, or Desktop to be heard everywhere Desktop goes. Open it from the **Soundboard** button (Ctrl+6), or use its column at the right of the mixer.
+- **The fader and M** set the app's own volume and mute. It's the same volume Plasma's volume applet shows for that app, so the two always agree, and it's remembered for the app the next time it plays.
+- **The meter** shows what the app plays, after its volume.
+- **The button under the icon** is where it plays, as on the Apps page.
+- An app with several streams (a browser with two tabs playing) moves them all together.
 
-- **Add Sounds…** adds WAV, FLAC, MP3 or Ogg files as pads, named after the files. The first pad plays into your first mix bus; change that under **Plays into**.
-- **Click a pad** to play it, and again to stop it. Several pads can play at once. A playing pad is lit, with its progress along the bottom. **Stop All** stops them all.
-- **Right-click a pad** to rename it, set its level, or make it loop (it then plays until clicked again). Remove it from there too.
-- **From anywhere:** right-click a pad and choose **MIDI Learn** to play it from a controller's pad or button, or **Add Hotkey…** for a key. The tray icon's menu has the pads too, and `patchprime-ctl pad <name>` plays one from a script or a Stream Deck button.
+Strips come and go as apps start and stop playing. To leave an app out of the mixer (system sounds, say), right-click its strip and choose **Hide from the Mixer**. Show it again from the Apps page.
 
-## Cue (headphones)
+With many apps playing, click the **APPS** heading to fold them into one column: each app becomes a compact row (icon, name, **M**, a meter and a level slider). Click it again for full strips. Patch Prime remembers which you chose.
+
+## Monitoring and meters
+
+Hearing one thing on its own, and reading what the meters say.
+
+### Cue (headphones)
+
+<!-- keywords: solo, pfl, afl, pre-fader listen, after-fader listen, headphones, monitor, listen -->
 
 Cue lets you listen to a strip in your headphones without changing what goes to your stream or speakers.
 
@@ -214,7 +268,51 @@ Once a cue output is chosen, two more controls appear beside it:
 
 Cue is temporary: it isn't saved, and it isn't part of scenes. Set **Cue** to **Off** to turn it off and clear every cue.
 
+### Meters
+
+<!-- keywords: rms, peak, peak hold, level, clipping, lufs, signal light, vu -->
+
+Each channel's meter shows three things:
+
+- a **solid bar**: the RMS level, roughly how loud it sounds;
+- a **lighter bar** above it: the peak level;
+- a **thin line**: the highest recent peak. It holds for about a second and a half, then falls.
+
+The colors turn yellow near full scale and red at the top.
+
+Mix buses and outputs show their **loudness** under the meters: short-term LUFS over the last 3 seconds. Streams usually aim for about −14 to −16, podcasts −16, and broadcast −23. For a measurement to publish by, use the Loudness meter (next).
+
+The light by each strip's name glows whenever sound passes, even sound far too quiet for the meters. It's handy for checking that a route works.
+
+### Loudness for publishing
+
+<!-- keywords: lufs, ebu r128, bs.1770, atsc, true peak, dbtp, lra, integrated, podcast, youtube, spotify, normalise -->
+
+Podcast apps, streaming sites and broadcasters ask for a set loudness, measured the standard way (ITU-R BS.1770, EBU R128). The **Loudness** meter, in the Recordings panel and on the Recordings page, measures one strip like that, for example your Stream Mix or podcast bus.
+
+- **Loudness of …** picks the strip; **Loudness: off** stops it. It measures what the strip sends on, after its effects and fader, all the time, with the window open or closed.
+- **Target:** Podcast (−16 LUFS, −1 dBTP, the default), Streaming (−14 LUFS, −1 dBTP, as YouTube and Spotify use), EBU R128 broadcast (−23 LUFS, −1 dBTP), ATSC A/85 (−24 LUFS, −2 dBTP), or Custom.
+- The big number is the **integrated** loudness: the whole programme since the measurement started, with silence and quiet pauses left out as the standard says. It's green within 1 LU of the target, amber within 2, red beyond, and says how far over or under you are.
+- **Short-term** (the last 3 s) and **Momentary** (the last 0.4 s) show the loudness now; **Range** (LRA) is how much it varies (speech is usually 3–8 LU); **True peak** is the highest peak since the start, including peaks between samples, red when it's over the target's limit.
+- **Reset** starts over. It also starts over by itself when the measured strip starts recording, alone or in a take, so the reading matches the file.
+
+To hit a target: get the integrated reading close with the strip's fader or a **Broadcast leveler** (set its Target to the same LUFS), and put a **Safety limiter** last with **True peak** on and its Ceiling at the target's limit (−1 dB).
+
+### Effect meters
+
+<!-- keywords: gain reduction, gr, meter bridge, threshold line -->
+
+In a strip's effects window every effect shows its input and output levels (the same solid RMS and lighter peak bars, on a scale down to −80 dB) and, for dynamics, its gain reduction as an amber bar hanging from the top; thresholds and the limiter's ceiling are lines across the meters. See [Effects](#effects). The input and output levels are only measured while the effects window is open, so they cost nothing otherwise.
+
+On the mixer, the insert slot of a gate, ducker, multiband compressor, limiter or leveler shows its gain reduction as a thin amber bar along the slot's bottom edge, so you can see an effect working without opening the window.
+
 ## Effects
+
+What each effect does and how to set it. Effects run on a strip, in a chain, and save with it and with scenes.
+
+### Working with effects
+
+<!-- keywords: chain, insert, bypass, bypass all, order, latency, add effect, meter bridge, value, reorder -->
 
 Click a strip's insert slots to open its effects window. The window is separate from the mixer, so you can keep both in view.
 
@@ -229,6 +327,8 @@ Click a strip's insert slots to open its effects window. The window is separate 
 
 ### Parametric EQ
 
+<!-- keywords: equaliser, equalizer, filter, bell, shelf, low cut, high pass, tone, frequency -->
+
 Six bands. Each band can be a bell, a low or high shelf, or a low or high cut (12 dB per octave).
 
 - **On the curve:** drag a numbered handle left and right for frequency, and up and down for gain. Scroll on it to make the band narrower or wider (Q). Double-click it to set its gain to 0 dB.
@@ -238,11 +338,15 @@ A new EQ is flat: a low shelf at 80 Hz, bells at 250 Hz, 1 kHz, 3 kHz and 6 kHz,
 
 ### Compressor
 
+<!-- keywords: dynamics, amount, ratio, attack, release, makeup, voice -->
+
 Evens out a voice: loud words are turned down, so the quiet ones can come up. It's one knob, **Amount**: 0 % does nothing, 40 % is a light touch for speech, 100 % is heavy, radio-style. The knob sets the threshold, ratio, attack, release and makeup gain together, with the makeup chosen so your voice comes out about as loud as it went in, only steadier. The line on IN shows the threshold the knob is using, and GR how much it's turning down.
 
 Turn on **Advanced** for the controls themselves: **Threshold**, **Ratio**, **Attack**, **Release** and **Makeup**, in place of the knob. They start where the knob was, so nothing jumps. Turning Advanced off goes back to the knob, where you left it.
 
 ### De-esser
+
+<!-- keywords: sibilance, harsh, ess, s sounds -->
 
 Softens harsh "s", "sh" and "t" sounds without dulling the voice. It watches the sound above **Frequency** (6 kHz to start), and while that's over **Threshold** it turns down only that part, by up to **Range** dB; the rest of the voice doesn't move. The GR meter shows how much it's cutting.
 
@@ -250,9 +354,13 @@ To set it up, turn on **Listen**: you hear only the part it watches. Move **Freq
 
 ### Expander
 
+<!-- keywords: downward expansion, noise, breaths, room -->
+
 A gentler noise gate: below **Threshold** it turns the sound down gradually instead of shutting it. With **Ratio** 1:2, a sound 10 dB under the threshold comes out 20 dB under; **Range** is the most it will cut. Breaths and room sound between words drop away while the ends of words still trail off naturally. **Attack** is how fast it opens when you speak, **Release** how fast it closes. Put the threshold line between your quiet and your speaking level on IN, as with the gate.
 
 ### Multiband compressor
+
+<!-- keywords: bands, crossover, dynamics -->
 
 Splits the sound into four bands at three crossovers (120 Hz, 1 kHz and 6 kHz to start) and compresses each band separately.
 
@@ -265,13 +373,19 @@ With nothing compressing, the four bands add back up to the original sound exact
 
 ### Noise gate
 
+<!-- keywords: gate, threshold, background noise, keyboard noise -->
+
 Turns the strip down by **Range** when it falls below **Threshold**, so breaths, keyboard and room noise between words don't come through. **Attack**, **Hold** and **Release** set how fast it opens, how long it stays open after you stop, and how fast it closes. The GR meter shows how much it's cutting. To set it, watch IN while you're quiet and while you talk: put the threshold line between the two.
 
 ### Noise suppression
 
+<!-- keywords: denoise, rnnoise, fan, hum, ai, neural, background noise -->
+
 Takes fans, hum and room noise out of a voice with RNNoise, a small neural network. **Amount** blends the cleaned voice with the original; 100 % is fully cleaned. The **Voice** meter shows how sure it is that it hears a voice. It adds 10 ms of delay and works at 48 kHz (at other sample rates it passes the sound through untouched).
 
 ### Ducker
+
+<!-- keywords: ducking, sidechain, side chain, key, dip music, talk over -->
 
 Turns this strip down by **Depth** while its **Key** is above **Threshold**. Use it to dip music or game sound while you talk. **Attack**, **Hold** and **Release** shape the dip.
 
@@ -280,6 +394,8 @@ The key is chosen in the effect's panel. It can be another strip (your mic), or 
 The GR meter shows how far it's dipping. A strip can't be keyed from a strip it feeds, or from a strip keyed by it: that would be a loop, and Patch Prime refuses it.
 
 ### Broadcast leveler
+
+<!-- keywords: agc, automatic gain, loudness, lufs, leveller -->
 
 Slowly turns the strip up or down so it sits at a steady loudness, like a radio station's processing.
 
@@ -292,11 +408,15 @@ The GAIN meter shows the gain it's applying, and **Loudness** what it measures.
 
 ### Safety limiter
 
+<!-- keywords: limit, clipping, ceiling, true peak, brickwall, protection -->
+
 Nothing leaves the strip above the **Ceiling** (−1 dB to start). It looks 1.5 ms ahead, so peaks are caught before they arrive instead of being clipped. **Release** sets how fast it recovers. The GR meter shows how much it's limiting. Put it last on a stream mix or an output.
 
 **True peak:** with it on, the ceiling is in dBTP: the limiter also catches the peaks that form *between* samples when the sound is played back or encoded to MP3 or AAC, which can poke over a sample-peak ceiling by a dB or more. Loudness targets ("−1 dBTP") mean true peak, so turn it on for anything you publish.
 
 ### Reverb
+
+<!-- keywords: room, echo, ambience, tail, reverb bus -->
 
 An algorithmic reverb.
 
@@ -312,13 +432,19 @@ Bypassing a reverb stops new sound going in, and what's already in the room ring
 
 ### Delay (line up outputs)
 
+<!-- keywords: sync, bluetooth, hdmi, tv, lip sync, align -->
+
 Delays the strip by up to one second. Use it on a fast output to line it up with a slower one, such as Bluetooth headphones or an HDMI TV.
 
 ### Gain
 
+<!-- keywords: trim, boost, preamp -->
+
 A plain level trim, ±24 dB.
 
 ### Presets
+
+<!-- keywords: chain preset, effect preset, voice starting points, podcast voice, streaming voice, radio voice, natural voice, noisy room, bookmark -->
 
 Effects settings can be saved and reused:
 
@@ -329,6 +455,8 @@ Effects settings can be saved and reused:
 - Plugins' presets keep the plugin's own state too (what its window changed). Saving a preset or a scene while a plugin's window is open first collects its latest state.
 
 ### Plugins (LV2, CLAP and VST3)
+
+<!-- keywords: lsp, calf, x42, zam, dragonfly, yabridge, scan, third party, crash, plugin window -->
 
 Besides the built-in effects, a strip can run **plugins** in three formats: **LV2**, the Linux plugin format (LSP, x42, ZAM, Calf, Dragonfly and many more); **CLAP**, a newer cross-platform format (LSP, DPF, Dragonfly, Surge, Airwindows...); and **VST3**, the most common format for commercial plugins (Linux builds only; Windows plugins work through [yabridge](https://github.com/robbert-vdh/yabridge)). Install them from your distribution (for example `sudo apt install lsp-plugins-lv2`, `lsp-plugins-clap` or `lsp-plugins-vst3`), or from the maker. Patch Prime looks for CLAP plugins in `~/.clap`, `/usr/lib/clap`, `/usr/local/lib/clap` and the folders in `CLAP_PATH`, and for VST3 plugins in `~/.vst3`, `/usr/lib/vst3` and `/usr/local/lib/vst3`.
 
@@ -344,51 +472,83 @@ Besides the built-in effects, a strip can run **plugins** in three formats: **LV
 - **Plugins run in a separate process each.** If one crashes, the strip carries on without it, and Patch Prime restarts it a second later. If it crashes three times within a minute, it stays off, with a message in the effects window; change any of its settings to try again.
 - Plugins cost what their processing costs; running them in their own processes adds no delay. Built-in effects remain the lightest choice.
 
-## Meters
+## Recording and playback
 
-Each channel's meter shows three things:
+Recording strips to files, playing them back into the mix, and recording several strips in step.
 
-- a **solid bar**: the RMS level, roughly how loud it sounds;
-- a **lighter bar** above it: the peak level;
-- a **thin line**: the highest recent peak. It holds for about a second and a half, then falls.
+### Recording a strip
 
-The colors turn yellow near full scale and red at the top.
+<!-- keywords: capture, flac, wav, mp3, inputs raw, inputs processed, music folder, file format -->
 
-Mix buses and outputs show their **loudness** under the meters: short-term LUFS over the last 3 seconds. Streams usually aim for about −14 to −16, podcasts −16, and broadcast −23. For a measurement to publish by, use the Loudness meter (next).
+Inputs, mix buses (Stream Mix, for example) and routed inputs (Desktop) can be recorded to a file. Press **Record** at the bottom of the strip, and press it again to stop. Several strips can record at once.
 
-### Loudness for publishing
+- **What's recorded** on a mix bus or Desktop is what the strip sends on, after its effects and its fader: what the rest of the mix hears from it, and what OBS would capture. On a hardware **input** (a microphone) you choose, with **Inputs raw** or **Inputs processed** in the Recordings panel or on the Recordings page: raw is the sound as the device sends it, before the strip's effects and fader (the default; for processing later, or for setting up the effects on it, below); processed is after its effects and fader, as the mix hears it. The choice applies at once, also to a recording already running. A mono input records in mono (the same sound in both channels).
+- **Where:** files go to `~/Music/Patch Prime`, named after the strip and the time, for example `Stream Mix 2026-10-31 11-42-07.flac`.
+- **Format:** choose it in the Recordings panel or on the Recordings page. **FLAC** is lossless at about half the size of WAV. **WAV** is uncompressed. **MP3** is small and plays everywhere, but only up to 48 kHz: at a higher mixer rate an MP3 recording stops at once with a message. FLAC and WAV are 24-bit. The format applies to the next recording.
+- **In time:** some effects make the sound a little late: noise suppression by 10 ms, the safety limiter by about 1.6 ms, and plugins by what they report. A recording taken after a strip's effects leaves that much off its start (and adds as much silence at the end), so it lines up with real time, with raw recordings, and with the other tracks of a take. The amount is the strip's latency when the recording starts. A strip's latency is shown in its effects window. Only a strip's own effects count: a mix bus's recording isn't moved for the effects of the strips feeding it.
+- Recording runs in the engine, so it carries on with the window closed. It stops if you change the mixer's sample rate or the audio server restarts; what was recorded until then is kept.
 
-Podcast apps, streaming sites and broadcasters ask for a set loudness, measured the standard way (ITU-R BS.1770, EBU R128). The **Loudness** meter, in the Recordings panel and on the Recordings page, measures one strip like that, for example your Stream Mix or podcast bus.
+### Recordings list and player
 
-- **Loudness of …** picks the strip; **Loudness: off** stops it. It measures what the strip sends on, after its effects and fader, all the time, with the window open or closed.
-- **Target:** Podcast (−16 LUFS, −1 dBTP, the default), Streaming (−14 LUFS, −1 dBTP, as YouTube and Spotify use), EBU R128 broadcast (−23 LUFS, −1 dBTP), ATSC A/85 (−24 LUFS, −2 dBTP), or Custom.
-- The big number is the **integrated** loudness: the whole programme since the measurement started, with silence and quiet pauses left out as the standard says. It's green within 1 LU of the target, amber within 2, red beyond, and says how far over or under you are.
-- **Short-term** (the last 3 s) and **Momentary** (the last 0.4 s) show the loudness now; **Range** (LRA) is how much it varies (speech is usually 3–8 LU); **True peak** is the highest peak since the start, including peaks between samples, red when it's over the target's limit.
-- **Reset** starts over. It also starts over by itself when the measured strip starts recording, alone or in a take, so the reading matches the file.
+<!-- keywords: playback, play into, loop, trash, delete, open folder -->
 
-To hit a target: get the integrated reading close with the strip's fader or a **Broadcast leveler** (set its Target to the same LUFS), and put a **Safety limiter** last with **True peak** on and its Ceiling at the target's limit (−1 dB).
+The **Recordings panel**, to the right of the outputs in the mixer, has the player at the top (play/pause, loop, stop, position, **Play into**), the recording format and the folder button, and the files below it in a scrolling list. The **Recordings** page (View menu, Ctrl+5, or the Recordings button above the mixer) has the same with more room. Both list the files newest first, with their length, size and date.
 
-The light by each strip's name glows whenever sound passes, even sound far too quiet for the meters. It's handy for checking that a route works.
+- **Play** (or double-click a file) plays it through the player. **Play into** chooses the strip it plays into: an input, a mix bus, Desktop or a hardware output. Play into Stream Mix to let your stream hear it, or into your headphones' output to listen alone.
+- The player bar has play/pause, **loop** (play the file over and over), stop and a position slider (drag it to jump).
 
-### Effect meters
+- **Move to Trash** puts a file in the desktop's trash, from which you can still restore it.
+- **Open Folder** opens the recordings folder in the file manager.
 
-In a strip's effects window every effect shows its input and output levels (the same solid RMS and lighter peak bars, on a scale down to −80 dB) and, for dynamics, its gain reduction as an amber bar hanging from the top; thresholds and the limiter's ceiling are lines across the meters. See [Effects](#effects). The input and output levels are only measured while the effects window is open, so they cost nothing otherwise.
+### Multitrack takes
 
-On the mixer, the insert slot of a gate, ducker, multiband compressor, limiter or leveler shows its gain reduction as a thin amber bar along the slot's bottom edge, so you can see an effect working without opening the window.
+<!-- keywords: arm, tracks, record take, audacity, reaper, ardour, podcast, sample aligned -->
 
-## Audio engine settings
+A take records several strips at once, each to its own file, all starting on the same sample, so they line up as tracks in Audacity, Reaper or Ardour. Record your mic, a guest and the stream mix together, then fix the levels or the edit afterwards.
 
-On the **Devices** page, under **Audio engine**:
+1. Turn on **Multitrack** in the Recordings panel (or on the Recordings page). The strips' **Record** buttons now read **Arm**.
+2. Click **Arm** on each strip you want in the take. An armed strip's button is outlined in red and its dot blinks. Strips stay armed until you disarm them.
+3. Press **Record Take**. Every armed strip records; its button shows the time. Press **Stop Take** (or any recording strip's button) to stop them all.
 
-- **Clock**: what keeps time for all your audio.
-  - **Patch Prime** (recommended): unplugging any interface doesn't interrupt the others.
-  - **An interface's own clock**: for studio setups that want one hardware master. If that interface is unplugged, Patch Prime keeps time until it returns, with a brief glitch on the other interfaces as the clock changes hands.
-- **Sample rate**: 48 kHz is the default and suits almost everything.
-- **Block size**: **Automatic** lets PipeWire choose. Smaller blocks mean less latency and more CPU.
+- **Where:** each take gets a folder, `Take 2026-11-02 14-30-00`, in the recordings folder, with one file per strip named after it: `Mic.flac`, `Stream Mix.flac`. The recordings list shows them as, for example, "Mic.flac (take 2026-11-02 14-30-00)". Moving a take's last file to the trash removes its folder.
+- **Mono inputs** are recorded as mono files; stereo strips as stereo.
+- **Inputs raw** or **Inputs processed** applies to takes too: raw records hardware inputs before their effects, processed after their effects and fader. Mix buses and Desktop are always recorded as mixed.
+- With Multitrack off, the Record buttons record their strip on its own again, as before.
+- **Record Take** can also be started from the tray menu, a hotkey or a MIDI button (right-click **Record Take**), or `patchprime-ctl take`.
 
-Each hardware device has a **settings button** (the sliders icon) for its own sample rate and scheduling. Changing these restarts WirePlumber, which interrupts audio for a few seconds.
+### Setting up a mic's effects on a recording
 
-## Control surface (Mackie Control)
+<!-- keywords: tune, adjust, loop, playback through effects, test recording -->
+
+You can't really hear your own voice while you talk, so tuning a gate or a compressor live is guesswork. Instead:
+
+1. With **Inputs raw** chosen (the default), press **Record** on the mic's strip and talk for half a minute the way you normally do, then stop. This records the mic before its effects.
+2. On the Recordings page, choose the mic in **Play into** (it reads "MAMic1 (instead of the device)", for example), turn on **loop**, and play the recording.
+3. While it plays, the mic's strip hears the recording *instead of* the microphone: the device is cut off, and the strip's status line reads **▶ Playback**. The recording goes through the strip's whole effects chain, its fader and its sends, exactly as your voice would.
+4. Open the strip's effects and adjust them while you listen (cue the strip, or listen on the output it's sent to). Stop the player when you're done: the microphone is connected again at once.
+
+## Soundboard
+
+Sounds played on cue, into one strip.
+
+### Using the soundboard
+
+<!-- keywords: pads, jingle, stinger, sound effects, applause, intro, loop -->
+
+The soundboard plays sound files on cue (an intro, applause, a stinger) into one strip: a mix bus such as Stream Mix, or Desktop to be heard everywhere Desktop goes. Open it from the **Soundboard** button (Ctrl+6), or use its column at the right of the mixer.
+
+- **Add Sounds…** adds WAV, FLAC, MP3 or Ogg files as pads, named after the files. The first pad plays into your first mix bus; change that under **Plays into**.
+- **Click a pad** to play it, and again to stop it. Several pads can play at once. A playing pad is lit, with its progress along the bottom. **Stop All** stops them all.
+- **Right-click a pad** to rename it, set its level, or make it loop (it then plays until clicked again). Remove it from there too.
+- **From anywhere:** right-click a pad and choose **MIDI Learn** to play it from a controller's pad or button, or **Add Hotkey…** for a key. The tray icon's menu has the pads too, and `patchprime-ctl pad <name>` plays one from a script or a Stream Deck button.
+
+## Hardware and remote control
+
+Everything that isn't a mouse in the mixer: controllers, keys, scripts and the tray.
+
+### Control surface (Mackie Control)
+
+<!-- keywords: mcu, x-touch, behringer, icon, faderport, motorised faders, v-pot, bank -->
 
 Patch Prime can be driven from a hardware controller that speaks Mackie Control: a Mackie Control Universal, or a controller in its Mackie (MCU) mode, such as a Behringer X-Touch, an Icon Platform or a PreSonus FaderPort 8.
 
@@ -409,7 +569,9 @@ To choose where the V-Pots send, press **SELECT** on a mix bus or an output, or 
 
 The **master fader** sets the default output's level (or the first output's). **F1** to **F8** load your first eight scenes, in alphabetical order.
 
-## MIDI controllers (MIDI Learn)
+### MIDI controllers (MIDI Learn)
+
+<!-- keywords: midi, nanokontrol, knob, encoder, learn, map, cc, pickup, soft takeover -->
 
 Any other MIDI controller (a fader box, a knob controller, a pad controller, a keyboard's knobs) can drive Patch Prime once you've taught it what each control does.
 
@@ -419,6 +581,7 @@ Any other MIDI controller (a fader box, a knob controller, a pad controller, a k
    - a send's button or level on the **Routing** page
    - an effect's parameter or on/off button in the effects window
    - **Load** in the scene row (for the scene picked there)
+   - a soundboard pad, or **Record Take**
 3. A bar at the bottom of the window says Patch Prime is listening. Move a fader or knob, or press a button, on the controller. That's it. **Cancel** stops listening.
 
 How controls behave:
@@ -430,7 +593,9 @@ How controls behave:
 
 Learning a control again moves it to the new job, and a control learned for something already mapped replaces the old one. The **MIDI mappings** list on the Devices page shows them all, with a button to forget each. Right-clicking a control also offers **Forget MIDI Control**. Mappings are saved, and follow an effect when you move it in the chain.
 
-## Global hotkeys
+### Global hotkeys
+
+<!-- keywords: shortcut, keyboard, push to talk, ptt, push to mute, cough, duck, kglobalaccel, global shortcut -->
 
 Hotkeys work in every app, even with Patch Prime's window closed: mute your mic from a game, hold a key to talk, dip the music while you speak.
 
@@ -443,21 +608,23 @@ Then click the key button and press the key. A single key without Ctrl, Alt or M
 
 What a hotkey can do:
 
-- **Mute on/off**, **Cue on/off**, **Record on/off**, a send or an effect **on/off**, **load a scene**, or **record a take** (start/stop).
+- **Mute on/off**, **Cue on/off**, **Record on/off**, a send or an effect **on/off**, **load a scene**, **play a pad**, or **record a take** (start/stop).
 - **Push to talk**: the strip is unmuted while the key is held, and muted again when you let go. **Push to mute** is the opposite (a cough button).
 - **Duck while held**: the strip drops 15 dB while the key is held, and comes back when you let go (unless you changed its level in the meantime).
 - **Level up** and **Level down**: 1 dB per press. Hold the key to keep going.
 
 The **Hotkeys** list on the Devices page shows them all: click a key to change it, or remove a hotkey. They're KDE global shortcuts, so they also appear in **System Settings → Keyboard → Shortcuts → Patch Prime**, where keys can be changed too. They work on X11 and Wayland.
 
-## Scripts and Stream Deck (patchprime-ctl)
+### Scripts and Stream Deck (patchprime-ctl)
+
+<!-- keywords: command line, cli, terminal, script, automation, streamcontroller, macro, cron, json -->
 
 `patchprime-ctl` controls the mixer from a terminal, a script, or any tool that runs commands: a Stream Deck through StreamController, a macro keyboard, a cron job. Strips are named by their label, in any case (put names with spaces in quotes). Switches take `on`, `off` or `toggle` (the default).
 
 ```
 patchprime-ctl list                      # the strips, their levels and mutes
 patchprime-ctl mute Mic                  # mute on/off
-patchprime-ctl mute Mic off              # (push to talk: "off" on press, "on" on release)
+patchprime-ctl mute Mic off              # unmute (for push to talk, see below)
 patchprime-ctl volume "Stream Mix" -6    # set a level in dB
 patchprime-ctl volume Desktop down 3     # nudge it (1 dB without a number)
 patchprime-ctl cue Mic
@@ -468,12 +635,15 @@ patchprime-ctl send Mic "Stream Mix" on
 patchprime-ctl send-level Mic "Stream Mix" up
 patchprime-ctl effect Mic 2 off          # the strip's second effect
 patchprime-ctl record "Stream Mix"
-patchprime-ctl arm Mic on               # multitrack: arm a strip for the next take
-patchprime-ctl take                     # start (or stop) the take
-patchprime-ctl loudness "Stream Mix"    # measure a strip's loudness
-patchprime-ctl loudness                 # print the readings
+patchprime-ctl multitrack on             # Record buttons arm strips
+patchprime-ctl arm Mic on                # arm a strip for the next take
+patchprime-ctl take                      # start (or stop) the take
+patchprime-ctl loudness "Stream Mix"     # measure a strip's loudness
+patchprime-ctl loudness                  # print the readings
+patchprime-ctl scenes                    # list them
 patchprime-ctl scene Podcast
 patchprime-ctl pad Applause              # play a soundboard pad (again to stop)
+patchprime-ctl pads stop                 # stop them all
 patchprime-ctl get Mic muted             # yes or no: for a button's state
 ```
 
@@ -481,7 +651,9 @@ patchprime-ctl get Mic muted             # yes or no: for a button's state
 
 **Stream Deck:** in StreamController, give a button the **Run command** action with, for example, `patchprime-ctl mute Mic`. For push to talk, run `patchprime-ctl mute Mic off` on press and `patchprime-ctl mute Mic on` on release.
 
-## Tray icon and on-screen messages
+### Tray icon and on-screen messages
+
+<!-- keywords: system tray, status icon, osd, notification, mic indicator -->
 
 Patch Prime puts an icon in the system tray, from login, even with its window closed. It shows your microphone: the strip that's the system default input (or the first hardware input).
 
@@ -489,28 +661,69 @@ Patch Prime puts an icon in the system tray, from login, even with its window cl
 - **Click** to open Patch Prime (or bring its window forward).
 - **Middle-click** to mute or unmute the mic.
 - **Scroll** over it to set the mic's level, 1 dB per notch.
-- **Its menu** has the mute, your scenes, and Open Patch Prime.
+- **Its menu** has the mute, your scenes, the soundboard, **Record Take**, and Open Patch Prime.
 
 **On-screen messages:** when a hotkey or a MIDI button changes something (mutes the mic, cues a strip, turns a send or an effect on or off, starts recording, loads a scene), Plasma shows what happened in the middle of the screen, as it does for the volume keys. Level hotkeys show the new level. Push to talk shows nothing; the tray icon already shows it.
 
 Both can be turned off on the **Devices** page, under **Desktop**.
 
-## Unplugging and plugging in devices
+## Engine and devices
+
+The part underneath: clocks, sample rates, hardware coming and going, and where your settings live.
+
+### Audio engine settings
+
+<!-- keywords: clock, master clock, sample rate, buffer, block size, latency, quantum, scheduling, wireplumber, tsched -->
+
+On the **Devices** page, under **Audio engine**:
+
+- **Clock**: what keeps time for all your audio.
+  - **Patch Prime** (recommended): unplugging any interface doesn't interrupt the others.
+  - **An interface's own clock**: for studio setups that want one hardware master. If that interface is unplugged, Patch Prime keeps time until it returns, with a brief glitch on the other interfaces as the clock changes hands.
+- **Sample rate**: 48 kHz is the default and suits almost everything.
+- **Block size**: **Automatic** lets PipeWire choose. Smaller blocks mean less latency and more CPU.
+
+Each hardware device has a **settings button** (the sliders icon) for its own sample rate and scheduling. Changing these restarts WirePlumber, which interrupts audio for a few seconds.
+
+### Unplugging and plugging in devices
+
+<!-- keywords: hotplug, usb, offline, disconnect, reconnect -->
 
 - When a device is unplugged, its strip shows **Offline** and keeps its settings. When it comes back, even in another USB port, everything reconnects by itself.
 - A notification tells you when a device has been gone for more than 10 seconds, and when it's back.
 - If a device comes back only half working (present, but with no sound), Patch Prime re-applies its profile once or twice to recover it.
 
+### Where your settings are
+
+<!-- keywords: config, configuration, backup, files, json, restore, move to new computer -->
+
+In `~/.config/patchprime/`:
+
+- `devices.json`: devices, labels, levels, sends and effects;
+- `apps.json`: app routes;
+- `presets.json`: your effect and chain presets;
+- `scenes/`: one file per scene.
+
+Back up that folder to keep your setup.
+
+How the window was left (its size, the mini window) is in `~/.config/kingsqueak.org/patchprime.conf`. Recordings are in `~/Music/Patch Prime`.
+
 ## Recipes
 
-**Stream your mic and desktop sound, hear them in headphones**
+Common jobs, step by step.
+
+### Stream your mic and desktop sound, hear them in headphones
+
+<!-- keywords: obs, streaming, twitch, youtube, setup -->
 
 1. Make a mix bus called "Stream Mix" and a virtual input called "Desktop".
 2. Star **Desktop**, so apps play into it.
 3. Send your mic and Desktop to Stream Mix, and Desktop to your headphones.
 4. In OBS, record `patchprime.stream-mix`.
 
-**Clean up a microphone**
+### Clean up a microphone
+
+<!-- keywords: voice, chain, order of effects, podcast -->
 
 The quickest way: open the mic's effects, choose **Chain Presets → Voice Starting Points**, and pick the one closest to what you want. Then adjust the de-esser and the compressor's Amount to your voice.
 
@@ -524,24 +737,51 @@ To build it yourself, add these effects in this order:
 6. Broadcast leveler (for a steady loudness)
 7. Safety limiter
 
-**Music that dips while you talk**
+### Music that dips while you talk
+
+<!-- keywords: ducking, sidechain -->
 
 Add a **Ducker** to the music or Desktop strip and set its **Key** to your mic.
 
-**A shared reverb**
+### A shared reverb
+
+<!-- keywords: reverb bus, send effect, aux -->
 
 1. On the **Devices** page, click **Add Reverb Bus**. You get a mix bus called "Reverb" with **Reverb** on it at 100 % **Mix**, sent to the outputs your strips use (or to every output, if none are in use yet).
 2. Send any strip to Reverb. Each strip's send level sets how much reverb it gets.
 
 A mix bus can't feed another mix bus, so this reverb doesn't reach Stream Mix. For reverb on your stream, add a Reverb to Stream Mix itself, with a low mix.
 
-**Check your stream's loudness**
+### Check your stream's loudness
+
+<!-- keywords: lufs, level -->
 
 Watch the LUFS number under Stream Mix. Add a broadcast leveler and a safety limiter to Stream Mix to keep it steady.
 
 ## Troubleshooting
 
-**The window says the engine isn't running.**
+When something doesn't work as expected.
+
+### No sound from a strip
+
+<!-- keywords: silent, nothing, no audio, muted, not working, quiet -->
+
+Work along the path:
+
+1. **Is the light by its name on?** It glows for any sound at all. If it's dark, nothing is reaching the strip: check the device, or that the app plays to it on the [Apps](#app-routes) page.
+2. **Does it say Offline?** The device is unplugged or switched off. See [Unplugging and plugging in devices](#unplugging-and-plugging-in-devices).
+3. **Is it muted, or its fader down?** Check **M** and the level, on the strip and on what it feeds.
+4. **Does it go anywhere?** The send button shows where. An input with "No sends" reaches nothing; see [Routing](#routing).
+5. **Is cue on?** While anything is cued, the cue output plays only the cued strips. See [Cue (headphones)](#cue-headphones).
+
+### I hear myself late, or twice
+
+<!-- keywords: echo, doubling, delay, monitoring, feedback -->
+
+Your mic is probably sent to the output you're listening on, so you hear yourself after the trip through the computer. Turn that send off on the mic's send button. An app monitoring its own input (OBS, Audacity) does the same: turn off monitoring there. Noise suppression and plugins add a little more delay; each strip's total is at the top of its [effects window](#working-with-effects).
+
+### The window says the engine isn't running
+
 The engine is a systemd user service. Check and start it with:
 
 ```sh
@@ -555,16 +795,20 @@ Its log:
 journalctl --user -u patchprimed
 ```
 
-**An app doesn't show my virtual devices by name.**
+### An app doesn't show my virtual devices by name
+
 Apps that list devices through PulseAudio show node names such as `patchprime.stream-mix`. Restart the app after creating or renaming a device.
 
-**An app ignores the route I chose.**
+### An app ignores the route I chose
+
 If the app picks its own device in its settings, that wins. Change it there, or set the app to "default".
 
-**There's a short burst of noise when I unplug my master interface.**
-That happens only when an interface is the clock. Use **Patch Prime** as the clock for glitch-free unplugging.
+### The other interfaces glitch when I unplug my master interface
 
-**I want everything Patch Prime made gone from PipeWire.**
+That happens only when an interface is the clock: PipeWire restarts the other interfaces as the clock changes hands. Use **Patch Prime** as the [clock](#audio-engine-settings) for glitch-free unplugging.
+
+### I want everything Patch Prime made gone from PipeWire
+
 Stop the engine and remove its buses:
 
 ```sh
@@ -574,11 +818,74 @@ patchprimed --remove-buses
 
 Starting the engine again rebuilds everything from your settings.
 
-**Where are my settings?**
-In `~/.config/patchprime/`:
+## Reference
 
-- `devices.json`: devices, labels, levels, sends and effects;
-- `apps.json`: app routes;
-- `scenes/`: one file per scene.
+Lists to look things up in.
 
-Back up that folder to keep your setup.
+### Keyboard shortcuts
+
+<!-- keywords: keys, keyboard control, tab, hotkeys, shortcut list -->
+
+| Keys | Where | What it does |
+|---|---|---|
+| F1 | Main window | Open this guide |
+| Ctrl+1 to Ctrl+6 | Main window | Mixer, Apps, Routing, Devices, Recordings, Soundboard |
+| Ctrl+M | Main and mini window | Switch between the mixer and the [mini window](#mini-window) |
+| Ctrl+Q | Main window | Close the window (the engine keeps running) |
+| Tab, Shift+Tab | Anywhere | Move between controls |
+| Arrow keys | A fader | Change the level by 1 dB |
+| Page Up, Page Down | A fader | Change the level by 6 dB |
+| Home | A fader | 0 dB |
+| End | A fader | All the way down |
+| Enter | A strip's fader | Type a level |
+| M | Anywhere on a strip | Mute the strip |
+| C | Anywhere on a strip | Cue the strip |
+| Ctrl+W | Effects window, this guide | Close it |
+| Ctrl+F | This guide | Go to the search box |
+| Alt+Left, Alt+Right | This guide | Back and forward through the topics you've read |
+| Esc | This guide | Clear the search, or close the window |
+
+M and C don't work while you're typing in a text box.
+
+For keys that work everywhere, even with the window closed, see [Global hotkeys](#global-hotkeys).
+
+### Languages
+
+<!-- keywords: translation, german, spanish, french, deutsch, espanol, francais, locale -->
+
+Patch Prime follows your desktop's language. The windows, effect names and settings are available in English, German, Spanish and French. The other languages are machine drafts that no native speaker has checked yet, so corrections are welcome.
+
+The engine's own messages, `patchprime-ctl` and this guide are in English.
+
+To try another language without changing your desktop, start the app from a terminal with `LANGUAGE=de patchprime`.
+
+### Accessibility
+
+<!-- keywords: screen reader, orca, focus, keyboard only, blind -->
+
+Every control has a name that says which strip it's on, for screen readers, and the whole mixer works from the keyboard (see [Keyboard shortcuts](#keyboard-shortcuts)). The focused control shows a colored outline, and the mixer scrolls it into view.
+
+The EQ and multiband graphs need a mouse, but their tables and parameter rows do the same job from the keyboard. This hasn't been tried with a real screen reader yet, so reports are welcome.
+
+### Glossary
+
+<!-- keywords: terms, definitions, meaning, jargon, words -->
+
+- **AFL, PFL:** after-fader and pre-fader listen, the two ways [cue](#cue-headphones) plays a strip.
+- **Block size:** how many samples are processed at a time. Smaller means less delay and more CPU. See [Audio engine settings](#audio-engine-settings).
+- **Bus:** a mix of other strips. See [Mix buses and virtual devices](#mix-buses-and-virtual-devices).
+- **Clock:** what keeps all your interfaces in time. See [Audio engine settings](#audio-engine-settings).
+- **Cue:** hearing a strip alone in your headphones, without changing the mix.
+- **dBFS, dBTP:** levels below digital full scale, measured at the samples and between them (true peak).
+- **Ducking:** dipping one sound while another plays. See [Ducker](#ducker).
+- **Fader:** a strip's level control.
+- **Gain reduction (GR):** how far an effect is turning the sound down right now.
+- **Insert:** an effect in a strip's path, so all of the strip's sound goes through it.
+- **Key:** the sound that controls a ducker.
+- **LUFS, LU:** loudness as listeners perceive it. See [Loudness for publishing](#loudness-for-publishing).
+- **Pad:** one sound on the [soundboard](#soundboard).
+- **Scene:** a whole mix saved under a name. See [Scenes](#scenes).
+- **Send:** a route from one strip to another, with its own level.
+- **Strip:** one column of the mixer.
+- **Take:** several strips recorded together, sample-aligned. See [Multitrack takes](#multitrack-takes).
+- **Virtual device:** an input or output that exists only in software.

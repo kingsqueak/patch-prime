@@ -34,11 +34,11 @@ A virtual audio mixer and router for KDE Plasma, built on PipeWire. Think of it 
 - **Pro-audio friendly.** Choose the sample rate and block size, use one hardware interface as the master clock or let Patch Prime keep time, pick stereo pairs on multichannel cards, and have hot-plugged devices recovered automatically.
 - **Runs in the background.** The engine (`patchprimed`) is a systemd user service. Your routing keeps working with the window closed and comes back after a reboot.
 
-See the **[user guide](docs/HELP.md)** for how to use it.
+See the **[user guide](docs/HELP.md)** for how to use it. It's built into the app too (Help menu, F1), with an index by subject and search.
 
 ## Status
 
-Version 0.15: under active development and in daily use on the author's machine. Devices, mixer, routing, apps, scenes, effects, monitoring and recording are done, with packages for Ubuntu 26.04, Fedora 44 and Arch Linux. LV2, CLAP and VST3 plugins work, with their own editor windows. New in 0.15: multitrack recording (a file per strip, sample-aligned), raw or processed mic recordings, loudness for publishing (LUFS and true peak against a target) with a true-peak limiter, ducking keyed by an app, and voice tools (a one-knob compressor, a de-esser, an expander and ready-made voice chains).
+Version 0.50: under active development and in daily use on the author's machine. Devices, mixer, routing, apps, scenes, effects, monitoring and recording are done, with packages for Ubuntu 26.04, Fedora 44 and Arch Linux. LV2, CLAP and VST3 plugins work, with their own editor windows. New since 0.15: a mini window, a setup wizard, German, Spanish and French (machine drafts), full keyboard control and screen-reader names, pre-fader cue with its own level, reverb tails and a one-click reverb bus, latency reporting, and a rewritten user guide with an index and search.
 
 ## Requirements
 
@@ -72,8 +72,8 @@ Each release has packages built by GitHub Actions; download the one for your sys
 | System | Package | Install |
 | --- | --- | --- |
 | Ubuntu 26.04 (amd64, arm64) | `patchprime_<version>-1_<arch>.deb` | `sudo apt install ./patchprime_0.15-1_amd64.deb` |
-| Fedora 44 (x86_64, aarch64) | `patchprime-<version>-1.fc44.<arch>.rpm` | `sudo dnf install ./patchprime-0.15-1.fc44.x86_64.rpm` |
-| Arch Linux (x86_64) | `patchprime-<version>-1-x86_64.pkg.tar.zst` | `sudo pacman -U patchprime-0.15-1-x86_64.pkg.tar.zst` |
+| Fedora 44 (x86_64, aarch64) | `patchprime-<version>-1.fc44.<arch>.rpm` | `sudo dnf install ./patchprime-0.50-1.fc44.x86_64.rpm` |
+| Arch Linux (x86_64) | `patchprime-<version>-1-x86_64.pkg.tar.zst` | `sudo pacman -U patchprime-0.50-1-x86_64.pkg.tar.zst` |
 
 On Arch you can also build it yourself: `makepkg -si` in [`packaging/arch`](packaging/arch). The engine starts at your next login (or right away when you open **Patch Prime** from the application menu). Patch Prime needs Qt 6.10 or newer, KDE Frameworks 6 and PipeWire 1.6, so older releases of these distributions can't run it.
 

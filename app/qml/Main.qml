@@ -13,12 +13,11 @@ Kirigami.ApplicationWindow {
     id: root
 
     // "devices", "routing", "apps", "recordings" or "about" opens that page first, "guide"
-    // the user guide (set from PATCHPRIME_PAGE).
+    // the user guide, "guide:<anchor>" a topic, "guide?<words>" a search (set from
+    // PATCHPRIME_PAGE).
     property string startPage
     // A strip label whose effects panel opens at start (set from PATCHPRIME_EFFECTS).
     property string openEffects
-    // The user guide's Markdown (docs/HELP.md, built in).
-    property string guideText
 
     readonly property string repository: "https://github.com/kingsqueak/patch-prime"
 
@@ -191,6 +190,11 @@ Kirigami.ApplicationWindow {
                 }
             }
             QQC2.MenuItem {
+                text: qsTr("&Keyboard Shortcuts")
+                icon.name: "input-keyboard"
+                onTriggered: userGuide.show("keyboard-shortcuts")
+            }
+            QQC2.MenuItem {
                 text: qsTr("User Guide &Online")
                 icon.name: "internet-services"
                 onTriggered: Qt.openUrlExternally(root.repository + "/blob/main/docs/HELP.md")
@@ -220,7 +224,6 @@ Kirigami.ApplicationWindow {
 
     UserGuide {
         id: userGuide
-        markdown: root.guideText
     }
 
     SetupWizard {
@@ -359,6 +362,10 @@ Kirigami.ApplicationWindow {
             open(aboutPage);
         else if (startPage === "guide")
             userGuide.show();
+        else if (startPage.startsWith("guide:"))
+            userGuide.show(startPage.slice(6));
+        else if (startPage.startsWith("guide?"))
+            userGuide.show("", startPage.slice(6));
         else if (startPage.startsWith("wizard")) // wizard, or wizard2 at that step
             wizard.start(Number(startPage.slice(6)));
     }
