@@ -30,6 +30,8 @@ function gainReduction(type, values) {
 
 // The dB a full gain-reduction meter stands for.
 function reductionRange(type) {
+    if (type === "leveler")
+        return 36; // its boost goes to +35 dB
     return type === "gate" || type === "expander" ? 40 : type === "limiter" || type === "deesser" ? 12 : 24;
 }
 

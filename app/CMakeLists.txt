@@ -42,3 +42,13 @@ configure_file(${PROJECT_SOURCE_DIR}/data/org.kingsqueak.patchprime.desktop.in
                ${CMAKE_CURRENT_BINARY_DIR}/org.kingsqueak.patchprime.desktop @ONLY)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/org.kingsqueak.patchprime.desktop
         DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+
+# The app's icon (PatchPrimeMac's), named as the launcher, in the hicolor theme:
+# scalable, and as PNGs for desktops that don't draw SVG icons.
+install(FILES ${PROJECT_SOURCE_DIR}/data/icons/org.kingsqueak.patchprime.svg
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
+foreach(size 48 64 128 256 512)
+    install(FILES ${PROJECT_SOURCE_DIR}/data/icons/org.kingsqueak.patchprime-${size}.png
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/${size}x${size}/apps
+            RENAME org.kingsqueak.patchprime.png)
+endforeach()

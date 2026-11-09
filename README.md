@@ -1,3 +1,5 @@
+<img src="data/icons/org.kingsqueak.patchprime-256.png" alt="" width="128" align="right">
+
 # Patch Prime
 
 A virtual audio mixer and router for KDE Plasma, built on PipeWire. Think of it as a small mixing console for your desktop: every input, app and output gets a channel strip, you decide what goes where, and you can process any strip with built-in effects.

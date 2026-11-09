@@ -400,7 +400,7 @@ The GR meter shows how far it's dipping. A strip can't be keyed from a strip it 
 Slowly turns the strip up or down so it sits at a steady loudness, like a radio station's processing.
 
 - **Target**: the loudness to aim for, in LUFS. About −16 for streams and podcasts, −23 for broadcast.
-- **Max boost** and **Max cut**: how far it may go.
+- **Max boost** (up to 35 dB, for a quiet source) and **Max cut** (up to 24 dB): how far it may go.
 - **Speed**: how many seconds a change takes.
 - **Freeze below**: when the sound drops below this, it holds still, so silence and room noise aren't turned up.
 

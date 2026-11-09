@@ -11,6 +11,7 @@
 #include <QDBusConnection>
 #include <QFile>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QImage>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
@@ -55,6 +56,10 @@ int main(int argc, char *argv[])
     QGuiApplication::setApplicationDisplayName(QStringLiteral("Patch Prime " PATCHPRIME_VERSION));
     QGuiApplication::setOrganizationDomain(QStringLiteral("kingsqueak.org"));
     QGuiApplication::setDesktopFileName(QStringLiteral("org.kingsqueak.patchprime"));
+    // The window's icon where the desktop doesn't take it from the launcher (X11):
+    // the installed one, or the generic one when run from a build folder.
+    QGuiApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("org.kingsqueak.patchprime"),
+                                                    QIcon::fromTheme(QStringLiteral("audio-card"))));
     QGuiApplication::setApplicationVersion(QStringLiteral(PATCHPRIME_VERSION));
 
     pp::loadTranslations(app);
