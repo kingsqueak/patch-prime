@@ -13,6 +13,7 @@
 #include <pipewire/extensions/metadata.h>
 #include <pipewire/filter.h>
 #include <pipewire/pipewire.h>
+#include <spa/support/cpu.h>
 #include <spa/param/audio/format-utils.h>
 #include <spa/param/latency-utils.h>
 #include <spa/param/props.h>
@@ -336,7 +337,13 @@ std::string PipeWireGraph::Session::open()
     if (loop == nullptr) {
         return "could not create a PipeWire thread loop";
     }
-    context = pw_context_new(pw_thread_loop_get_loop(loop), nullptr, 0);
+    // Denormals flushed to zero on PipeWire's realtime thread (FTZ and DAZ,
+    // which PipeWire sets there itself). The built-in effects already keep
+    // out of denormals, but a plugin with a long decaying tail can slow down
+    // tenfold or more in them, and that's an xrun. Used by the engine and by
+    // every plugin host.
+    context = pw_context_new(pw_thread_loop_get_loop(loop),
+                             pw_properties_new(SPA_KEY_CPU_ZERO_DENORMALS, "true", nullptr), 0);
     if (context == nullptr) {
         return "could not create a PipeWire context";
     }

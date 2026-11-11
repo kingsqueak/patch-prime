@@ -31,6 +31,9 @@ patchprime_add_test(test_audiosetup test_audiosetup.cpp)
 patchprime_add_test(test_hotplugrecovery test_hotplugrecovery.cpp)
 patchprime_add_test(test_scenes test_scenes.cpp)
 patchprime_add_test(test_effects test_effects.cpp)
+# Fails if an effect's realtime processing allocates; wraps the allocator, so
+# it's a program of its own (glibc only: it needs __libc_malloc).
+patchprime_add_test(test_rtalloc test_rtalloc.cpp)
 patchprime_add_test(test_recording test_recording.cpp)
 patchprime_add_test(test_loudness test_loudness.cpp)
 patchprime_add_test(test_mackie test_mackie.cpp fakemidiport.h)
