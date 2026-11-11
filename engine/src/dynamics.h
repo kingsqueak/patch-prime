@@ -47,6 +47,7 @@ public:
     GateEffect() = default;
     [[nodiscard]] std::string_view type() const override { return "gate"; }
     void prepare(double sampleRate, int channels) override;
+    void resume() noexcept override;
     void process(float *const *channels, int channelCount, int frames) noexcept override;
     void setParam(const std::string &name, double value) override;
     // The cut now (dB, positive), the largest since the last call.
@@ -75,6 +76,7 @@ public:
     DuckerEffect() = default;
     [[nodiscard]] std::string_view type() const override { return "ducker"; }
     void prepare(double sampleRate, int channels) override;
+    void resume() noexcept override;
     void process(float *const *channels, int channelCount, int frames) noexcept override;
     void setParam(const std::string &name, double value) override;
     // The dip now (dB, positive), the largest since the last call.

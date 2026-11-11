@@ -1014,6 +1014,94 @@ private Q_SLOTS:
         QVERIFY2(peak < 8.0F, qPrintable(QString::number(peak)));
     }
 
+    void idleProcessorIsSilentAndForgets()
+    {
+        // A delay and a reverb holding a tone, then the strip goes idle.
+        Processor processor;
+        std::vector<std::unique_ptr<Effect>> effects;
+        effects.push_back(makeEffect("delay"));
+        effects.push_back(makeEffect("reverb"));
+        effects[0]->setParam("time", 50.0);
+        effects[1]->setParam("mix", 100.0);
+        processor.setChain(std::make_unique<EffectChain>(std::move(effects), rate, 2));
+        QVERIFY(processor.chain()->ringsOut());
+
+        // Buffers point into themselves, so each block gets new ones.
+        const auto toneBlock = [] {
+            Buffers b(480, 0.0F);
+            for (std::size_t i = 0; i < 480; ++i) {
+                b.left[i] = b.right[i] =
+                    static_cast<float>(0.5 * std::sin(2.0 * M_PI * 440.0 * static_cast<double>(i) / rate));
+            }
+            return b;
+        };
+        for (int block = 0; block < 20; ++block) {
+            auto b = toneBlock();
+            processor.process(b.planes.data(), b.planes.data(), 2, 480);
+        }
+
+        // Idle: silence out, whatever comes in.
+        processor.setIdle(true);
+        for (int block = 0; block < 10; ++block) {
+            auto b = toneBlock();
+            processor.process(b.planes.data(), b.planes.data(), 2, 480);
+            QVERIFY(std::ranges::all_of(b.left, [](float v) { return v == 0.0F; }));
+            QVERIFY(std::ranges::all_of(b.right, [](float v) { return v == 0.0F; }));
+        }
+
+        // Back, with silence coming in: nothing from before the mute comes out
+        // (the delay line and the reverb's tail were cleared).
+        processor.setIdle(false);
+        float loudest = 0.0F;
+        for (int block = 0; block < 100; ++block) {
+            Buffers b(480, 0.0F);
+            processor.process(b.planes.data(), b.planes.data(), 2, 480);
+            for (float v : b.left) {
+                loudest = std::max(loudest, std::abs(v));
+            }
+        }
+        QCOMPARE(loudest, 0.0F);
+
+        // And it processes again: the tone comes out, 50 ms late.
+        float heard = 0.0F;
+        for (int block = 0; block < 20; ++block) {
+            auto b = toneBlock();
+            processor.process(b.planes.data(), b.planes.data(), 2, 480);
+            for (float v : b.left) {
+                heard = std::max(heard, std::abs(v));
+            }
+        }
+        QVERIFY(heard > 0.1F);
+    }
+
+    void gateAndExpanderStartClosedAfterResume()
+    {
+        GateEffect gate;
+        gate.prepare(rate, 1);
+        ExpanderEffect expander;
+        expander.prepare(rate, 1);
+        // Loud enough to open both.
+        std::vector<float> loud(4800, 0.5F);
+        float *plane = loud.data();
+        gate.process(&plane, 1, 4800);
+        std::vector<float> loud2(4800, 0.5F);
+        float *plane2 = loud2.data();
+        expander.process(&plane2, 1, 4800);
+        QVERIFY(loud[4799] > 0.4F);
+        QVERIFY(loud2[4799] > 0.4F);
+        // Resumed: a quiet sound right after is held down, not let through.
+        gate.resume();
+        expander.resume();
+        std::vector<float> quiet(48, 0.001F);
+        float *q = quiet.data();
+        gate.process(&q, 1, 48);
+        std::vector<float> quiet2(48, 0.001F);
+        float *q2 = quiet2.data();
+        expander.process(&q2, 1, 48);
+        QVERIFY(std::abs(quiet[0]) < 0.0005F);
+        QVERIFY(std::abs(quiet2[0]) < 0.0005F);
+    }
+
     void delayLinesUp()
     {
         // 0 ms: untouched.

@@ -6,6 +6,10 @@ Description=Patch Prime audio engine
 Documentation=https://github.com/kingsqueak/patch-prime
 After=pipewire.service wireplumber.service
 Wants=pipewire.service wireplumber.service
+# Enabled for every user (systemctl --global), but only real people's
+# sessions want a mixer: not the login screen's user (sddm, gdm), which has
+# its own PipeWire and once held a device the user's session then couldn't open.
+ConditionUser=!@system
 
 [Service]
 Type=dbus

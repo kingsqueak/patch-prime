@@ -533,6 +533,18 @@ void Processor::collect()
     std::erase_if(m_retired, [cycle](const Retired &r) { return cycle > r.cycle; });
 }
 
+void EffectChain::resume() noexcept
+{
+    for (auto &effect : m_effects) {
+        effect->resume();
+    }
+}
+
+bool EffectChain::ringsOut() const
+{
+    return std::ranges::any_of(m_effects, [](const auto &effect) { return effect->ringsOut(); });
+}
+
 void Processor::process(const float *const *in, float *const *out, int channelCount, int frames,
                         const float *key) noexcept
 {
@@ -559,7 +571,22 @@ void Processor::process(const float *const *in, float *const *out, int channelCo
         }
     }
     EffectChain *chain = m_chain.load();
+    if (m_idle.load(std::memory_order_relaxed)) {
+        for (float *output : outputs) {
+            if (output != nullptr) {
+                std::memset(output, 0, static_cast<std::size_t>(frames) * sizeof(float));
+            }
+        }
+        m_wasIdle = true;
+        m_cycle.fetch_add(1);
+        m_inProcess.store(false);
+        return;
+    }
     const bool complete = std::ranges::all_of(outputs, [](const float *p) { return p != nullptr; });
+    if (chain != nullptr && m_wasIdle) {
+        chain->resume();
+    }
+    m_wasIdle = false;
     if (chain != nullptr && complete && chain->channels() == channelCount) {
         std::array<float *, maxEffectChannels> part{};
         for (int start = 0; start < frames; start += maxEffectFrames) {

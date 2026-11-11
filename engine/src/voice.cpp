@@ -267,6 +267,12 @@ void ExpanderEffect::prepare(double sampleRate, int /*channels*/)
     m_cutDb = m_range.load(); // starts closed, so nothing pops through
 }
 
+void ExpanderEffect::resume() noexcept
+{
+    m_envelope = 0.0;
+    m_cutDb = m_range.load(); // closed again, as when new
+}
+
 void ExpanderEffect::setParam(const std::string &name, double value)
 {
     if (name == "threshold") {

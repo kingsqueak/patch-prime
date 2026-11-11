@@ -68,6 +68,13 @@ void GateEffect::prepare(double sampleRate, int /*channels*/)
     m_open = false;
 }
 
+void GateEffect::resume() noexcept
+{
+    m_rider.reset(-m_range.load()); // closed again, as when new
+    m_envelope = 0.0;
+    m_open = false;
+}
+
 void GateEffect::setParam(const std::string &name, double value)
 {
     if (name == "threshold") {
@@ -133,6 +140,12 @@ void DuckerEffect::prepare(double sampleRate, int /*channels*/)
     m_rider.reset(0.0);
     m_meanSquare = 0.0;
     m_rmsStep = 1.0 - coefficient(10.0, sampleRate);
+}
+
+void DuckerEffect::resume() noexcept
+{
+    m_rider.reset(0.0);
+    m_meanSquare = 0.0;
 }
 
 void DuckerEffect::setParam(const std::string &name, double value)

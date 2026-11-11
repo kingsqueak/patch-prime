@@ -4,6 +4,7 @@
 #include "busmanager.h"
 #include "devicemodel.h"
 
+#include <limits>
 #include <QAbstractItemModelTester>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -301,6 +302,11 @@ private Q_SLOTS:
         QCOMPARE(role(model, 0, DeviceModel::VolumeRole).toDouble(),
                  DeviceModel::maximumVolumeDb());
         QCOMPARE(settings.last().at(0).toString(), QStringLiteral("Audio/Sink|speakers"));
+        // -inf (typed, or from patchprime-ctl) is all the way down; NaN is refused.
+        model.setVolume(0, -std::numeric_limits<double>::infinity());
+        QCOMPARE(role(model, 0, DeviceModel::VolumeRole).toDouble(), DeviceModel::minimumVolumeDb());
+        model.setVolume(0, std::numeric_limits<double>::quiet_NaN());
+        QCOMPARE(role(model, 0, DeviceModel::VolumeRole).toDouble(), DeviceModel::minimumVolumeDb());
     }
 
     void volumeIsSavedEvenWhenTheModelGoesAway()

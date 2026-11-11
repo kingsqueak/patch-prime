@@ -26,6 +26,9 @@ namespace pp {
 namespace {
 
 constexpr auto pendingTimeout = std::chrono::seconds(3);
+// How long a strip has been silent before its effects stop (see updateIdle):
+// long enough for PipeWire to have applied the mute.
+constexpr auto idleDelay = std::chrono::milliseconds(150);
 const std::string nodeType = "PipeWire:Interface:Node";
 
 std::uint64_t parseSerial(const std::string &value)
@@ -374,6 +377,8 @@ BusManager::BusManager(PipeWireGraph *graph, DeviceModel *devices, QObject *pare
     m_reconcileTimer.setSingleShot(true);
     m_reconcileTimer.setInterval(20);
     connect(&m_reconcileTimer, &QTimer::timeout, this, &BusManager::reconcile);
+    m_idleTimer.setSingleShot(true);
+    connect(&m_idleTimer, &QTimer::timeout, this, &BusManager::updateIdle);
     m_retryTimer.setSingleShot(true);
     m_retryTimer.setInterval(pendingTimeout + std::chrono::milliseconds(200));
     connect(&m_retryTimer, &QTimer::timeout, this, &BusManager::scheduleReconcile);
@@ -764,6 +769,10 @@ void BusManager::reconcile()
     std::erase_if(m_pendingBuses, [now](const auto &p) { return now - p.second > pendingTimeout; });
     std::erase_if(m_pendingLinks, [now](const auto &p) { return now - p.second > pendingTimeout; });
 
+    // Before any fader or mute is applied: a strip being unmuted gets its
+    // effects back first.
+    updateIdle();
+
     const auto wanted = wantedBuses();
     const auto sends = wantedSends(wanted);
     // The cue node is there only while something is cued.
@@ -1023,6 +1032,46 @@ bool BusManager::mayCreate(const std::string &name, CreationLimiter::Clock::time
     return false;
 }
 
+void BusManager::updateIdle()
+{
+    const auto now = std::chrono::steady_clock::now();
+    std::optional<std::chrono::steady_clock::duration> soonest;
+    for (auto &[name, fx] : m_effects) {
+        const auto *settings = m_devices->store().find(fx.key);
+        const bool silent = settings != nullptr &&
+                            (settings->muted || settings->volumeDb <= DeviceModel::minimumVolumeDb());
+        // Cue can hear a strip that's muted (PFL), and after the fader a
+        // reverb's tail goes on being heard after the mute.
+        const auto *chain = fx.processor->chain();
+        const bool heard = m_devices->cued().contains(fx.key) ||
+                           (!fx.beforeBus && chain != nullptr && chain->ringsOut());
+        if (!silent || heard) {
+            fx.silentSince.reset();
+            if (fx.processor->isIdle()) {
+                fx.processor->setIdle(false);
+                qCDebug(lcBus, "effects of %s running", name.c_str());
+            }
+            continue;
+        }
+        if (!fx.silentSince) {
+            fx.silentSince = now;
+        }
+        const auto waited = now - *fx.silentSince;
+        if (waited >= idleDelay) {
+            if (!fx.processor->isIdle()) {
+                fx.processor->setIdle(true);
+                qCDebug(lcBus, "effects of %s idle (strip silent)", name.c_str());
+            }
+        } else if (!soonest || idleDelay - waited < *soonest) {
+            soonest = idleDelay - waited;
+        }
+    }
+    if (soonest) {
+        m_idleTimer.start(std::chrono::duration_cast<std::chrono::milliseconds>(*soonest) +
+                          std::chrono::milliseconds(1));
+    }
+}
+
 void BusManager::applyVolume(std::uint32_t nodeId, std::size_t channels, double db, bool muted)
 {
     const std::vector<float> volumes(channels, dbToLinear(db, DeviceModel::minimumVolumeDb()));
@@ -1123,7 +1172,9 @@ std::optional<bool> BusManager::ensureEffectsNode(const std::string &fxName, con
                                      .keyed = keyed,
                                      .effects = std::move(effects),
                                      .indices = std::move(indices),
-                                     .sampleRate = rate})
+                                     .sampleRate = rate,
+                                     .beforeBus = effectsBeforeBus(wanted),
+                                     .silentSince = std::nullopt})
                  .first;
     } else if (fx->second.effects != effects || fx->second.sampleRate != rate) {
         auto *chain = fx->second.processor->chain();

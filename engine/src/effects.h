@@ -178,6 +178,14 @@ public:
     void process(float *const *channels, int frames, const float *key = nullptr,
                  bool measure = false) noexcept;
 
+    // Realtime: every effect forgets what it holds (delay lines, envelopes),
+    // as when it comes back from bypass. For a chain that was idle (see
+    // Processor::setIdle), so nothing from before comes out.
+    void resume() noexcept;
+    // Main thread: whether any effect rings out on its own (see
+    // Effect::ringsOut): such a chain is never idled where it can be heard.
+    [[nodiscard]] bool ringsOut() const;
+
     // Main thread: each effect's input and output levels, in chain order.
     // Peaks are since the last call (an effect's output is the next one's
     // input, so they're all taken together).
@@ -231,6 +239,11 @@ public:
     [[nodiscard]] EffectChain *chain() const { return m_chain.load(); }
     // Main thread: deletes chains the realtime thread can no longer be using.
     void collect();
+    // Main thread. Idle: the output is silence and the chain isn't run (a
+    // muted strip's effects cost nothing). Coming back, the chain resumes
+    // (see EffectChain::resume) before it runs again.
+    void setIdle(bool idle) { m_idle.store(idle, std::memory_order_relaxed); }
+    [[nodiscard]] bool isIdle() const { return m_idle.load(std::memory_order_relaxed); }
     // Whether the chain measures its levels (see EffectChain::takeLevels);
     // off by default, since nothing needs them unless an effects window is open.
     void setMetering(bool on) { m_metering.store(on, std::memory_order_relaxed); }
@@ -248,6 +261,8 @@ private:
     std::atomic<std::uint64_t> m_cycle{0}; // bumped at the end of every process()
     std::atomic<bool> m_inProcess{false};
     std::atomic<bool> m_metering{false};
+    std::atomic<bool> m_idle{false};
+    bool m_wasIdle = false; // realtime only
     struct Retired
     {
         std::unique_ptr<EffectChain> chain;

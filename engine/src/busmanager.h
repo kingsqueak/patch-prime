@@ -360,6 +360,12 @@ private:
     [[nodiscard]] static std::map<std::string, WantedSend>
     wantedSends(const std::map<std::string, Wanted> &buses);
     void applyVolume(std::uint32_t nodeId, std::size_t channels, double db, bool muted);
+    // Idles the built-in effects of strips nobody can hear (see
+    // Processor::setIdle): muted or faded right down, not cued, and, after the
+    // fader, without an effect that rings out. A strip goes idle idleDelay
+    // after it fell silent, so PipeWire's mute is in place first; it comes
+    // back at once, before the mute is lifted.
+    void updateIdle();
     // The row of the strip whose effect the plugin node runs, when that
     // effect is still a plugin of this type; -1 otherwise.
     [[nodiscard]] int pluginRow(const std::string &node, const std::string &type) const;
@@ -377,6 +383,9 @@ private:
         std::vector<std::size_t> indices;    // their positions in the strip's list
         int sampleRate = 0;
         int latency = -1; // what PipeWire was last told (samples); -1: nothing yet
+        bool beforeBus = false; // a hardware input's: before its fader and mute
+        // Since when the strip has been muted, or its fader all the way down.
+        std::optional<std::chrono::steady_clock::time_point> silentSince;
     };
 
     // A strip's processing, from its first node that's up to its last.
@@ -459,6 +468,7 @@ private:
     // PipeWire refused silently (a link to a port that was going away) is
     // then made again, even when nothing else in the graph changes.
     QTimer m_retryTimer;
+    QTimer m_idleTimer;
     bool m_metering = false;
     std::set<std::string> m_effectMetering; // endpoint keys
 

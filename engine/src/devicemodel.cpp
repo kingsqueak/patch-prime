@@ -296,7 +296,8 @@ void DeviceModel::setEnabled(int row, bool enabled)
 
 void DeviceModel::setVolume(int row, double volumeDb)
 {
-    if (row < 0 || row >= rowCount() || !std::isfinite(volumeDb)) {
+    // NaN is refused; -inf means all the way down (the clamp below), as typed.
+    if (row < 0 || row >= rowCount() || std::isnan(volumeDb)) {
         return;
     }
     volumeDb = std::clamp(volumeDb, minimumVolumeDb(), maximumVolumeDb());
@@ -630,7 +631,7 @@ void DeviceModel::setCueOutput(const std::string &key)
 
 void DeviceModel::setCueLevel(double db)
 {
-    if (!std::isfinite(db)) {
+    if (std::isnan(db)) {
         return;
     }
     db = std::clamp(db, minimumVolumeDb(), maximumVolumeDb());
@@ -729,7 +730,7 @@ void DeviceModel::setDeviceScheduling(int row, Scheduling scheduling)
 
 void DeviceModel::setSendLevel(int row, const QString &destinationKey, double db)
 {
-    if (row < 0 || row >= rowCount() || !std::isfinite(db)) {
+    if (row < 0 || row >= rowCount() || std::isnan(db)) {
         return;
     }
     const auto &r = m_rows[static_cast<std::size_t>(row)];

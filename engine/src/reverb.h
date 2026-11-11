@@ -40,6 +40,9 @@ public:
     void process(float *const *channels, int channelCount, int frames) noexcept override;
     void setParam(const std::string &name, double value) override;
     [[nodiscard]] bool ringsOut() const noexcept override { return true; }
+    // Only for a chain coming back from idle (bypass doesn't call it for an
+    // effect that rings out): the old tail is gone.
+    void resume() noexcept override;
 
 private:
     static constexpr int blockFrames = 32;

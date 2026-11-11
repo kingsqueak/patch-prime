@@ -113,6 +113,12 @@ void ReverbEffect::clear() noexcept
     m_lowpass.fill(0.0F);
 }
 
+void ReverbEffect::resume() noexcept
+{
+    clear();
+    m_quietFrames = 0;
+}
+
 void ReverbEffect::setParam(const std::string &name, double value)
 {
     if (name == "size") {
