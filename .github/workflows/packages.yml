@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: 2026 KC2RGW Chris
 
 # Builds the packages, each in its distribution's container on GitHub's
-# runners: .deb for Ubuntu 26.04 and .rpm for Fedora 44 (amd64 and arm64),
+# runners: .deb for Ubuntu 26.04 and Debian testing and .rpm for Fedora 44
+# (amd64 and arm64),
 # and an Arch Linux package from packaging/arch/PKGBUILD (x86_64). Runs by
 # hand (Actions > Packages > Run workflow) and on a version tag (v*), which
 # also attaches the packages to that tag's GitHub release.
@@ -18,17 +19,38 @@ permissions:
 
 jobs:
   deb:
-    name: Ubuntu 26.04 ${{ matrix.arch }}
+    name: ${{ matrix.distro }} ${{ matrix.arch }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - arch: amd64
+          - distro: Ubuntu 26.04
+            image: ubuntu:26.04
+            artifact: ubuntu26.04
+            release: "1"
+            arch: amd64
             runner: ubuntu-24.04
-          - arch: arm64
+          - distro: Ubuntu 26.04
+            image: ubuntu:26.04
+            artifact: ubuntu26.04
+            release: "1"
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          # Debian testing: Debian 13's Qt (6.8) and PipeWire (1.4) are too old.
+          - distro: Debian testing
+            image: debian:testing
+            artifact: debian-testing
+            release: "1.debian"
+            arch: amd64
+            runner: ubuntu-24.04
+          - distro: Debian testing
+            image: debian:testing
+            artifact: debian-testing
+            release: "1.debian"
+            arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    container: ubuntu:26.04
+    container: ${{ matrix.image }}
     steps:
       - name: Install build dependencies
         env:
@@ -48,6 +70,7 @@ jobs:
           -DCMAKE_INSTALL_PREFIX=/usr
           -DPATCHPRIME_WERROR=ON
           -DPATCHPRIME_REQUIRE_TRAY=ON
+          -DPATCHPRIME_DEB_RELEASE=${{ matrix.release }}
 
       - name: Build
         run: cmake --build build
@@ -68,7 +91,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: patchprime-ubuntu26.04-${{ matrix.arch }}
+          name: patchprime-${{ matrix.artifact }}-${{ matrix.arch }}
           path: build/patchprime_*.deb
           if-no-files-found: error
 
