@@ -97,16 +97,27 @@ const GraphObject *nodeNamed(const PipeWireGraph &graph, const std::string &name
     return nullptr;
 }
 
+// The ids of every node with this name. Some names are the same for every
+// engine (the cue node, patchprime.cue): the user's own engine may have one
+// too while these tests run, so links are counted between all of them.
+std::set<std::string> nodeIdsNamed(const PipeWireGraph &graph, const std::string &name)
+{
+    std::set<std::string> ids;
+    for (const auto &[id, node] : graph.nodes()) {
+        if (prop(node, "node.name") == name) {
+            ids.insert(std::to_string(node.id));
+        }
+    }
+    return ids;
+}
+
 std::ptrdiff_t linkCount(const PipeWireGraph &graph, const std::string &from, const std::string &to)
 {
-    const auto *a = nodeNamed(graph, from);
-    const auto *b = nodeNamed(graph, to);
-    if (a == nullptr || b == nullptr) {
-        return 0;
-    }
+    const auto a = nodeIdsNamed(graph, from);
+    const auto b = nodeIdsNamed(graph, to);
     return std::ranges::count_if(graph.links(), [&](const auto &entry) {
-        return prop(entry.second, "link.output.node") == std::to_string(a->id) &&
-               prop(entry.second, "link.input.node") == std::to_string(b->id);
+        return a.contains(prop(entry.second, "link.output.node")) &&
+               b.contains(prop(entry.second, "link.input.node"));
     });
 }
 
@@ -115,14 +126,10 @@ std::set<std::uint32_t> linkIds(const PipeWireGraph &graph, const std::string &f
                                 const std::string &to)
 {
     std::set<std::uint32_t> ids;
-    const auto *a = nodeNamed(graph, from);
-    const auto *b = nodeNamed(graph, to);
-    if (a == nullptr || b == nullptr) {
-        return ids;
-    }
+    const auto a = nodeIdsNamed(graph, from);
+    const auto b = nodeIdsNamed(graph, to);
     for (const auto &[id, link] : graph.links()) {
-        if (prop(link, "link.output.node") == std::to_string(a->id) &&
-            prop(link, "link.input.node") == std::to_string(b->id)) {
+        if (a.contains(prop(link, "link.output.node")) && b.contains(prop(link, "link.input.node"))) {
             ids.insert(id);
         }
     }
@@ -2042,6 +2049,9 @@ private Q_SLOTS:
 
         // After the fader: from the strip's output, through the cue node.
         const std::string cueNode(cueNodeName);
+        // The user's own engine may have a cue node of the same name: only ours
+        // comes and goes.
+        const auto othersCue = nodeIdsNamed(m_graph, cueNode);
         QVERIFY(store.cuePreFader()); // the default
         devices.setCuePreFader(false);
         devices.setCueOutput(sinkKey);
@@ -2105,13 +2115,13 @@ private Q_SLOTS:
 
         // Uncued: the cue node goes, the output's own path stays.
         devices.setCue(devices.rowForKey(micKey), false);
-        QVERIFY(QTest::qWaitFor([&] { return nodeNamed(m_graph, cueNode) == nullptr; }, 5000));
+        QVERIFY(QTest::qWaitFor([&] { return nodeIdsNamed(m_graph, cueNode) == othersCue; }, 5000));
         QCOMPARE(linkCount(m_graph, outBus, m_sinkName), 2);
         // Cued again, then cue turned off: gone too.
         devices.setCue(devices.rowForKey(micKey), true);
         QVERIFY(QTest::qWaitFor([&] { return linkCount(m_graph, inBus, cueNode) == 2; }, 5000));
         devices.setCueOutput({});
-        QVERIFY(QTest::qWaitFor([&] { return nodeNamed(m_graph, cueNode) == nullptr; }, 5000));
+        QVERIFY(QTest::qWaitFor([&] { return nodeIdsNamed(m_graph, cueNode) == othersCue; }, 5000));
         QCOMPARE(linkCount(m_graph, outBus, m_sinkName), 2);
 
         devices.setEnabled(devices.rowForKey(micKey), false);
