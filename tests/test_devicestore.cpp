@@ -29,7 +29,9 @@ private Q_SLOTS:
         // aside, whole, for the user to recover.
         QTemporaryDir dir;
         const auto path = dir.filePath(QStringLiteral("devices.json"));
-        const QByteArray broken = R"({"devices": {"Audio/Source|mic": {"label": "Desk)";
+        // Escaped, not a raw string: moc misreads raw strings in a test class.
+        // NOLINTNEXTLINE(modernize-raw-string-literal)
+        const QByteArray broken = "{\"devices\": {\"Audio/Source|mic\": {\"label\": \"Desk";
         {
             QFile file(path);
             QVERIFY(file.open(QIODevice::WriteOnly));
