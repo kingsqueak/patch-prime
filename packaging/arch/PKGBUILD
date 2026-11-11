@@ -21,7 +21,7 @@ source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
         "https://github.com/xiph/rnnoise/releases/download/v0.2/rnnoise-0.2.tar.gz"
         "clap-1.2.10.tar.gz::https://github.com/free-audio/clap/archive/refs/tags/1.2.10.tar.gz"
         "vst3_pluginterfaces-3.8.0.tar.gz::https://github.com/steinbergmedia/vst3_pluginterfaces/archive/refs/tags/v3.8.0_build_66.tar.gz")
-sha256sums=('812a25e9c0b0d39bb86a1547c17b95b8708b4f15dd605f3b41421283447f3299'
+sha256sums=('696ad9799b0b1f29ab9994018313749fdaaead1c42462bcfb1a30369548343fc'
             '90fce4b00b9ff24c08dbfe31b82ffd43bae383d85c5535676d28b0a2b11c0d37'
             '58fdb977c6678859c15d57942378b651399178f49a3a8ecad1813b9f231dc096'
             'c922f0a35f2c093dfcb24ccd95282e70d00cc2de42fc0c8ac1577398ffe7b6d4')
