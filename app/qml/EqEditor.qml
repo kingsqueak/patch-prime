@@ -12,8 +12,8 @@ import org.kingsqueak.patchprime.engine
 // a table of the bands with typed values.
 //
 // While a handle is dragged the curve follows the pointer at once (`live`
-// overrides the daemon's values) and the daemon is told as it goes; on
-// release the daemon's values take over again.
+// overrides the daemon's values) and the daemon is told as it goes, every
+// 30 ms at most; after release the daemon's values take over once they arrive.
 ColumnLayout {
     id: editor
 
@@ -48,6 +48,44 @@ ColumnLayout {
     }
     function set(name, value) {
         Devices.setEffectParam(key, index, name, value);
+    }
+    // While a handle is dragged, the newest values go to the daemon at most
+    // every `sendTimer.interval`: one call per mouse event (two per handle),
+    // each echoed back as a redraw, made the drag lag behind the pointer.
+    property var pending: ({})
+    property int dragging: 0
+    function setSoon(name, value) {
+        const next = Object.assign({}, pending);
+        next[name] = value;
+        pending = next;
+        if (!sendTimer.running)
+            sendTimer.start();
+    }
+    function sendPending() {
+        const all = pending;
+        pending = {};
+        for (const name in all)
+            set(name, all[name]);
+    }
+    // After a drag the dragged values stay until the daemon's arrive, so the
+    // handle doesn't flick back to where it was; the timer is in case they
+    // never differ (or the daemon changed them).
+    onParamsChanged: {
+        if (dragging === 0 && Object.keys(pending).length === 0)
+            live = {};
+    }
+    Timer {
+        id: sendTimer
+        interval: 30
+        onTriggered: editor.sendPending()
+    }
+    Timer {
+        id: settleTimer
+        interval: 400
+        onTriggered: {
+            if (editor.dragging === 0)
+                editor.live = {};
+        }
     }
     // Bells and shelves have a gain; cuts don't.
     function hasGain(band) {
@@ -159,7 +197,7 @@ ColumnLayout {
         Repeater {
             model: editor.bandCount
 
-            delegate: Rectangle {
+            delegate: Item {
                 id: handle
 
                 required property int index
@@ -168,35 +206,59 @@ ColumnLayout {
                 readonly property real freq: editor.bandParam(band, "Freq")
                 readonly property real gain: editor.hasGain(band) ? editor.bandParam(band, "Gain") : 0
 
-                width: Style.handleSize
+                // The area that catches the pointer is twice the drawn circle,
+                // so a handle needn't be hit dead centre.
+                width: Style.handleSize * 2
                 height: width
-                radius: width / 2
                 x: graph.xFor(freq) - width / 2
                 y: graph.yFor(gain) - height / 2
-                color: on ? Style.bandColors[index] : "transparent"
-                border.color: Style.bandColors[index]
-                border.width: 2
-                opacity: on ? 1 : 0.6
-                z: drag.active ? 2 : 1
+                z: drag.active ? 3 : (hover.hovered ? 2 : 1)
 
-                QQC2.Label {
+                Rectangle {
                     anchors.centerIn: parent
-                    text: handle.band
-                    font: Kirigami.Theme.smallFont
-                    color: handle.on ? "white" : Kirigami.Theme.textColor
+                    width: Style.handleSize * (hover.hovered || drag.active ? 1.2 : 1)
+                    height: width
+                    radius: width / 2
+                    color: handle.on ? Style.bandColors[handle.index] : "transparent"
+                    border.color: Style.bandColors[handle.index]
+                    border.width: 2
+                    opacity: handle.on ? 1 : 0.6
+
+                    Behavior on width {
+                        NumberAnimation { duration: Kirigami.Units.shortDuration }
+                    }
+
+                    QQC2.Label {
+                        anchors.centerIn: parent
+                        text: handle.band
+                        font: Kirigami.Theme.smallFont
+                        color: handle.on ? "white" : Kirigami.Theme.textColor
+                    }
                 }
 
                 DragHandler {
                     id: drag
 
                     target: null
-                    // Where the pointer grabbed, relative to the handle's centre.
+                    // Move with the first pixels: the default threshold (about
+                    // 10 px on Plasma) left the handle still, then jumping.
+                    // Two pixels leave double-click (0 dB) working.
+                    dragThreshold: 2
+                    // Keep the drag: by default the effects window's scroll
+                    // area takes it over once the pointer has moved far enough,
+                    // and the handle stops mid-slide.
+                    grabPermissions: PointerHandler.CanTakeOverFromAnything
+                    // Where the handle was when the drag started.
                     property point start
                     onActiveChanged: {
                         if (active) {
                             start = Qt.point(graph.xFor(handle.freq), graph.yFor(handle.gain));
+                            editor.dragging += 1;
                         } else {
-                            editor.live = {}; // the daemon's values from here
+                            editor.dragging -= 1;
+                            sendTimer.stop();
+                            editor.sendPending();
+                            settleTimer.restart();
                         }
                     }
                     onTranslationChanged: {
@@ -206,11 +268,11 @@ ColumnLayout {
                         const freq = Math.round(graph.freqAt(start.x + translation.x));
                         const next = Object.assign({}, editor.live);
                         next[prefix + "Freq"] = freq;
-                        editor.set(prefix + "Freq", freq);
+                        editor.setSoon(prefix + "Freq", freq);
                         if (editor.hasGain(handle.band)) {
                             const gain = Math.round(graph.dbAt(start.y + translation.y) * 10) / 10;
                             next[prefix + "Gain"] = gain;
-                            editor.set(prefix + "Gain", gain);
+                            editor.setSoon(prefix + "Gain", gain);
                         }
                         editor.live = next;
                     }
@@ -231,7 +293,7 @@ ColumnLayout {
 
                 HoverHandler {
                     id: hover
-                    cursorShape: Qt.SizeAllCursor
+                    cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                 }
                 QQC2.ToolTip.visible: hover.hovered && !drag.active
                 QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay

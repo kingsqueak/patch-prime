@@ -161,14 +161,17 @@ QQC2.ApplicationWindow {
             text: qsTr("No effects. They run in order, top to bottom: before the fader on an input, after it elsewhere. A strip without effects has no processing at all.")
         }
 
+        // Keyed on the number of effects, not the list itself: the list is new
+        // with every update from the daemon, and a Repeater over it rebuilt
+        // every card each time, dropping a handle or slider mid-drag.
         Repeater {
-            model: panel.effects
+            model: panel.effects.length
 
             delegate: QQC2.Frame {
                 id: slot
 
-                required property var modelData
                 required property int index
+                readonly property var modelData: panel.effects[index] || ({ type: "", params: {} })
                 // The type's name and parameters; read again when the lists change.
                 readonly property var info: {
                     Devices.effectTypes;
@@ -369,8 +372,11 @@ QQC2.ApplicationWindow {
                                 }
                             }
 
+                            // By count too, so a slider keeps its drag.
                             Repeater {
-                                model: {
+                                id: paramRows
+
+                                readonly property var rows: {
                                     if (slot.modelData.type === "eq" || slot.modelData.type === "multiband")
                                         return [];
                                     let all = slot.info.params || [];
@@ -382,12 +388,13 @@ QQC2.ApplicationWindow {
                                     }
                                     return slot.plugin && !slot.allParams ? all.slice(0, slot.paramLimit) : all;
                                 }
+                                model: rows.length
 
                                 delegate: EffectParamRow {
-                                    required property var modelData
+                                    required property int index
                                     stripKey: panel.key
                                     effectIndex: slot.index
-                                    info: modelData
+                                    info: paramRows.rows[index] || ({})
                                     values: slot.modelData.params
                                 }
                             }

@@ -230,6 +230,8 @@ ColumnLayout {
                     id: drag
 
                     target: null
+                    // Keep the drag from the effects window's scroll area.
+                    grabPermissions: PointerHandler.CanTakeOverFromAnything
                     xAxis.enabled: true
                     yAxis.enabled: false
                     property real startX
