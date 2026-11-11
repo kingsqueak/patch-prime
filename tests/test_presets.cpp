@@ -5,6 +5,8 @@
 #include "effects.h"
 #include "presets.h"
 
+#include <QDir>
+#include <QFile>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -40,6 +42,23 @@ class TestPresets : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void unreadableFileIsKept()
+    {
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("presets.json"));
+        {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("[\"not an object\"]");
+        }
+        PresetStore store(path);
+        QVERIFY(!store.load());
+        QVERIFY(store.lastError().contains(QStringLiteral("kept as")));
+        QCOMPARE(QDir(dir.path()).entryList({QStringLiteral("presets.json.unreadable-*")}).size(), 1);
+        QVERIFY(store.saveChain(QStringLiteral("New"), {effect("gain", {{"gainDb", 1.0}})}));
+        QCOMPARE(QDir(dir.path()).entryList({QStringLiteral("presets.json.unreadable-*")}).size(), 1);
+    }
+
     void storeRoundTrip()
     {
         QTemporaryDir dir;

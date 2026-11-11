@@ -71,6 +71,8 @@ add_library(patchprime-engine STATIC
     src/plugins.cpp
     src/plugins.h
     src/presets.cpp
+    src/settingsfile.cpp
+    src/settingsfile.h
     src/presets.h
     src/loudnessmanager.cpp
     src/loudnessmanager.h

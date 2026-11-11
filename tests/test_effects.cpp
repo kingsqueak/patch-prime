@@ -1207,6 +1207,82 @@ private Q_SLOTS:
         QCOMPARE(effectsNodeName("patchprime.desktop"), "patchprime.fx.desktop");
     }
 
+    void initialValuesAreANewEffects()
+    {
+        // updateChain puts unnamed parameters back to their listed initial
+        // value; that's only right if it's what a new effect uses.
+        std::mt19937 random(7);
+        std::uniform_real_distribution<float> noise(-0.5F, 0.5F);
+        std::vector<float> input(9600);
+        for (float &v : input) {
+            v = noise(random);
+        }
+        for (const auto &type : effectTypes()) {
+            auto fresh = makeEffect(type);
+            auto reset = makeEffect(type);
+            QVERIFY2(fresh != nullptr, type.c_str());
+            for (const auto &info : effectParams(type)) {
+                reset->setParam(info.name, info.initial);
+            }
+            fresh->prepare(rate, 2);
+            reset->prepare(rate, 2);
+            Buffers a(9600, 0.0F);
+            Buffers b(9600, 0.0F);
+            std::ranges::copy(input, a.left.begin());
+            std::ranges::copy(input, a.right.begin());
+            std::ranges::copy(input, b.left.begin());
+            std::ranges::copy(input, b.right.begin());
+            for (int start = 0; start < 9600; start += 480) {
+                std::array<float *, 2> pa{a.left.data() + start, a.right.data() + start}; // NOLINT
+                std::array<float *, 2> pb{b.left.data() + start, b.right.data() + start}; // NOLINT
+                fresh->process(pa.data(), 2, 480);
+                reset->process(pb.data(), 2, 480);
+            }
+            QVERIFY2(a.left == b.left && a.right == b.right, type.c_str());
+        }
+    }
+
+    void updateLeavesNoStaleValues()
+    {
+        // A compressor in Advanced with its own settings, then a preset that
+        // names only Amount (as the voice chains do): it must sound exactly
+        // like a new compressor at that Amount.
+        std::vector<EffectSettings> before{{.type = "compressor",
+                                            .enabled = true,
+                                            .params = {{"advanced", 1.0}, {"threshold", -50.0}, {"ratio", 10.0}},
+                                            .key = {},
+                                            .state = {}}};
+        auto chain = buildChain(before, rate, 2);
+        std::vector<EffectSettings> preset{{.type = "compressor",
+                                            .enabled = true,
+                                            .params = {{"amount", 40.0}},
+                                            .key = {},
+                                            .state = {}}};
+        QVERIFY(updateChain(*chain, preset));
+        auto fresh = buildChain(preset, rate, 2);
+        // Half a second: the makeup gain glides from where it was (deliberately,
+        // so changes don't jump), so only the end is compared.
+        constexpr std::size_t length = 24000;
+        Buffers a(static_cast<int>(length), 0.0F);
+        Buffers b(static_cast<int>(length), 0.0F);
+        for (std::size_t i = 0; i < length; ++i) {
+            a.left[i] = a.right[i] = b.left[i] = b.right[i] =
+                static_cast<float>(0.8 * std::sin(2.0 * M_PI * 200.0 * static_cast<double>(i) / rate));
+        }
+        for (std::size_t start = 0; start < length; start += 480) {
+            std::array<float *, 2> pa{a.left.data() + start, a.right.data() + start}; // NOLINT
+            std::array<float *, 2> pb{b.left.data() + start, b.right.data() + start}; // NOLINT
+            chain->process(pa.data(), 480);
+            fresh->process(pb.data(), 480);
+        }
+        // Equal but for rounding (a stale threshold and ratio differ by far more).
+        float worst = 0.0F;
+        for (std::size_t i = length - 4800; i < length; ++i) {
+            worst = std::max(worst, std::abs(a.left[i] - b.left[i]));
+        }
+        QVERIFY2(worst < 1e-3F, qPrintable(QString::number(worst)));
+    }
+
     void cueChoices()
     {
         QTemporaryDir dir;

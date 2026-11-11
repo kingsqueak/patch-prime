@@ -706,6 +706,8 @@ In `~/.config/patchprime/`:
 
 Back up that folder to keep your setup.
 
+If one of these files is damaged and can't be read, Patch Prime starts without it but doesn't write over it: it renames it `<file>.unreadable-<date>-<time>` in the same folder, so what was in it can still be recovered.
+
 How the window was left (its size, the mini window) is in `~/.config/kingsqueak.org/patchprime.conf`. Recordings are in `~/Music/Patch Prime`.
 
 ## Recipes

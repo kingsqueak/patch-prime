@@ -475,6 +475,14 @@ bool updateChain(EffectChain &chain, const std::vector<EffectSettings> &effects)
     }
     for (std::size_t i = 0; i < known.size(); ++i) {
         Effect &effect = chain.at(i);
+        // A parameter the settings don't name goes back to its initial value,
+        // as in a new chain: a preset that leaves one out (a voice chain's
+        // compressor names only its Amount) mustn't leave the old value playing.
+        for (const auto &info : effectParams(known[i]->type)) {
+            if (!known[i]->params.contains(info.name)) {
+                effect.setParam(info.name, info.initial);
+            }
+        }
         for (const auto &[name, value] : known[i]->params) {
             effect.setParam(name, value);
         }

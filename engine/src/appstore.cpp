@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 KC2RGW Chris
 
 #include "appstore.h"
+#include "settingsfile.h"
 
 #include <QDir>
 #include <QFile>
@@ -62,7 +63,11 @@ bool AppStore::load()
     QJsonParseError parseError{};
     const auto document = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (!document.isObject()) {
-        m_lastError = parseError.errorString();
+        file.close();
+        m_lastError = document.isNull() ? parseError.errorString() : QStringLiteral("not a JSON object");
+        if (const auto kept = setAsideUnreadable(m_path); !kept.isEmpty()) {
+            m_lastError += QStringLiteral("; kept as ") + kept;
+        }
         return false;
     }
     const auto apps = document.object().value(QLatin1String("apps")).toObject();

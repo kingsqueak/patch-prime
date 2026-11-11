@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 KC2RGW Chris
 
 #include "devicestore.h"
+#include "settingsfile.h"
 
 #include "effects.h"
 #include "plugins.h"
@@ -270,7 +271,11 @@ bool DeviceStore::load()
     QJsonParseError parseError{};
     const auto document = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (!document.isObject()) {
-        m_lastError = parseError.errorString();
+        file.close();
+        m_lastError = document.isNull() ? parseError.errorString() : QStringLiteral("not a JSON object");
+        if (const auto kept = setAsideUnreadable(m_path); !kept.isEmpty()) {
+            m_lastError += QStringLiteral("; kept as ") + kept;
+        }
         return false;
     }
     const auto root = document.object();

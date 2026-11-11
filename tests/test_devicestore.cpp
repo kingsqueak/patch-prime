@@ -4,6 +4,7 @@
 #include "devicestore.h"
 
 #include <QFile>
+#include <QDir>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -20,6 +21,36 @@ private Q_SLOTS:
         DeviceStore store(dir.filePath(QStringLiteral("nope/devices.json")));
         QVERIFY(store.load());
         QVERIFY(store.entries().empty());
+    }
+
+    void unreadableFileIsKept()
+    {
+        // A broken file isn't written over by the next save: it's kept
+        // aside, whole, for the user to recover.
+        QTemporaryDir dir;
+        const auto path = dir.filePath(QStringLiteral("devices.json"));
+        const QByteArray broken = R"({"devices": {"Audio/Source|mic": {"label": "Desk)";
+        {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write(broken);
+        }
+        DeviceStore store(path);
+        QVERIFY(!store.load());
+        QVERIFY(store.lastError().contains(QStringLiteral("kept as")));
+        QVERIFY(store.entries().empty());
+        QVERIFY(!QFile::exists(path));
+        const auto kept = QDir(dir.path()).entryList({QStringLiteral("devices.json.unreadable-*")});
+        QCOMPARE(kept.size(), 1);
+        QFile copy(dir.filePath(kept.first()));
+        QVERIFY(copy.open(QIODevice::ReadOnly));
+        QCOMPARE(copy.readAll(), broken);
+        // And the store goes on working.
+        store.upsert("Audio/Sink|speakers").enabled = true;
+        QVERIFY(store.save());
+        DeviceStore again(path);
+        QVERIFY(again.load());
+        QCOMPARE(again.entries().size(), 1U);
     }
 
     void roundTrip()
