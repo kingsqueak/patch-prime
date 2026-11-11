@@ -9,6 +9,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <string>
@@ -157,11 +158,14 @@ private:
 private slots:
     void theWatchSeesAllocations()
     {
+        // Through a volatile pointer, so an optimising compiler can't remove
+        // the pair (it may drop a new that's deleted at once, and malloc/free).
+        static void *(*volatile allocate)(std::size_t) = std::malloc;
         allocations = 0;
         {
             const Watch watch;
-            auto *p = new std::vector<float>(64); // NOLINT(cppcoreguidelines-owning-memory)
-            delete p; // NOLINT(cppcoreguidelines-owning-memory)
+            void *p = allocate(64);
+            std::free(p); // NOLINT(cppcoreguidelines-no-malloc,cppcoreguidelines-owning-memory)
         }
         QVERIFY(allocations.load() >= 1);
     }
