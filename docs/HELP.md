@@ -53,6 +53,7 @@ Patch Prime turns your computer's audio into a small mixing console. This guide 
 - **[Engine and devices](#engine-and-devices)**
   - [Audio engine settings](#audio-engine-settings)
   - [Unplugging and plugging in devices](#unplugging-and-plugging-in-devices)
+  - [Updates](#updates)
   - [Where your settings are](#where-your-settings-are)
 - **[Recipes](#recipes)**
   - [Stream your mic and desktop sound, hear them in headphones](#stream-your-mic-and-desktop-sound-hear-them-in-headphones)
@@ -127,7 +128,7 @@ Above the strips, the top row of the mixer has **Scene**, to save and load the w
 
 - **File → Quit** (Ctrl+Q) closes the window. The engine keeps running, so your audio doesn't stop.
 - **View → Mini Window** (Ctrl+M) collapses the mixer to a narrow stack of levels. See [Mini window](#mini-window).
-- **Help → Patch Prime User Guide** (F1) opens this guide in a window of its own, built into the app so it works offline. **User Guide Online** opens it on GitHub, **Keyboard Shortcuts** goes straight to [that list](#keyboard-shortcuts), **Setup Wizard…** runs the [setup wizard](#first-setup), **Report a Bug…** opens the issue tracker, and **About Patch Prime** shows the version and license.
+- **Help → Patch Prime User Guide** (F1) opens this guide in a window of its own, built into the app so it works offline. **User Guide Online** opens it on GitHub, **Keyboard Shortcuts** goes straight to [that list](#keyboard-shortcuts), **Check for Updates…** asks whether there's a newer version (see [Updates](#updates)), **Setup Wizard…** runs the [setup wizard](#first-setup), **Report a Bug…** opens the issue tracker, and **About Patch Prime** shows the version and license.
 
 In this guide's window, the index on the left lists the topics by what they're about, and the search box above it looks through everything as you type. Ctrl+F jumps to the search box.
 
@@ -692,6 +693,15 @@ Each hardware device has a **settings button** (the sliders icon) for its own sa
 - When a device is unplugged, its strip shows **Offline** and keeps its settings. When it comes back, even in another USB port, everything reconnects by itself.
 - A notification tells you when a device has been gone for more than 10 seconds, and when it's back.
 - If a device comes back only half working (present, but with no sound), Patch Prime re-applies its profile once or twice to recover it.
+
+### Updates
+<!-- keywords: new version, upgrade, release, check for updates, privacy, network, internet, github -->
+
+A few seconds after Patch Prime's window opens, it asks GitHub once whether a newer version has been released. If there is one, a note appears across the top of the window: **What's New** opens the release page, and **✕** hides the note for that version (it shows again for the next one). **Help → Check for Updates…** asks again at any time and says what it found.
+
+That one request is all: it goes to `api.github.com` and sends nothing but the request itself (no settings, no usage). Nothing is downloaded or installed. To update, download the new package from the release page and install it as you did the first one, then restart the engine (`systemctl --user restart patchprimed`) and reopen the window.
+
+The engine never goes online; only the window asks, and only for this.
 
 ### Where your settings are
 

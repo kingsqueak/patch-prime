@@ -38,7 +38,7 @@ set(CPACK_DEBIAN_PACKAGE_SECTION "sound")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/kingsqueak/patch-prime")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_PACKAGE_DEPENDS
-    "pipewire (>= 1.6), wireplumber, qml6-module-org-kde-kirigami, qml6-module-org-kde-kquickcontrols, \
+    "pipewire (>= 1.6), wireplumber, libssl3t64 | libssl3, qml6-module-org-kde-kirigami, qml6-module-org-kde-kquickcontrols, \
 qml6-module-org-kde-desktop, qml6-module-qtquick-controls, \
 qml6-module-qtquick-layouts, qml6-module-qtquick-window, \
 qml6-module-qtquick-templates, qml6-module-qtqml-workerscript, qml6-module-qtcore, \

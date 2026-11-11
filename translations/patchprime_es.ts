@@ -1623,12 +1623,40 @@
         <translation>A&amp;sistente de configuración…</translation>
     </message>
     <message>
+        <source>Check for &amp;Updates…</source>
+        <translation>Buscar actuali&amp;zaciones…</translation>
+    </message>
+    <message>
         <source>&amp;Report a Bug…</source>
         <translation>&amp;Informar de un error…</translation>
     </message>
     <message>
         <source>&amp;About Patch Prime</source>
         <translation>&amp;Acerca de Patch Prime</translation>
+    </message>
+    <message>
+        <source>Check for Updates</source>
+        <translation>Buscar actualizaciones</translation>
+    </message>
+    <message>
+        <source>Couldn&apos;t reach GitHub to check. Try again later, or look at the releases page.</source>
+        <translation>No se pudo contactar con GitHub. Inténtelo más tarde o consulte la página de versiones.</translation>
+    </message>
+    <message>
+        <source>Patch Prime %1 is out. You have %2.</source>
+        <translation>Ya está disponible Patch Prime %1. Tiene la %2.</translation>
+    </message>
+    <message>
+        <source>You have the latest version, %1.</source>
+        <translation>Tiene la versión más reciente, %1.</translation>
+    </message>
+    <message>
+        <source>What&apos;s New</source>
+        <translation>Novedades</translation>
+    </message>
+    <message>
+        <source>Releases Page</source>
+        <translation>Página de versiones</translation>
     </message>
     <message>
         <source>A virtual audio mixer and router for KDE Plasma on PipeWire</source>
@@ -2717,6 +2745,17 @@ Este programa se distribuye con la esperanza de que sea útil, pero SIN NINGUNA 
     <message>
         <source>The engine isn&apos;t running</source>
         <translation>El motor no está en ejecución</translation>
+    </message>
+</context>
+<context>
+    <name>UpdateBanner</name>
+    <message>
+        <source>Patch Prime %1 is out. You have %2.</source>
+        <translation>Ya está disponible Patch Prime %1. Tiene la %2.</translation>
+    </message>
+    <message>
+        <source>What&apos;s New</source>
+        <translation>Novedades</translation>
     </message>
 </context>
 <context>

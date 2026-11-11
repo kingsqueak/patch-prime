@@ -1623,12 +1623,40 @@
         <translation>&amp;Assistant de configuration…</translation>
     </message>
     <message>
+        <source>Check for &amp;Updates…</source>
+        <translation>Rechercher des &amp;mises à jour…</translation>
+    </message>
+    <message>
         <source>&amp;Report a Bug…</source>
         <translation>&amp;Signaler un bogue…</translation>
     </message>
     <message>
         <source>&amp;About Patch Prime</source>
         <translation>À &amp;propos de Patch Prime</translation>
+    </message>
+    <message>
+        <source>Check for Updates</source>
+        <translation>Rechercher des mises à jour</translation>
+    </message>
+    <message>
+        <source>Couldn&apos;t reach GitHub to check. Try again later, or look at the releases page.</source>
+        <translation>Impossible de joindre GitHub. Réessayez plus tard ou consultez la page des versions.</translation>
+    </message>
+    <message>
+        <source>Patch Prime %1 is out. You have %2.</source>
+        <translation>Patch Prime %1 est disponible. Vous avez la %2.</translation>
+    </message>
+    <message>
+        <source>You have the latest version, %1.</source>
+        <translation>Vous avez la dernière version, %1.</translation>
+    </message>
+    <message>
+        <source>What&apos;s New</source>
+        <translation>Nouveautés</translation>
+    </message>
+    <message>
+        <source>Releases Page</source>
+        <translation>Page des versions</translation>
     </message>
     <message>
         <source>A virtual audio mixer and router for KDE Plasma on PipeWire</source>
@@ -2717,6 +2745,17 @@ Ce programme est distribué dans l&apos;espoir qu&apos;il sera utile, mais SANS 
     <message>
         <source>The engine isn&apos;t running</source>
         <translation>Le moteur n&apos;est pas lancé</translation>
+    </message>
+</context>
+<context>
+    <name>UpdateBanner</name>
+    <message>
+        <source>Patch Prime %1 is out. You have %2.</source>
+        <translation>Patch Prime %1 est disponible. Vous avez la %2.</translation>
+    </message>
+    <message>
+        <source>What&apos;s New</source>
+        <translation>Nouveautés</translation>
     </message>
 </context>
 <context>

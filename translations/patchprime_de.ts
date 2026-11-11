@@ -1623,12 +1623,40 @@
         <translation>&amp;Einrichtungsassistent…</translation>
     </message>
     <message>
+        <source>Check for &amp;Updates…</source>
+        <translation>Nach &amp;Aktualisierungen suchen…</translation>
+    </message>
+    <message>
         <source>&amp;Report a Bug…</source>
         <translation>&amp;Fehler melden…</translation>
     </message>
     <message>
         <source>&amp;About Patch Prime</source>
         <translation>&amp;Über Patch Prime</translation>
+    </message>
+    <message>
+        <source>Check for Updates</source>
+        <translation>Nach Aktualisierungen suchen</translation>
+    </message>
+    <message>
+        <source>Couldn&apos;t reach GitHub to check. Try again later, or look at the releases page.</source>
+        <translation>GitHub war nicht erreichbar. Versuchen Sie es später noch einmal oder sehen Sie auf der Seite mit den Versionen nach.</translation>
+    </message>
+    <message>
+        <source>Patch Prime %1 is out. You have %2.</source>
+        <translation>Patch Prime %1 ist erschienen. Sie haben %2.</translation>
+    </message>
+    <message>
+        <source>You have the latest version, %1.</source>
+        <translation>Sie haben die neueste Version, %1.</translation>
+    </message>
+    <message>
+        <source>What&apos;s New</source>
+        <translation>Neuigkeiten</translation>
+    </message>
+    <message>
+        <source>Releases Page</source>
+        <translation>Versionsseite</translation>
     </message>
     <message>
         <source>A virtual audio mixer and router for KDE Plasma on PipeWire</source>
@@ -2717,6 +2745,17 @@ Die Veröffentlichung dieses Programms erfolgt in der Hoffnung, dass es Ihnen vo
     <message>
         <source>The engine isn&apos;t running</source>
         <translation>Die Engine läuft nicht</translation>
+    </message>
+</context>
+<context>
+    <name>UpdateBanner</name>
+    <message>
+        <source>Patch Prime %1 is out. You have %2.</source>
+        <translation>Patch Prime %1 ist erschienen. Sie haben %2.</translation>
+    </message>
+    <message>
+        <source>What&apos;s New</source>
+        <translation>Neuigkeiten</translation>
     </message>
 </context>
 <context>

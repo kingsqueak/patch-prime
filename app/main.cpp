@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 KC2RGW Chris
 
 #include "daemonclient.h"
+#include "updatechecker.h"
 #include "userguide.h"
 #include "windowservice.h"
 
@@ -90,6 +91,18 @@ int main(int argc, char *argv[])
     UserGuide userGuide(guide.open(QIODevice::ReadOnly) ? QString::fromUtf8(guide.readAll()) : QString());
     qmlRegisterSingletonInstance("org.kingsqueak.patchprime.engine", 1, 0, "Guide", &userGuide);
     qmlRegisterType<GuideHighlighter>("org.kingsqueak.patchprime.engine", 1, 0, "GuideHighlighter");
+
+    // Is there a newer release? Asked once, a few seconds after start (not for
+    // screenshots, unless PATCHPRIME_UPDATE_URL points at a test file).
+    const bool testUpdates = qEnvironmentVariableIsSet("PATCHPRIME_UPDATE_URL");
+    int updateDelayMs = 5000;
+    if (testUpdates) {
+        updateDelayMs = 0;
+    } else if (screenshot) {
+        updateDelayMs = -1; // no check
+    }
+    UpdateChecker updates(QString::fromLatin1(UpdateChecker::latestApi), updateDelayMs);
+    qmlRegisterSingletonInstance("org.kingsqueak.patchprime.engine", 1, 0, "Updates", &updates);
 
     QQmlApplicationEngine engine;
     engine.setInitialProperties(

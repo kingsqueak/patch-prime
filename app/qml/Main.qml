@@ -205,6 +205,14 @@ Kirigami.ApplicationWindow {
                 enabled: Devices.connected
                 onTriggered: wizard.start(0)
             }
+            QQC2.MenuItem {
+                text: qsTr("Check for &Updates…")
+                icon.name: "system-software-update"
+                onTriggered: {
+                    updateResult.waiting = true;
+                    Updates.check();
+                }
+            }
             QQC2.MenuSeparator {}
             QQC2.MenuItem {
                 text: qsTr("&Report a Bug…")
@@ -220,6 +228,7 @@ Kirigami.ApplicationWindow {
         }
     }
 
+    header: UpdateBanner {}
     footer: MidiLearnBanner {}
 
     UserGuide {
@@ -228,6 +237,38 @@ Kirigami.ApplicationWindow {
 
     SetupWizard {
         id: wizard
+    }
+
+    // The answer to Help > Check for Updates… (the check at start only shows
+    // the banner, and only when there is something new).
+    Kirigami.PromptDialog {
+        id: updateResult
+
+        property bool waiting: false
+
+        title: qsTr("Check for Updates")
+        subtitle: Updates.failed ? qsTr("Couldn't reach GitHub to check. Try again later, or look at the releases page.")
+                : Updates.available ? qsTr("Patch Prime %1 is out. You have %2.").arg(Updates.latest).arg(Updates.current)
+                : qsTr("You have the latest version, %1.").arg(Updates.current)
+        standardButtons: Kirigami.Dialog.Close
+        customFooterActions: [
+            Kirigami.Action {
+                text: Updates.available ? qsTr("What's New") : qsTr("Releases Page")
+                icon.name: "internet-services"
+                visible: Updates.available || Updates.failed
+                onTriggered: Qt.openUrlExternally(Updates.available ? Updates.page : root.repository + "/releases")
+            }
+        ]
+
+        Connections {
+            target: Updates
+            function onChecked() {
+                if (updateResult.waiting) {
+                    updateResult.waiting = false;
+                    updateResult.open();
+                }
+            }
+        }
     }
 
     // The first time, with nothing in the mixer: the wizard offers itself.
