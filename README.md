@@ -40,7 +40,7 @@ See the **[user guide](docs/HELP.md)** for how to use it. It's built into the ap
 
 ## Status
 
-Version 0.50: under active development and in daily use on the author's machine. Devices, mixer, routing, apps, scenes, effects, monitoring and recording are done, with packages for Ubuntu 26.04, Fedora 44 and Arch Linux. LV2, CLAP and VST3 plugins work, with their own editor windows. New since 0.15: a mini window, a setup wizard, German, Spanish and French (machine drafts), full keyboard control and screen-reader names, pre-fader cue with its own level, reverb tails and a one-click reverb bus, latency reporting, and a rewritten user guide with an index and search.
+Version 0.51: under active development and in daily use on the author's machine. Devices, mixer, routing, apps, scenes, effects, monitoring and recording are done, with packages for Ubuntu 26.04, Debian testing, Fedora 44 and Arch Linux. LV2, CLAP and VST3 plugins work, with their own editor windows. New in 0.51: EQ handles that are easy to grab and keep their grip, a muted strip's effects pause and cost nothing, a check for updates with a notice in the window, presets that leave no old values behind, damaged settings files kept instead of overwritten, and packages for Debian testing.
 
 ## Requirements
 
@@ -73,11 +73,12 @@ Each release has packages built by GitHub Actions; download the one for your sys
 
 | System | Package | Install |
 | --- | --- | --- |
-| Ubuntu 26.04 (amd64, arm64) | `patchprime_<version>-1_<arch>.deb` | `sudo apt install ./patchprime_0.15-1_amd64.deb` |
-| Fedora 44 (x86_64, aarch64) | `patchprime-<version>-1.fc44.<arch>.rpm` | `sudo dnf install ./patchprime-0.50-1.fc44.x86_64.rpm` |
-| Arch Linux (x86_64) | `patchprime-<version>-1-x86_64.pkg.tar.zst` | `sudo pacman -U patchprime-0.50-1-x86_64.pkg.tar.zst` |
+| Ubuntu 26.04 (amd64, arm64) | `patchprime_<version>-1_<arch>.deb` | `sudo apt install ./patchprime_0.51-1_amd64.deb` |
+| Debian testing (amd64, arm64) | `patchprime_<version>-1.debian_<arch>.deb` | `sudo apt install ./patchprime_0.51-1.debian_amd64.deb` |
+| Fedora 44 (x86_64, aarch64) | `patchprime-<version>-1.fc44.<arch>.rpm` | `sudo dnf install ./patchprime-0.51-1.fc44.x86_64.rpm` |
+| Arch Linux (x86_64) | `patchprime-<version>-1-x86_64.pkg.tar.zst` | `sudo pacman -U patchprime-0.51-1-x86_64.pkg.tar.zst` |
 
-On Arch you can also build it yourself: `makepkg -si` in [`packaging/arch`](packaging/arch). The engine starts at your next login (or right away when you open **Patch Prime** from the application menu). Patch Prime needs Qt 6.10 or newer, KDE Frameworks 6 and PipeWire 1.6, so older releases of these distributions can't run it.
+On Arch you can also build it yourself: `makepkg -si` in [`packaging/arch`](packaging/arch). The engine starts at your next login (or right away when you open **Patch Prime** from the application menu). Patch Prime needs Qt 6.10 or newer, KDE Frameworks 6 and PipeWire 1.6, so older releases of these distributions can't run it (Debian 13 among them: use Debian testing).
 
 To build the .deb or .rpm yourself: configure with `-DCMAKE_INSTALL_PREFIX=/usr`, build, then `cpack -G DEB` or `cpack -G RPM` in the build directory.
 
